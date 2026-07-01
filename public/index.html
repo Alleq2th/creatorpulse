@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>CreatorPulse — AI Content Engine</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#060810;--sf:#0c1120;--s2:#111827;--s3:#1a2235;--br:rgba(255,255,255,.07);--pr:#7C3AED;--pl:#A855F7;--ac:#F97316;--a2:#06B6D4;--tx:#F1F5F9;--mu:#64748B;--gr:#10B981;--r:14px;--rs:8px}
+body{background:var(--bg);color:var(--tx);font-family:'Inter',sans-serif;min-height:100vh}
+.app{display:flex;min-height:100vh}
+.sidebar{width:220px;min-height:100vh;background:var(--sf);border-right:1px solid var(--br);display:flex;flex-direction:column;padding:16px 12px;position:fixed;left:0;top:0;bottom:0;z-index:10;overflow-y:auto}
+.logo{display:flex;align-items:center;gap:9px;padding:6px 8px;margin-bottom:14px}
+.lm{width:32px;height:32px;border-radius:9px;background:linear-gradient(135deg,var(--pr),var(--ac));display:flex;align-items:center;justify-content:center;font-size:16px;position:relative;flex-shrink:0}
+.lm::after{content:'';position:absolute;inset:-3px;border-radius:12px;background:linear-gradient(135deg,var(--pr),var(--a2),var(--ac));z-index:-1;animation:pr 2.5s ease-in-out infinite;opacity:.5}
+@keyframes pr{0%,100%{opacity:.3;transform:scale(1)}50%{opacity:.7;transform:scale(1.1)}}
+.lt{font-family:'Syne',sans-serif;font-weight:800;font-size:15px}.lt span{color:var(--pl)}
+.ns{font-size:10px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:1.2px;padding:8px 8px 4px;margin-top:6px}
+.ni{display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:var(--rs);cursor:pointer;font-size:12px;color:var(--mu);transition:all .15s;border:none;background:none;width:100%}
+.ni:hover{background:var(--s2);color:var(--tx)}.ni.active{background:rgba(124,58,237,.15);color:var(--pl);font-weight:600}
+.npills{margin:4px 6px 10px;display:flex;flex-direction:column;gap:3px}
+.npill{padding:5px 9px;background:var(--s2);border-radius:6px;border:1px solid var(--br);font-size:11px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.main{margin-left:220px;flex:1;display:flex;flex-direction:column;min-height:100vh}
+.topbar{padding:13px 24px;border-bottom:1px solid var(--br);display:flex;align-items:center;justify-content:space-between;background:var(--sf);position:sticky;top:0;z-index:5}
+.topbar h1{font-family:'Syne',sans-serif;font-size:18px;font-weight:700}
+.topbar p{font-size:11px;color:var(--mu);margin-top:1px}
+.content{padding:22px;flex:1}
+.btn{padding:8px 15px;border-radius:var(--rs);border:none;cursor:pointer;font-size:12px;font-weight:600;transition:all .15s;font-family:'Inter',sans-serif;display:inline-flex;align-items:center;gap:5px}
+.bp{background:var(--pr);color:#fff}.bp:hover:not(:disabled){background:var(--pl);transform:translateY(-1px)}
+.ba{background:var(--ac);color:#fff}.ba:hover:not(:disabled){opacity:.88}
+.bs{background:var(--s2);color:var(--tx);border:1px solid var(--br)}.bs:hover:not(:disabled){background:var(--s3)}
+.bg2{background:transparent;color:var(--mu);border:1px solid var(--br)}.bg2:hover:not(:disabled){border-color:var(--pr);color:var(--pl)}
+.bsm{padding:6px 11px;font-size:11px}.bxs{padding:4px 9px;font-size:10px}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none!important}
+.ti{background:var(--s2);border:1px solid var(--br);border-radius:var(--rs);padding:9px 12px;color:var(--tx);font-size:13px;font-family:'Inter',sans-serif;outline:none;width:100%}
+.ti:focus{border-color:var(--pr)}.ti::placeholder{color:var(--mu)}
+/* ONBOARDING */
+.obw{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:40px 20px}
+.obc{background:var(--sf);border:1px solid var(--br);border-radius:20px;padding:38px;max-width:680px;width:100%}
+.prog{display:flex;gap:5px;margin-bottom:28px}
+.pd{height:4px;flex:1;border-radius:99px;background:var(--s2);transition:background .3s}
+.pd.done{background:var(--pr)}.pd.active{background:var(--pl)}
+.obs{font-size:10px;color:var(--pl);font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:5px}
+.obt{font-family:'Syne',sans-serif;font-size:26px;font-weight:800;margin-bottom:6px;line-height:1.15}
+.obb{color:var(--mu);font-size:13px;margin-bottom:22px;line-height:1.6}
+.nscroll{max-height:340px;overflow-y:auto;padding-right:5px}
+.nct{font-size:10px;font-weight:600;color:var(--mu);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px;margin-top:12px}
+.nchips{display:flex;flex-wrap:wrap;gap:6px}
+.nc{padding:5px 11px;border-radius:99px;border:1px solid var(--br);font-size:11px;cursor:pointer;transition:all .15s;background:var(--s2);color:var(--mu)}
+.nc:hover{border-color:var(--pr);color:var(--tx)}.nc.sel{background:rgba(124,58,237,.2);border-color:var(--pr);color:var(--pl);font-weight:600}
+.nc.mx{opacity:.35;cursor:not-allowed}
+.pg{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+.pc{padding:15px 11px;border-radius:var(--r);border:2px solid var(--br);cursor:pointer;transition:all .15s;background:var(--s2);text-align:center}
+.pc:hover{border-color:var(--pr)}.pc.sel{border-color:var(--pr);background:rgba(124,58,237,.1)}
+.pc.prim{border-color:var(--ac);background:rgba(249,115,22,.08)}
+.pi{font-size:22px;margin-bottom:4px;display:block}.pn{font-size:12px;font-weight:600}
+.ptg{font-size:9px;color:var(--ac);font-weight:700;text-transform:uppercase;letter-spacing:.8px;margin-top:2px}
+.obn{display:flex;gap:9px;margin-top:22px;justify-content:space-between;align-items:center}
+/* NOTIFICATION BELL */
+.bell-wrap{position:relative;cursor:pointer}
+.bell-btn{width:34px;height:34px;border-radius:50%;background:var(--s2);border:1px solid var(--br);display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer;transition:all .15s}
+.bell-btn:hover{border-color:var(--pr)}
+.bell-dot{position:absolute;top:1px;right:1px;width:10px;height:10px;background:var(--ac);border-radius:50%;border:2px solid var(--sf);display:none}
+.bell-dot.show{display:block}
+.notif-dropdown{position:absolute;top:42px;right:0;width:300px;background:var(--sf);border:1px solid var(--br);border-radius:var(--r);box-shadow:0 20px 60px rgba(0,0,0,.5);z-index:100;display:none}
+.notif-dropdown.open{display:block}
+.notif-header{padding:12px 16px;border-bottom:1px solid var(--br);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--mu)}
+.notif-item{padding:12px 16px;border-bottom:1px solid var(--br);cursor:pointer}
+.notif-item:hover{background:var(--s2)}.notif-item:last-child{border-bottom:none}
+.notif-niche{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--ac)}
+.notif-hl{font-size:12px;font-weight:600;margin-top:2px;line-height:1.4}
+.notif-time{font-size:10px;color:var(--mu);margin-top:2px}
+.notif-empty{padding:20px;text-align:center;color:var(--mu);font-size:12px}
+/* TREND CARDS */
+.stit{font-family:'Syne',sans-serif;font-size:15px;font-weight:700;margin-bottom:11px}
+.tlist{display:flex;flex-direction:column;gap:7px}
+.tc{background:var(--sf);border:1px solid var(--br);border-radius:var(--r);overflow:hidden;transition:border-color .2s}
+.tc.exp{border-color:var(--pr)}
+.th{padding:15px 17px;cursor:pointer;display:flex;align-items:flex-start;gap:10px}
+.th:hover{background:rgba(255,255,255,.012)}
+.trend-img{width:56px;height:56px;border-radius:8px;object-fit:cover;flex-shrink:0;background:var(--s2);border:1px solid var(--br)}
+.trend-img-placeholder{width:56px;height:56px;border-radius:8px;flex-shrink:0;background:var(--s2);border:1px solid var(--br);display:flex;align-items:center;justify-content:center;font-size:20px}
+.rb{background:rgba(249,115,22,.15);border:1px solid rgba(249,115,22,.3);color:var(--ac);font-size:10px;font-weight:700;padding:2px 7px;border-radius:99px;white-space:nowrap;flex-shrink:0;margin-top:2px}
+.ntb{font-size:10px;padding:2px 6px;border-radius:99px;margin-left:3px;font-weight:600;flex-shrink:0;margin-top:2px}
+.hl{font-size:14px;font-weight:600;line-height:1.4;flex:1}
+.tmeta{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
+.ttg{font-size:10px;padding:2px 7px;border-radius:99px;background:var(--s2);color:var(--mu)}
+.tsc{font-size:10px;padding:2px 7px;border-radius:99px;background:rgba(16,185,129,.12);color:var(--gr);font-weight:600}
+.cv{font-size:10px;color:var(--mu);margin-left:6px;transition:transform .2s;flex-shrink:0;margin-top:3px}
+.cv.open{transform:rotate(180deg)}
+/* CONTENT PANEL */
+.cp{border-top:1px solid var(--br);padding:16px;background:rgba(0,0,0,.22)}
+.sb2{font-size:12px;color:var(--mu);line-height:1.6;margin-bottom:12px;padding:10px;background:var(--s2);border-radius:var(--rs);border-left:3px solid var(--pr)}
+.ar{background:rgba(124,58,237,.08);border:1px solid rgba(124,58,237,.2);border-radius:var(--rs);padding:8px 12px;font-size:11px;color:var(--pl);margin-bottom:11px;display:flex;gap:6px;align-items:flex-start;line-height:1.5}
+.ptabs{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:11px}
+.ptab{padding:6px 11px;border-radius:99px;border:1px solid var(--br);font-size:11px;cursor:pointer;transition:all .15s;background:transparent;color:var(--mu)}
+.ptab:hover{border-color:var(--pr);color:var(--tx)}.ptab.active{background:var(--pr);border-color:var(--pr);color:#fff;font-weight:600}
+.ctps{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:13px}
+.ctp{padding:5px 10px;border-radius:var(--rs);border:1px solid var(--br);font-size:10px;cursor:pointer;transition:all .15s;background:transparent;color:var(--mu)}
+.ctp:hover{color:var(--tx);border-color:var(--mu)}.ctp.active{border-color:var(--ac);color:var(--ac);background:rgba(249,115,22,.08)}
+.gr2{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+/* OUTPUTS */
+.oa{display:flex;flex-direction:column;gap:7px}
+.oc{background:var(--s2);border:1px solid var(--br);border-radius:var(--r);overflow:hidden}
+.oh{padding:9px 13px;border-bottom:1px solid var(--br);display:flex;align-items:center;justify-content:space-between}
+.ol{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--pl)}
+.cb{padding:4px 9px;border-radius:var(--rs);border:1px solid var(--br);background:var(--sf);color:var(--mu);font-size:10px;cursor:pointer;transition:all .15s}
+.cb:hover{border-color:var(--gr);color:var(--gr)}.cb.copied{border-color:var(--gr)!important;color:var(--gr)!important}
+.ob{padding:13px;font-size:12px;line-height:1.75;color:var(--tx);white-space:pre-wrap}
+.slds{padding:11px;display:flex;flex-direction:column;gap:6px}
+.sld{background:var(--sf);border-radius:var(--rs);padding:11px;border-left:3px solid var(--pr)}
+.sn{font-size:9px;color:var(--pl);font-weight:700;text-transform:uppercase;letter-spacing:.8px;margin-bottom:3px}
+.st2{font-size:12px;font-weight:700;margin-bottom:3px}.sbd{font-size:11px;line-height:1.6;color:rgba(241,245,249,.85)}
+.iw{padding:11px}.gi{width:100%;border-radius:var(--rs);display:block}
+.ia{display:flex;gap:6px;margin-top:8px;align-items:center;flex-wrap:wrap}
+.ino{font-size:10px;color:var(--mu)}
+.hbl{margin:0 11px 11px;background:var(--sf);border-radius:var(--rs);padding:10px;border:1px solid var(--br)}
+.hlb{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--ac);margin-bottom:4px}
+.htx{font-size:13px;font-weight:700}
+.img-gen-loading{padding:20px;text-align:center;color:var(--mu);font-size:12px;display:flex;flex-direction:column;align-items:center;gap:10px}
+.sp{width:15px;height:15px;border:2px solid var(--s3);border-top-color:var(--pr);border-radius:50%;animation:spin .7s linear infinite;display:inline-block;flex-shrink:0}
+.sp-lg{width:32px;height:32px;border-width:3px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.lr{display:flex;align-items:center;gap:8px;padding:14px 0;color:var(--mu);font-size:12px}
+/* CALENDAR */
+.cal{display:flex;flex-direction:column;gap:14px}
+.cgw{background:var(--sf);border:1px solid var(--br);border-radius:var(--r);overflow:hidden}
+.ch2{padding:13px 17px;border-bottom:1px solid var(--br);display:flex;align-items:center;justify-content:space-between}
+.cm{font-family:'Syne',sans-serif;font-weight:700;font-size:15px}
+.cn{display:flex;gap:5px}
+.cn button{width:27px;height:27px;border-radius:var(--rs);border:1px solid var(--br);background:var(--s2);color:var(--tx);cursor:pointer;font-size:12px}
+.cday{display:grid;grid-template-columns:repeat(7,1fr);border-bottom:1px solid var(--br)}
+.cdl2{padding:8px;text-align:center;font-size:10px;font-weight:600;color:var(--mu);text-transform:uppercase}
+.ccel{display:grid;grid-template-columns:repeat(7,1fr)}
+.cc{min-height:64px;padding:5px;border-right:1px solid var(--br);border-bottom:1px solid var(--br)}
+.cc.td{background:rgba(124,58,237,.06)}
+.cdt{font-size:11px;font-weight:600;color:var(--mu);margin-bottom:2px;width:20px;height:20px;display:flex;align-items:center;justify-content:center;border-radius:50%}
+.cdt.tod{background:var(--pr);color:#fff;font-size:10px}
+.cev{font-size:9px;padding:1px 4px;border-radius:3px;margin-bottom:1px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cev.post{background:rgba(124,58,237,.2);color:var(--pl)}
+.cev.event{background:rgba(249,115,22,.15);color:var(--ac)}
+.cev.reminder{background:rgba(6,182,212,.15);color:var(--a2)}
+.cbot{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.cbc{background:var(--sf);border:1px solid var(--br);border-radius:var(--r);padding:15px}
+.upi{padding:8px 0;border-bottom:1px solid var(--br)}.upi:last-child{border-bottom:none}
+.upd{font-size:9px;color:var(--ac);font-weight:700;text-transform:uppercase}
+.upn{font-size:12px;font-weight:600;margin-top:1px}.upt{font-size:10px;color:var(--mu);margin-top:1px}
+.pchip{padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;background:rgba(16,185,129,.15);color:var(--gr)}
+/* LOADING SCREEN */
+.loading-screen{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;gap:16px}
+.loading-screen.hide{display:none}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--s2);border-radius:99px}
+/* AUTH */
+.auth-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:32px 20px;background:var(--bg)}
+.auth-card{background:var(--sf);border:1px solid var(--br);border-radius:20px;padding:36px;max-width:440px;width:100%}
+.auth-logo{display:flex;align-items:center;gap:9px;margin-bottom:28px;justify-content:center}
+.auth-title{font-family:'Syne',sans-serif;font-size:24px;font-weight:800;margin-bottom:6px;text-align:center}
+.auth-sub{color:var(--mu);font-size:13px;margin-bottom:24px;text-align:center;line-height:1.5}
+.auth-field{margin-bottom:14px}
+.auth-label{font-size:10px;color:var(--mu);display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.8px;font-weight:600}
+.auth-input{background:var(--s2);border:1px solid var(--br);border-radius:var(--rs);padding:11px 14px;color:var(--tx);font-size:14px;font-family:'Inter',sans-serif;outline:none;width:100%}
+.auth-input:focus{border-color:var(--pr)}
+.auth-input::placeholder{color:var(--mu)}
+.auth-btn{width:100%;padding:12px;border-radius:var(--rs);border:none;cursor:pointer;font-size:14px;font-weight:700;transition:all .15s;font-family:'Inter',sans-serif;margin-top:6px}
+.auth-btn-primary{background:var(--pr);color:white}.auth-btn-primary:hover:not(:disabled){background:var(--pl)}
+.auth-btn-secondary{background:var(--s2);color:var(--tx);border:1px solid var(--br);margin-top:10px}.auth-btn-secondary:hover:not(:disabled){background:var(--s3)}
+.auth-btn:disabled{opacity:.5;cursor:not-allowed}
+.auth-err{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);border-radius:var(--rs);padding:10px 14px;font-size:12px;color:#FCA5A5;margin-bottom:14px}
+.auth-link{font-size:12px;color:var(--pl);cursor:pointer;text-align:center;margin-top:16px;display:block}.auth-link:hover{text-decoration:underline}
+.auth-divider{display:flex;align-items:center;gap:12px;margin:18px 0;color:var(--mu);font-size:11px}
+.auth-divider::before,.auth-divider::after{content:'';flex:1;height:1px;background:var(--br)}
+/* LANDING */
+.landing-wrap{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px;text-align:center;background:var(--bg)}
+.landing-title{font-family:'Syne',sans-serif;font-size:42px;font-weight:800;line-height:1.1;margin-bottom:12px}
+.landing-title span{color:var(--pl)}
+.landing-sub{color:var(--mu);font-size:15px;max-width:480px;line-height:1.6;margin-bottom:36px}
+.landing-features{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;max-width:480px;margin-bottom:36px}
+.landing-feat{background:var(--sf);border:1px solid var(--br);border-radius:var(--r);padding:16px;text-align:left}
+.landing-feat-icon{font-size:22px;margin-bottom:6px}
+.landing-feat-title{font-size:13px;font-weight:700;margin-bottom:3px}
+.landing-feat-desc{font-size:11px;color:var(--mu);line-height:1.4}
+.landing-btns{display:flex;gap:12px;flex-wrap:wrap;justify-content:center}
+.landing-btn{padding:13px 28px;border-radius:var(--rs);border:none;cursor:pointer;font-size:14px;font-weight:700;transition:all .15s;font-family:'Inter',sans-serif}
+.landing-btn-primary{background:var(--pr);color:white}.landing-btn-primary:hover{background:var(--pl);transform:translateY(-1px)}
+.landing-btn-secondary{background:var(--s2);color:var(--tx);border:1px solid var(--br)}.landing-btn-secondary:hover{background:var(--s3)}
+@media(max-width:800px){.sidebar{display:none}.main{margin-left:0}.cbot{grid-template-columns:1fr}.pg{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+
+<div class="loading-screen" id="loading-screen">
+  <div class="lm" style="width:48px;height:48px;font-size:24px">⚡</div>
+  <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800">Creator<span style="color:#A855F7">Pulse</span></div>
+  <div class="sp sp-lg"></div>
+  <div style="color:#64748B;font-size:13px">Loading your content engine...</div>
+</div>
+
+<div id="root"></div>
+
+<script>
+const NICHES={"Sports":["Football/Soccer","Basketball","Tennis","Cricket","Formula 1","Boxing","MMA/UFC","WWE Wrestling","American Football","Baseball","Ice Hockey","Golf","Rugby","Athletics/Track","Cycling","Swimming","Esports","Volleyball"],"Entertainment":["Celebrity Gossip","Music (Afrobeats)","Music (Hip-Hop)","Music (Pop)","Music (R&B)","Music (K-Pop)","Music (Amapiano)","Movies & TV","Anime","Korean Drama","Bollywood","Pop Culture"],"Gaming":["Console Gaming","PC Gaming","Mobile Gaming","Game Reviews","Twitch Streaming","YouTube Gaming","Speedrunning"],"Lifestyle":["Travel","Food & Recipes","Fitness & Gym","Mental Health","Relationships & Dating","Parenting","Minimalism","Home Decor","Pets"],"Fashion & Beauty":["Streetwear","Luxury Fashion","Skincare","Makeup","Haircare","Nails","Thrift & Vintage","Men's Fashion"],"Finance":["Personal Finance","Crypto","Stock Market","Side Hustles","Business News","Real Estate","Budgeting"],"Tech":["AI & Tech News","Gadget Reviews","Coding & Dev Life","Startups","Cybersecurity","Space & Science"],"Education":["Science","History","Language Learning","Productivity","Study Tips","Philosophy","Psychology"],"Talk & Commentary":["Yapping Videos","Hot Takes","Rants","Storytelling","Political Commentary","True Crime","Mystery & Unexplained"],"Dance & Trends":["Viral Dances","Trend Reaction","Challenge Content"],"Creator Meta":["YouTube Growth","Social Media Tips","Brand Deals","Monetization Advice"],"Professional":["Medicine & Health","Law","Marketing","Entrepreneurship","Motivational Speaking","HR & Careers"],"Culture":["Faith & Religion","African Culture","Caribbean Culture","Astrology","Self-Development"]};
+const PLATS=[{id:"tiktok",label:"TikTok",icon:"🎵"},{id:"instagram",label:"Instagram",icon:"📸"},{id:"youtube",label:"YouTube",icon:"▶️"},{id:"twitter",label:"X/Twitter",icon:"𝕏"},{id:"facebook",label:"Facebook",icon:"👍"},{id:"linkedin",label:"LinkedIn",icon:"💼"}];
+const PTYPES={tiktok:["TikTok Script","TikTok No-Face Graphic","Caption + Hashtags"],instagram:["IG Reel Script","IG Carousel","Caption + Hashtags"],youtube:["Long Form Script","YouTube Short Script","Title + Description","Thumbnail","Documentary Script"],twitter:["Hot Take Tweet","Engagement Tweet","Thread (5 tweets)"],facebook:["Long-Form Post","Engagement Post"],linkedin:["Thought Leadership","Professional Update"]};
+const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
+const DAYS=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const NC={"Football/Soccer":"#00D4FF","Basketball":"#FF6B35","Tennis":"#00FF87","Cricket":"#F59E0B","Formula 1":"#EF4444","Boxing":"#EC4899","MMA/UFC":"#8B5CF6","Music (Afrobeats)":"#FF6B35","Music (Hip-Hop)":"#A855F7","Music (K-Pop)":"#EC4899","Music (Amapiano)":"#F97316","Celebrity Gossip":"#F472B6","Movies & TV":"#06B6D4","Anime":"#8B5CF6","Crypto":"#F59E0B","Stock Market":"#10B981","Streetwear":"#FF2D78","Skincare":"#F472B6","Console Gaming":"#9B59B6","Mobile Gaming":"#7C3AED","AI & Tech News":"#00B4D8","default":"#7C3AED"};
+function gc(n){return NC[n]||NC.default}
+
+// ── API CALLS (to our own backend) ───────────────────────────────────────────
+const API = window.location.origin;
+
+async function fetchNews(niche) {
+  const r = await fetch(`${API}/api/news?niche=${encodeURIComponent(niche)}`);
+  const d = await r.json();
+  return d.articles || [];
+}
+
+async function fetchSportsImage(query, type="player") {
+  const r = await fetch(`${API}/api/sports-image?query=${encodeURIComponent(query)}&type=${type}`);
+  const d = await r.json();
+  return d.image ? `${API}/api/image-proxy?url=${encodeURIComponent(d.image)}` : null;
+}
+
+async function fetchWikiImage(query) {
+  const r = await fetch(`${API}/api/wiki-image?query=${encodeURIComponent(query)}`);
+  const d = await r.json();
+  return d.image ? `${API}/api/image-proxy?url=${encodeURIComponent(d.image)}` : null;
+}
+
+async function generateText(system, user) {
+  const r = await fetch(`${API}/api/generate`, {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({system, user})
+  });
+  const d = await r.json();
+  if (d.error) throw new Error(d.error);
+  return d.text || "";
+}
+
+async function generateImage(prompt) {
+  const r = await fetch(`${API}/api/generate-image`, {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({prompt})
+  });
+  const d = await r.json();
+  return d.image || null;
+}
+
+async function fetchNotifications(niches) {
+  const r = await fetch(`${API}/api/notifications?niches=${encodeURIComponent(niches.join(","))}`);
+  const d = await r.json();
+  return d.notifications || [];
+}
+
+const SYS = "You are CreatorPulse AI, a scriptwriter for social media creators. Write in plain spoken language exactly as a person would say it out loud on camera. Never use markdown formatting: no headers (##), no bold (**text**), no bullet lists with dashes, no horizontal rules (---), no JSON unless explicitly asked. Write full sentences in natural paragraphs the way someone actually talks. Only use bracketed labels like [HOOK] or [CTA] when explicitly asked for a labeled structure. Be specific, punchy, and direct. No meta-commentary, no preamble, no 'Here is your script'. Just output the spoken words themselves, ready to read straight off a teleprompter.";
+
+// ── IMAGE HELPERS ─────────────────────────────────────────────────────────────
+function rr(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();}
+
+function makeGraphicCanvas(headline, subjectImg, slideNum, totalSlides, accent, channel) {
+  const W=1080,H=1080,cv=document.createElement("canvas");cv.width=W;cv.height=H;
+  const ctx=cv.getContext("2d");
+  // BG
+  const bg=ctx.createLinearGradient(0,0,W,H);bg.addColorStop(0,"#060810");bg.addColorStop(.6,"#0d1525");bg.addColorStop(1,"#180828");ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
+  // Glows
+  const g1=ctx.createRadialGradient(W*.85,H*.12,0,W*.85,H*.12,W*.55);g1.addColorStop(0,accent+"50");g1.addColorStop(.5,accent+"18");g1.addColorStop(1,"transparent");ctx.fillStyle=g1;ctx.fillRect(0,0,W,H);
+  // Grid
+  ctx.strokeStyle="rgba(255,255,255,0.025)";ctx.lineWidth=1;
+  for(let i=0;i<W;i+=64){ctx.beginPath();ctx.moveTo(i,0);ctx.lineTo(i,H);ctx.stroke();}
+  for(let i=0;i<H;i+=64){ctx.beginPath();ctx.moveTo(0,i);ctx.lineTo(W,i);ctx.stroke();}
+  // Subject image (face/logo) — right side
+  if(subjectImg) {
+    try {
+      // Draw image on right half with glow
+      ctx.save();
+      ctx.globalAlpha = 0.92;
+      // Clip to right zone
+      ctx.drawImage(subjectImg, W*0.42, 80, W*0.55, H*0.7);
+      ctx.restore();
+      // Gradient overlay so text is readable
+      const overlay=ctx.createLinearGradient(W*0.42,0,W,0);
+      overlay.addColorStop(0,"rgba(6,8,16,0.95)");
+      overlay.addColorStop(.4,"rgba(6,8,16,0.5)");
+      overlay.addColorStop(1,"rgba(6,8,16,0.15)");
+      ctx.fillStyle=overlay;ctx.fillRect(0,0,W,H);
+    } catch(e) {}
+  }
+  // Top bar
+  const tb=ctx.createLinearGradient(0,0,W,0);tb.addColorStop(0,accent);tb.addColorStop(.6,accent+"BB");tb.addColorStop(1,"transparent");ctx.fillStyle=tb;ctx.fillRect(0,0,W,8);
+  // Brand header
+  ctx.fillStyle="rgba(0,0,0,0.58)";ctx.fillRect(0,0,W,90);
+  ctx.fillStyle="rgba(255,255,255,.9)";ctx.font="bold 27px Arial";ctx.fillText("CREATORPULSE",76,55);
+  // Slide counter
+  if(totalSlides>1){
+    ctx.fillStyle=accent;rr(ctx,W-185,18,165,52,10);ctx.fill();
+    ctx.fillStyle="white";ctx.font="bold 22px Arial";ctx.textAlign="center";ctx.fillText(slideNum+" / "+totalSlides,W-102,50);ctx.textAlign="left";
+  }
+  // Left accent bar
+  const lb=ctx.createLinearGradient(0,145,0,H-100);lb.addColorStop(0,accent);lb.addColorStop(.7,accent+"88");lb.addColorStop(1,"transparent");ctx.fillStyle=lb;ctx.fillRect(54,145,7,H-265);
+  // Headline
+  const words=headline.toUpperCase().split(" ");const lines=[];let cur="";const mx=16;
+  for(const w of words){const t=cur?cur+" "+w:w;if(t.length>mx){lines.push(cur);cur=w;}else cur=t;}if(cur)lines.push(cur);
+  const fs=lines.length<=2?112:lines.length<=3?90:lines.length<=4?74:60;
+  ctx.shadowColor="rgba(0,0,0,.95)";ctx.shadowBlur=28;ctx.shadowOffsetX=4;ctx.shadowOffsetY=4;
+  ctx.font="900 "+fs+"px Arial";let y=215;
+  for(let i=0;i<Math.min(lines.length,5);i++){ctx.fillStyle=i===0?accent:"white";ctx.fillText(lines[i],76,y);y+=fs+10;}
+  ctx.shadowColor="transparent";
+  // Accent line
+  const hl=ctx.createLinearGradient(76,y+12,76+400,y+12);hl.addColorStop(0,accent);hl.addColorStop(1,"transparent");ctx.fillStyle=hl;ctx.fillRect(76,y+14,380,5);
+  // Bottom
+  ctx.fillStyle="rgba(0,0,0,.62)";ctx.fillRect(0,H-74,W,74);
+  ctx.fillStyle=accent;ctx.fillRect(0,H-8,W,8);
+  ctx.fillStyle="rgba(255,255,255,.55)";ctx.font="bold 24px Arial";ctx.fillText("@"+(channel||"CREATORPULSE").toUpperCase(),64,H-26);
+  ctx.fillStyle="rgba(255,255,255,.22)";ctx.font="bold 18px Arial";ctx.textAlign="right";ctx.fillText("Made with CreatorPulse",W-52,H-26);ctx.textAlign="left";
+  return cv.toDataURL("image/png");
+}
+
+function makeThumbnailCanvas(headline, subjectImg, channel, accent) {
+  const W=1280,H=720,cv=document.createElement("canvas");cv.width=W;cv.height=H;
+  const ctx=cv.getContext("2d");
+  const bg=ctx.createLinearGradient(0,0,W,H);bg.addColorStop(0,"#04060e");bg.addColorStop(.5,"#0d1525");bg.addColorStop(1,"#1a0830");ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
+  // Subject image left side
+  if(subjectImg) {
+    try {
+      ctx.save();
+      ctx.globalAlpha = 0.95;
+      ctx.drawImage(subjectImg, -20, 0, 620, H);
+      ctx.restore();
+      // Fade right edge
+      const fade=ctx.createLinearGradient(400,0,640,0);fade.addColorStop(0,"transparent");fade.addColorStop(1,"rgba(4,6,14,1)");ctx.fillStyle=fade;ctx.fillRect(400,0,240,H);
+    } catch(e) {
+      // Placeholder
+      ctx.fillStyle="rgba(255,255,255,.03)";ctx.fillRect(0,0,580,H);
+      ctx.fillStyle="rgba(255,255,255,.05)";ctx.font="bold 13px Arial";ctx.textAlign="center";ctx.fillText("[ ADD SUBJECT PHOTO ]",290,H/2);ctx.textAlign="left";
+    }
+  } else {
+    ctx.fillStyle="rgba(255,255,255,.03)";ctx.fillRect(0,0,580,H);
+    ctx.fillStyle="rgba(255,255,255,.05)";ctx.font="bold 13px Arial";ctx.textAlign="center";ctx.fillText("[ ADD SUBJECT PHOTO ]",290,H/2);ctx.textAlign="left";
+  }
+  // Right glow
+  const rg=ctx.createRadialGradient(W*.82,H*.22,0,W*.82,H*.22,520);rg.addColorStop(0,accent+"58");rg.addColorStop(.6,accent+"18");rg.addColorStop(1,"transparent");ctx.fillStyle=rg;ctx.fillRect(0,0,W,H);
+  // Divider
+  const dv=ctx.createLinearGradient(572,0,585,H);dv.addColorStop(0,"transparent");dv.addColorStop(.2,accent);dv.addColorStop(.8,accent);dv.addColorStop(1,"transparent");ctx.fillStyle=dv;ctx.fillRect(572,0,13,H);
+  // Headline
+  const words=headline.toUpperCase().split(" ");const lines=[];let cur="";
+  for(const w of words){const t=cur?cur+" "+w:w;if(t.length>10){lines.push(cur);cur=w;}else cur=t;}if(cur)lines.push(cur);
+  const fs=lines.length<=2?128:lines.length<=3?98:80;
+  ctx.shadowColor="rgba(0,0,0,.96)";ctx.shadowBlur=30;ctx.shadowOffsetX=5;ctx.shadowOffsetY=5;
+  let y=185;
+  for(let i=0;i<Math.min(lines.length,4);i++){ctx.fillStyle=i===0?accent:"white";ctx.font="900 "+fs+"px Arial";ctx.fillText(lines[i],605,y);y+=fs+10;}
+  ctx.shadowColor="transparent";
+  const ul=ctx.createLinearGradient(605,y+8,605+520,y+8);ul.addColorStop(0,accent);ul.addColorStop(1,"transparent");ctx.fillStyle=ul;ctx.fillRect(605,y+10,500,6);
+  ctx.fillStyle="rgba(255,255,255,.55)";ctx.font="bold 28px Arial";ctx.fillText((channel||"YOUR CHANNEL").toUpperCase(),605,y+52);
+  ctx.fillStyle=accent;rr(ctx,W-198,26,172,58,10);ctx.fill();
+  ctx.fillStyle="white";ctx.font="bold 22px Arial";ctx.textAlign="center";ctx.fillText("WATCH NOW",W-112,62);ctx.textAlign="left";
+  ctx.fillStyle="rgba(255,255,255,.28)";ctx.font="bold 17px Arial";ctx.fillText("Made with CreatorPulse AI",605,H-15);
+  return cv.toDataURL("image/png");
+}
+
+async function loadSubjectImage(headline, niche, articleImageUrl) {
+  // PRIORITY 1: Use the real photo already pulled from the news article — fastest, free, and shows the actual real person/scene
+  if (articleImageUrl) {
+    const proxiedUrl = `${API}/api/image-proxy?url=${encodeURIComponent(articleImageUrl)}`;
+    const realImg = await loadImageElement(proxiedUrl);
+    if (realImg) return realImg;
+  }
+
+  // PRIORITY 2 (fallback only, if article had no image): try sports DB / Wikipedia lookup by guessing subject name
+  const sportKeywords = ["football","soccer","basketball","tennis","cricket","boxing","mma","nba","nfl","premier league","champions league","f1"];
+  const isSport = sportKeywords.some(k => (niche+headline).toLowerCase().includes(k));
+
+  const words = headline.split(" ");
+  const properNouns = words.filter(w => w.length > 2 && w[0] === w[0].toUpperCase() && w[0] !== w[0].toLowerCase());
+  const subject = properNouns.slice(0,2).join(" ");
+
+  if (!subject) return null;
+
+  try {
+    let imgUrl = null;
+    if (isSport) {
+      imgUrl = await fetchSportsImage(subject, "player");
+      if (!imgUrl) imgUrl = await fetchSportsImage(subject, "team");
+    }
+    if (!imgUrl) imgUrl = await fetchWikiImage(subject);
+    if (!imgUrl) return null;
+    return await loadImageElement(imgUrl);
+  } catch(e) { return null; }
+}
+
+function loadImageElement(url) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = url;
+    setTimeout(() => resolve(null), 6000);
+  });
+}
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+let USER=null, TAB="generate", CAL_Y=new Date().getFullYear(), CAL_M=new Date().getMonth();
+const EXP={}, AP={}, AT={}, OUTS={}, RECS={}, LOAD={};
+const TRENDS_CACHE = {};
+let ALL_TRENDS = [];
+let NOTIFICATIONS = [];
+let NOTIF_OPEN = false;
+let OB={step:0,name:"",niches:[],platforms:[],primary:"",ppd:3};
+
+// ── AUTH STATE ────────────────────────────────────────────────────────────────
+let AUTH_MODE = "landing"; // "landing" | "login" | "signup" | "onboarding" | "app"
+let AUTH_TOKEN = null;
+let AUTH_ERR = "";
+let AUTH_LOADING = false;
+let AUTH_FORM = {email:"", password:"", confirmPassword:""};
+
+// Restore session from localStorage
+function restoreSession() {
+  try {
+    const saved = localStorage.getItem("cp_session");
+    if (saved) {
+      const { token, user } = JSON.parse(saved);
+      if (token && user) {
+        AUTH_TOKEN = token;
+        USER = user;
+        AUTH_MODE = "app";
+        return true;
+      }
+    }
+  } catch(e) {}
+  return false;
+}
+
+function saveSession(token, user) {
+  localStorage.setItem("cp_session", JSON.stringify({ token, user }));
+}
+
+function clearSession() {
+  localStorage.removeItem("cp_session");
+  AUTH_TOKEN = null;
+  USER = null;
+  AUTH_MODE = "landing";
+}
+
+function render(){
+  const root=document.getElementById("root");
+  if(AUTH_MODE==="landing"){root.innerHTML=renderLanding();bindLanding();}
+  else if(AUTH_MODE==="login"){root.innerHTML=renderLogin();bindLogin();}
+  else if(AUTH_MODE==="signup"){root.innerHTML=renderSignup();bindSignup();}
+  else if(AUTH_MODE==="onboarding"){root.innerHTML=renderOB();bindOB();}
+  else{root.innerHTML=renderApp();bindApp();}
+}
+
+// ── LANDING ───────────────────────────────────────────────────────────────────
+function renderLanding(){
+  return`<div class="landing-wrap">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:32px">
+      <div class="lm">⚡</div><div class="lt" style="font-size:20px">Creator<span>Pulse</span></div>
+    </div>
+    <div class="landing-title">The AI content engine<br>for every <span>creator</span></div>
+    <div class="landing-sub">Pick your niches, get live trending stories, and generate scripts, carousels, and thumbnails with real photos — instantly.</div>
+    <div class="landing-features">
+      <div class="landing-feat"><div class="landing-feat-icon">🔥</div><div class="landing-feat-title">Live Trending News</div><div class="landing-feat-desc">Real stories from 130+ niches, refreshed 7× daily</div></div>
+      <div class="landing-feat"><div class="landing-feat-icon">✍️</div><div class="landing-feat-title">Teleprompter Scripts</div><div class="landing-feat-desc">Word-for-word scripts ready to read on camera</div></div>
+      <div class="landing-feat"><div class="landing-feat-icon">🖼️</div><div class="landing-feat-title">Real Photo Graphics</div><div class="landing-feat-desc">Thumbnails with actual article photos</div></div>
+      <div class="landing-feat"><div class="landing-feat-icon">📅</div><div class="landing-feat-title">Content Calendar</div><div class="landing-feat-desc">Schedule & niche events in one place</div></div>
+    </div>
+    <div class="landing-btns">
+      <button class="landing-btn landing-btn-primary" id="land-signup">Get Started Free →</button>
+      <button class="landing-btn landing-btn-secondary" id="land-login">Log In</button>
+    </div>
+    <div style="margin-top:20px;font-size:12px;color:var(--mu)">Free forever · No credit card needed</div>
+  </div>`;
+}
+function bindLanding(){
+  document.getElementById("land-signup")?.addEventListener("click",()=>{AUTH_ERR="";AUTH_MODE="signup";render();});
+  document.getElementById("land-login")?.addEventListener("click",()=>{AUTH_ERR="";AUTH_MODE="login";render();});
+}
+
+// ── LOGIN ─────────────────────────────────────────────────────────────────────
+function renderLogin(){
+  return`<div class="auth-wrap"><div class="auth-card">
+    <div class="auth-logo"><div class="lm">⚡</div><div class="lt">Creator<span>Pulse</span></div></div>
+    <div class="auth-title">Welcome back</div>
+    <div class="auth-sub">Log in to your content dashboard</div>
+    ${AUTH_ERR?`<div class="auth-err">${AUTH_ERR}</div>`:""}
+    <div class="auth-field"><label class="auth-label">Email</label><input id="auth-email" class="auth-input" type="email" placeholder="you@example.com" value="${AUTH_FORM.email}"/></div>
+    <div class="auth-field"><label class="auth-label">Password</label><input id="auth-pw" class="auth-input" type="password" placeholder="Your password"/></div>
+    <button class="auth-btn auth-btn-primary" id="login-btn" ${AUTH_LOADING?"disabled":""}>${AUTH_LOADING?"Logging in...":"Log In"}</button>
+    <div class="auth-divider">or</div>
+    <button class="auth-btn auth-btn-secondary" id="go-signup">Create a free account</button>
+    <span class="auth-link" id="go-land">← Back to home</span>
+  </div></div>`;
+}
+function bindLogin(){
+  document.getElementById("auth-email")?.addEventListener("input",e=>{AUTH_FORM.email=e.target.value;});
+  document.getElementById("auth-pw")?.addEventListener("input",e=>{AUTH_FORM.password=e.target.value;});
+  document.getElementById("go-signup")?.addEventListener("click",()=>{AUTH_ERR="";AUTH_MODE="signup";render();});
+  document.getElementById("go-land")?.addEventListener("click",()=>{AUTH_ERR="";AUTH_MODE="landing";render();});
+  document.getElementById("login-btn")?.addEventListener("click",async()=>{
+    AUTH_ERR="";AUTH_LOADING=true;render();
+    try{
+      const r=await fetch(`${API}/api/auth/login`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:AUTH_FORM.email,password:AUTH_FORM.password})});
+      const d=await r.json();
+      if(d.error){AUTH_ERR=d.error;AUTH_LOADING=false;render();return;}
+      AUTH_TOKEN=d.token;USER=d.user;
+      saveSession(AUTH_TOKEN,USER);
+      AUTH_LOADING=false;AUTH_MODE="app";render();bindApp();
+      loadAllTrends();loadNotifications();
+    }catch(e){AUTH_ERR="Login failed. Check your connection.";AUTH_LOADING=false;render();}
+  });
+}
+
+// ── SIGNUP ────────────────────────────────────────────────────────────────────
+function renderSignup(){
+  return`<div class="auth-wrap"><div class="auth-card">
+    <div class="auth-logo"><div class="lm">⚡</div><div class="lt">Creator<span>Pulse</span></div></div>
+    <div class="auth-title">Create your account</div>
+    <div class="auth-sub">Free forever. Pick your niches after signup.</div>
+    ${AUTH_ERR?`<div class="auth-err">${AUTH_ERR}</div>`:""}
+    <div class="auth-field"><label class="auth-label">Email</label><input id="auth-email" class="auth-input" type="email" placeholder="you@example.com" value="${AUTH_FORM.email}"/></div>
+    <div class="auth-field"><label class="auth-label">Password</label><input id="auth-pw" class="auth-input" type="password" placeholder="Min 6 characters"/></div>
+    <div class="auth-field"><label class="auth-label">Confirm Password</label><input id="auth-confirm" class="auth-input" type="password" placeholder="Repeat password"/></div>
+    <button class="auth-btn auth-btn-primary" id="signup-btn" ${AUTH_LOADING?"disabled":""}>${AUTH_LOADING?"Creating account...":"Create Account →"}</button>
+    <div class="auth-divider">already have an account?</div>
+    <button class="auth-btn auth-btn-secondary" id="go-login2">Log In</button>
+    <span class="auth-link" id="go-land2">← Back to home</span>
+  </div></div>`;
+}
+function bindSignup(){
+  document.getElementById("auth-email")?.addEventListener("input",e=>{AUTH_FORM.email=e.target.value;});
+  document.getElementById("auth-pw")?.addEventListener("input",e=>{AUTH_FORM.password=e.target.value;});
+  document.getElementById("auth-confirm")?.addEventListener("input",e=>{AUTH_FORM.confirmPassword=e.target.value;});
+  document.getElementById("go-login2")?.addEventListener("click",()=>{AUTH_ERR="";AUTH_MODE="login";render();});
+  document.getElementById("go-land2")?.addEventListener("click",()=>{AUTH_ERR="";AUTH_MODE="landing";render();});
+  document.getElementById("signup-btn")?.addEventListener("click",async()=>{
+    AUTH_ERR="";
+    if(!AUTH_FORM.email||!AUTH_FORM.password){AUTH_ERR="Email and password required.";render();return;}
+    if(AUTH_FORM.password.length<6){AUTH_ERR="Password must be at least 6 characters.";render();return;}
+    if(AUTH_FORM.password!==AUTH_FORM.confirmPassword){AUTH_ERR="Passwords do not match.";render();return;}
+    AUTH_LOADING=true;render();
+    try{
+      const r=await fetch(`${API}/api/auth/signup`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:AUTH_FORM.email,password:AUTH_FORM.password,name:AUTH_FORM.email.split("@")[0],niches:[],platforms:[],primaryPlatform:"",postsPerDay:3})});
+      const d=await r.json();
+      if(d.error){AUTH_ERR=d.error;AUTH_LOADING=false;render();return;}
+      const lr=await fetch(`${API}/api/auth/login`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:AUTH_FORM.email,password:AUTH_FORM.password})});
+      const ld=await lr.json();
+      if(ld.error){AUTH_ERR="Account created! Please log in.";AUTH_LOADING=false;AUTH_MODE="login";render();return;}
+      AUTH_TOKEN=ld.token;USER=ld.user;AUTH_LOADING=false;
+      AUTH_MODE="onboarding";OB={step:0,name:USER.name||AUTH_FORM.email.split("@")[0],niches:[],platforms:[],primary:"",ppd:3};
+      render();
+    }catch(e){AUTH_ERR="Signup failed. Check connection.";AUTH_LOADING=false;render();}
+  });
+}
+
+// ── ONBOARDING ────────────────────────────────────────────────────────────────
+function renderOB(){
+  const steps=["Welcome","Niches","Platforms","Schedule"];
+  const dots=steps.map((_,i)=>`<div class="pd ${i<OB.step?"done":i===OB.step?"active":""}"></div>`).join("");
+  let body="";
+  if(OB.step===0){
+    body=`<div class="obt">Welcome to<br><span style="color:var(--pl)">CreatorPulse</span></div><div class="obb">Your AI content engine. Pick up to 5 niches, get live trending stories from the internet, and generate world-class content — scripts, carousels, thumbnails, graphics with real faces. Free and unlimited.</div><label style="font-size:10px;color:var(--mu);display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.8px;font-weight:600">Your creator name or handle</label><input id="ob-name" class="ti" placeholder="e.g. Sportsguys, FashionWithAde..." value="${OB.name}"/>`;
+  }else if(OB.step===1){
+    const sel=OB.niches.length;
+    const cats=Object.entries(NICHES).map(([cat,ns])=>`<div><div class="nct">${cat}</div><div class="nchips">${ns.map(n=>{const is=OB.niches.includes(n),mx=!is&&sel>=5;return`<div class="nc ${is?"sel":""} ${mx?"mx":""}" data-niche="${n}">${n}</div>`;}).join("")}</div></div>`).join("");
+    body=`<div class="obt">Pick your niches</div><div class="obb">Choose up to <strong>5 niches</strong> — live trending stories from all of them. <span style="color:var(--pl)">${sel}/5 selected</span></div><div class="nscroll">${cats}</div>`;
+  }else if(OB.step===2){
+    const cards=PLATS.map(p=>`<div class="pc ${OB.platforms.includes(p.id)?"sel":""} ${OB.primary===p.id?"prim":""}" data-plat="${p.id}"><span class="pi">${p.icon}</span><div class="pn">${p.label}</div>${OB.platforms.includes(p.id)&&OB.primary!==p.id?`<div class="spp" data-pid="${p.id}" style="font-size:9px;color:var(--mu);margin-top:2px;cursor:pointer">Set primary</div>`:""}${OB.primary===p.id?`<div class="ptg">★ Primary</div>`:""}</div>`).join("");
+    body=`<div class="obt">Where do<br>you post?</div><div class="obb">Select all platforms. Tap "Set primary" on your main one.</div><div class="pg">${cards}</div>`;
+  }else{
+    const ppd=[1,2,3,5,7].map(n=>`<button class="btn bs bsm ppd" data-n="${n}" style="${OB.ppd===n?"background:var(--pr);border-color:var(--pr);color:white":""}">${n}x/day</button>`).join("");
+    body=`<div class="obt">Daily posting<br>schedule</div><div class="obb">How many posts per day? Your calendar is built around this.</div><div style="display:flex;gap:7px;margin-bottom:20px">${ppd}</div><div style="background:var(--s2);border-radius:var(--r);padding:14px;border:1px solid var(--br);font-size:12px">${[["Creator",OB.name],["Niches",OB.niches.join(", ")||"—"],["Platforms",OB.platforms.map(id=>PLATS.find(p=>p.id===id)?.label).join(", ")||"—"],["Primary",PLATS.find(p=>p.id===OB.primary)?.label||"—"],["Posts/day",OB.ppd]].map(([k,v])=>`<div style="margin-bottom:5px"><span style="color:var(--mu)">${k}: </span><strong>${v}</strong></div>`).join("")}</div>`;
+  }
+  const ok=OB.step===0?OB.name.trim().length>0:OB.step===1?OB.niches.length>0:OB.step===2?OB.platforms.length>0&&OB.primary!=="":true;
+  return`<div class="obw"><div class="obc"><div style="display:flex;align-items:center;gap:9px;margin-bottom:24px"><div class="lm">⚡</div><div class="lt">Creator<span>Pulse</span></div></div><div class="prog">${dots}</div><div class="obs">Step ${OB.step+1} of ${steps.length} — ${steps[OB.step]}</div>${body}<div class="obn">${OB.step>0?`<button class="btn bs" id="ob-back">← Back</button>`:`<div></div>`}${OB.step<steps.length-1?`<button class="btn bp" id="ob-next" ${ok?"":"disabled"}>Continue →</button>`:`<button class="btn ba" id="ob-finish" ${ok?"":"disabled"}>Launch 🚀</button>`}</div></div></div>`;
+}
+
+function bindOB(){
+  document.getElementById("ob-name")?.addEventListener("input",e=>{OB.name=e.target.value;render();});
+  document.querySelectorAll(".nc:not(.mx)").forEach(el=>el.addEventListener("click",()=>{const n=el.dataset.niche;OB.niches=OB.niches.includes(n)?OB.niches.filter(x=>x!==n):[...OB.niches,n];render();}));
+  document.querySelectorAll(".pc").forEach(el=>el.addEventListener("click",()=>{const id=el.dataset.plat;OB.platforms=OB.platforms.includes(id)?OB.platforms.filter(x=>x!==id):[...OB.platforms,id];if(!OB.primary&&OB.platforms.includes(id))OB.primary=id;render();}));
+  document.querySelectorAll(".spp").forEach(el=>el.addEventListener("click",e=>{e.stopPropagation();OB.primary=el.dataset.pid;render();}));
+  document.querySelectorAll(".ppd").forEach(el=>el.addEventListener("click",()=>{OB.ppd=parseInt(el.dataset.n);render();}));
+  document.getElementById("ob-back")?.addEventListener("click",()=>{OB.step--;render();});
+  document.getElementById("ob-next")?.addEventListener("click",()=>{OB.step++;render();});
+  document.getElementById("ob-finish")?.addEventListener("click",async()=>{
+    USER={name:OB.name,niches:OB.niches,platforms:OB.platforms,primaryPlatform:OB.primary,postsPerDay:OB.ppd,email:USER?.email||""};
+    // Save profile to Supabase
+    if(AUTH_TOKEN){
+      try{
+        await fetch(`${API}/api/auth/update-profile`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:AUTH_TOKEN,...USER})});
+        saveSession(AUTH_TOKEN,USER);
+      }catch(e){}
+    }
+    AUTH_MODE="app";render();bindApp();
+    loadAllTrends();loadNotifications();
+  });
+}
+
+// ── LOAD LIVE TRENDS ──────────────────────────────────────────────────────────
+async function loadAllTrends() {
+  document.getElementById("trends-status")?.setAttribute("data-loading","true");
+  ALL_TRENDS = [];
+  for (const niche of USER.niches) {
+    try {
+      const articles = await fetchNews(niche);
+      ALL_TRENDS.push(...articles);
+      TRENDS_CACHE[niche] = articles;
+    } catch(e) {}
+  }
+  ALL_TRENDS.sort((a,b) => b.score - a.score);
+  if (TAB === "generate") { render(); bindApp(); }
+}
+
+async function loadNotifications() {
+  NOTIFICATIONS = await fetchNotifications(USER.niches);
+  const dot = document.getElementById("bell-dot");
+  if (dot && NOTIFICATIONS.length > 0) dot.classList.add("show");
+}
+
+// ── APP SHELL ─────────────────────────────────────────────────────────────────
+function renderApp(){
+  const nav=[{id:"generate",icon:"✨",label:"Generate Content"},{id:"calendar",icon:"📅",label:"Content Calendar"},{id:"settings",icon:"⚙️",label:"Settings"}];
+  const navH=nav.map(n=>`<button class="ni ${TAB===n.id?"active":""}" data-tab="${n.id}"><span style="font-size:13px;width:16px;text-align:center">${n.icon}</span>${n.label}</button>`).join("");
+  const pills=USER.niches.map(n=>`<div class="npill" style="border-left:3px solid ${gc(n)}">${n}</div>`).join("");
+  const picons=USER.platforms.map(id=>{const p=PLATS.find(x=>x.id===id);return`<span title="${p?.label}" style="font-size:14px">${p?.icon}</span>`;}).join("");
+  const titles={generate:{t:"Generate Content",s:"Live trending stories from the internet — tap to generate"},calendar:{t:"Content Calendar",s:"Your posting schedule + niche events"},settings:{t:"Settings",s:"Account & preferences"}};
+  const tt=titles[TAB];
+  const notifItems = NOTIFICATIONS.length > 0
+    ? NOTIFICATIONS.map(n=>`<div class="notif-item"><div class="notif-niche">${n.niche}</div><div class="notif-hl">${n.headline}</div><div class="notif-time">${n.time}</div></div>`).join("")
+    : `<div class="notif-empty">No new notifications</div>`;
+  let main=TAB==="generate"?renderGen():TAB==="calendar"?renderCal():renderSet();
+  return`<div class="app"><div class="sidebar"><div class="logo"><div class="lm">⚡</div><div class="lt">Creator<span>Pulse</span></div></div><div style="font-size:9px;color:var(--mu);text-transform:uppercase;letter-spacing:.8px;font-weight:600;padding:0 6px;margin-bottom:4px">Your Niches</div><div class="npills">${pills}</div><div class="ns">Menu</div>${navH}<div style="margin-top:auto;padding:11px 6px 0"><div style="font-size:9px;color:var(--mu);margin-bottom:3px">Platforms</div><div style="display:flex;gap:4px;flex-wrap:wrap">${picons}</div></div></div><div class="main"><div class="topbar"><div><h1>${tt.t}</h1><p>${tt.s}</p></div><div style="display:flex;align-items:center;gap:8px"><div class="bell-wrap" id="bell-wrap"><div class="bell-btn" id="bell-btn">🔔</div><div class="bell-dot" id="bell-dot"></div><div class="notif-dropdown ${NOTIF_OPEN?"open":""}" id="notif-dd"><div class="notif-header">🔔 Notifications</div>${notifItems}</div></div><span class="pchip">✦ Free</span><div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--pr),var(--ac));display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;cursor:pointer" id="avatar-btn" title="Logout">${USER.name[0]?.toUpperCase()}</div></div></div><div class="content">${main}</div></div></div>`;
+}
+
+function renderGen(){
+  const isLoading = ALL_TRENDS.length === 0;
+  const trendsHTML = isLoading
+    ? `<div class="lr"><span class="sp"></span><span>Fetching live trending stories from the internet...</span></div>`
+    : ALL_TRENDS.map(t=>renderTC(t)).join("");
+  return`<div id="trends-status" style="background:rgba(124,58,237,.07);border:1px solid rgba(124,58,237,.18);border-radius:var(--r);padding:10px 15px;margin-bottom:18px;display:flex;gap:8px;align-items:center;font-size:11px"><span>🔄</span><span style="color:var(--mu)">${isLoading?"<span class='sp'></span> Loading live news from <strong style='color:var(--tx)'>" + USER.niches.length + " niche" + (USER.niches.length>1?"s":"") + "</strong>...":"Live news from <strong style='color:var(--tx)'>" + USER.niches.length + " niche" + (USER.niches.length>1?"s":"") + "</strong> · <strong style='color:var(--pl)'>" + ALL_TRENDS.length + " stories</strong> · <span style='color:var(--gr)'>● Live</span>"}</span></div><div class="stit">🔥 Trending across your niches</div><div class="tlist">${trendsHTML}</div>`;
+}
+
+function renderTC(t){
+  const isE=!!EXP[t.id],ap=AP[t.id]||USER.primaryPlatform,at=AT[t.id]||PTYPES[ap]?.[0]||"",outs=OUTS[t.id]||[],rec=RECS[t.id]||"",isL=!!LOAD[t.id],nc=gc(t.niche);
+  const imgEl = t.image
+    ? `<img src="${t.image}" class="trend-img" onerror="this.style.display='none'" />`
+    : `<div class="trend-img-placeholder">${t.niche.includes("Football")||t.niche.includes("Soccer")?"⚽":t.niche.includes("Basketball")?"🏀":t.niche.includes("Music")?"🎵":t.niche.includes("Crypto")?"₿":t.niche.includes("Gaming")?"🎮":"📰"}</div>`;
+  let cpanel="";
+  if(isE){
+    const ptabs=USER.platforms.map(id=>{const p=PLATS.find(x=>x.id===id);return`<button class="ptab ${ap===id?"active":""}" data-tid="${t.id}" data-pid="${id}">${p?.icon} ${p?.label}</button>`;}).join("");
+    const cts=(PTYPES[ap]||[]).map(ct=>`<button class="ctp ${at===ct?"active":""}" data-tid="${t.id}" data-ct="${ct}">${ct}</button>`).join("");
+    const outsH=outs.map(o=>renderOut(o)).join("");
+    cpanel=`<div class="cp"><div class="sb2">${t.summary||"Tap generate to create content for this story."}</div>${rec?`<div class="ar"><span>🤖</span><span><strong>AI Rec:</strong> ${rec}</span></div>`:""}<div style="font-size:9px;color:var(--mu);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.8px">Platform</div><div class="ptabs">${ptabs}</div><div style="font-size:9px;color:var(--mu);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.8px">Content Type</div><div class="ctps">${cts}</div><div class="gr2"><button class="btn bp bsm gen-btn" data-tid="${t.id}" ${isL?"disabled":""}>${isL?`<span class="sp"></span> Generating...`:"⚡ Generate"}</button><button class="btn bg2 bsm gen-all-btn" data-tid="${t.id}" ${isL?"disabled":""}>All ${PLATS.find(p=>p.id===ap)?.label} Formats</button></div>${isL?`<div class="lr"><span class="sp"></span><span>CreatorPulse AI is crafting your content...</span></div>`:""}<div class="oa">${outsH}</div></div>`;
+  }
+  return`<div class="tc ${isE?"exp":""}" id="tc-${t.id}"><div class="th" data-tid="${t.id}">${imgEl}<span class="rb">${t.score}</span><span class="ntb" style="background:${nc}22;color:${nc};border:1px solid ${nc}44">${t.niche}</span><div style="flex:1"><div class="hl">${t.headline}</div><div class="tmeta"><span class="tsc">🔥 ${t.score} viral</span>${(t.tags||[]).map(tg=>`<span class="ttg">${tg}</span>`).join("")}${t.source?`<span class="ttg">${t.source}</span>`:""}</div></div><span class="cv ${isE?"open":""}">▼</span></div>${cpanel}</div>`;
+}
+
+function renderOut(o){
+  if(!o)return"";
+  if(o.type==="carousel"){
+    const imgs=(o.images||[]).map((img,i)=>`<div style="margin-bottom:9px"><img src="${img}" class="gi"/><div class="ia"><button class="btn bp bxs dl-btn" data-url="${img}" data-name="carousel-slide-${i+1}.png">⬇ Download Slide ${i+1}</button></div></div>`).join("");
+    const sts=(o.slides||[]).map(s=>`<div class="sld"><div class="sn">Slide ${s.slideNum} of ${o.slides.length}</div><div class="st2">${s.title}</div><div class="sbd">${s.body}</div></div>`).join("");
+    const cp=(o.slides||[]).map(s=>`SLIDE ${s.slideNum}: ${s.title}\n${s.body}`).join("\n\n");
+    return`<div class="oc"><div class="oh"><span class="ol">📱 IG Carousel (${o.slides?.length||0} slides)</span><button class="cb" data-copy="${encodeURIComponent(cp)}">Copy Text</button></div>${imgs?`<div class="iw">${imgs}</div>`:""}<div class="slds">${sts}</div></div>`;
+  }
+  if(o.type==="thumbnail"){
+    return`<div class="oc"><div class="oh"><span class="ol">🖼️ YouTube Thumbnail</span></div><div class="iw"><img src="${o.img}" class="gi"/><div class="ia"><button class="btn bp bxs dl-btn" data-url="${o.img}" data-name="thumbnail.png">⬇ Download PNG (1280x720)</button></div></div></div>`;
+  }
+  if(o.type==="noface"){
+    return`<div class="oc"><div class="oh"><span class="ol">🎵 TikTok No-Face Graphic</span><button class="cb" data-copy="${encodeURIComponent(o.hook+"\n\n"+o.caption)}">Copy</button></div><div class="iw"><img src="${o.img}" class="gi"/><div class="ia"><button class="btn bp bxs dl-btn" data-url="${o.img}" data-name="tiktok-graphic.png">⬇ Download Graphic</button></div></div><div class="hbl"><div class="hlb">🪝 Hook Text — show on screen</div><div class="htx">${o.hook}</div></div><div class="hbl"><div class="hlb">📝 Caption + Hashtags</div><div style="font-size:12px;line-height:1.7;white-space:pre-wrap">${o.caption}</div></div></div>`;
+  }
+  if(o.type==="hf-image"){
+    return`<div class="oc"><div class="oh"><span class="ol">🎨 AI Generated Image</span></div><div class="iw"><img src="${o.img}" class="gi"/><div class="ia"><button class="btn bp bxs dl-btn" data-url="${o.img}" data-name="ai-image.png">⬇ Download</button></div></div></div>`;
+  }
+  return`<div class="oc"><div class="oh"><span class="ol">${o.label||""}</span><button class="cb" data-copy="${encodeURIComponent(o.content||"")}">Copy</button></div><div class="ob">${(o.content||"").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</div></div>`;
+}
+
+function renderCal(){
+  const now=new Date(),today=now.getDate(),isCur=now.getMonth()===CAL_M&&now.getFullYear()===CAL_Y;
+  const first=new Date(CAL_Y,CAL_M,1).getDay(),days=new Date(CAL_Y,CAL_M+1,0).getDate();
+  const em={3:[{t:"post",x:"Post due"}],6:[{t:"event",x:"Niche event"}],10:[{t:"reminder",x:"Reminder"}],14:[{t:"post",x:"Mid-week post"},{t:"event",x:"Industry event"}],17:[{t:"reminder",x:"Weekly recap"}],21:[{t:"event",x:"Major event"}],25:[{t:"post",x:"End of week"}]};
+  if(isCur)em[today]=[{t:"reminder",x:"Post today!"},{t:"post",x:"Trending now"}];
+  const cells=[];for(let i=0;i<first;i++)cells.push(null);for(let d=1;d<=days;d++)cells.push(d);
+  const cellsH=cells.map(d=>{if(!d)return`<div class="cc"></div>`;const isTod=isCur&&d===today,evs=(em[d]||[]).map(e=>`<div class="cev ${e.t}">${e.x}</div>`).join("");return`<div class="cc ${isTod?"td":""}"><div class="cdt ${isTod?"tod":""}">${d}</div>${evs}</div>`;}).join("");
+  const mo=MONTHS[CAL_M];
+  const up=[
+    {date:"Today",name:"Breaking: Live Trending Stories",type:USER.niches[0]||"Your niche"},
+    {date:"Tomorrow",name:"Scheduled Content Drop",type:"Your Schedule"},
+    {date:mo.slice(0,3)+" "+String(Math.min(today+3,days)).padStart(2,"0"),name:"Post Reminder",type:"Calendar"},
+    {date:mo.slice(0,3)+" "+String(Math.min(today+7,days)).padStart(2,"0"),name:"Weekly Recap",type:"Automated"},
+    {date:mo.slice(0,3)+" "+String(Math.min(today+10,days)).padStart(2,"0"),name:"Niche Event Alert",type:USER.niches[1]||USER.niches[0]||"Trending"},
+  ];
+  return`<div class="cal"><div class="cgw"><div class="ch2"><div class="cm">${MONTHS[CAL_M]} ${CAL_Y}</div><div class="cn"><button id="cal-prev">&#8249;</button><button id="cal-next">&#8250;</button></div></div><div class="cday">${DAYS.map(d=>`<div class="cdl2">${d}</div>`).join("")}</div><div class="ccel">${cellsH}</div></div><div class="cbot"><div class="cbc"><div class="stit" style="font-size:13px;margin-bottom:11px">📌 Upcoming</div>${up.map(e=>`<div class="upi"><div class="upd">${e.date}</div><div class="upn">${e.name}</div><div class="upt">${e.type}</div></div>`).join("")}</div><div class="cbc"><div class="stit" style="font-size:13px;margin-bottom:9px">📋 Schedule</div><div style="font-size:12px;color:var(--mu);margin-bottom:11px">${USER.postsPerDay}x per day · <strong style="color:var(--tx)">${USER.postsPerDay*7}/week</strong></div><div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">${USER.niches.map(n=>`<div style="display:flex;align-items:center;gap:7px;font-size:11px"><div style="width:9px;height:9px;border-radius:50%;background:${gc(n)};flex-shrink:0"></div>${n}</div>`).join("")}</div><div style="background:rgba(6,182,212,.08);border:1px solid rgba(6,182,212,.2);border-radius:var(--rs);padding:9px 11px;font-size:10px;color:var(--a2)">✦ Google Calendar sync coming soon</div></div></div></div>`;
+}
+
+function renderSet(){
+  return`<div style="max-width:520px">
+    <div class="oc" style="margin-bottom:11px">
+      <div class="oh"><span class="ol">Account</span></div>
+      <div style="padding:14px;display:flex;flex-direction:column;gap:10px">
+        <div><label style="font-size:9px;color:var(--mu);display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.8px;font-weight:600">Creator Name</label><input class="ti" value="${USER.name}" id="set-name"/></div>
+        ${USER.email?`<div><label style="font-size:9px;color:var(--mu);display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.8px;font-weight:600">Email</label><input class="ti" value="${USER.email}" readonly style="opacity:.6"/></div>`:""}
+        <div><label style="font-size:9px;color:var(--mu);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.8px;font-weight:600">Active Niches</label>
+          <div style="display:flex;flex-wrap:wrap;gap:5px">${USER.niches.map(n=>`<span style="padding:3px 10px;border-radius:99px;background:${gc(n)}22;border:1px solid ${gc(n)}44;color:${gc(n)};font-size:11px;font-weight:600">${n}</span>`).join("")}</div>
+        </div>
+        <button class="btn bs bsm" id="logout-btn" style="border-color:rgba(239,68,68,.3);color:#FCA5A5;margin-top:4px">Sign Out</button>
+      </div>
+    </div>
+    <div class="oc">
+      <div class="oh"><span class="ol">Plan</span></div>
+      <div style="padding:14px">
+        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:15px;margin-bottom:3px">Free Plan — Fully Unlimited</div>
+        <div style="font-size:11px;color:var(--mu);margin-bottom:11px">Powered by Groq AI + NewsAPI + TheSportsDB.</div>
+        <div style="background:rgba(16,185,129,.07);border:1px solid rgba(16,185,129,.2);border-radius:var(--rs);padding:11px;font-size:11px;color:var(--gr);line-height:1.9">
+          ✓ Live news from 130+ niches<br>
+          ✓ Teleprompter-ready scripts<br>
+          ✓ Real article photos in thumbnails & carousels<br>
+          ✓ Threads, captions, reels, long form, docs<br>
+          ✓ Download all graphics as PNG<br>
+          ✓ Your profile saved — log in from any device
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ── BIND APP ──────────────────────────────────────────────────────────────────
+// ── SURGICAL CARD UPDATE (avoids full-page re-render on every tap) ───────────
+function updateSingleCard(tid){
+  const t = ALL_TRENDS.find(x=>x.id===tid);
+  if(!t) return;
+  const oldEl = document.getElementById("tc-"+tid);
+  if(!oldEl){ render(); bindApp(); return; }
+  const wrap = document.createElement("div");
+  wrap.innerHTML = renderTC(t);
+  const newEl = wrap.firstElementChild;
+  oldEl.replaceWith(newEl);
+  bindCard(newEl, tid);
+}
+
+function bindCard(cardEl, tid){
+  cardEl.querySelector(".th")?.addEventListener("click", async ()=>{
+    EXP[tid]=!EXP[tid];
+    if(EXP[tid]&&!AP[tid])AP[tid]=USER.primaryPlatform;
+    if(EXP[tid]&&!AT[tid])AT[tid]=PTYPES[USER.primaryPlatform]?.[0]||"";
+    updateSingleCard(tid);
+    if(EXP[tid]&&!RECS[tid]){
+      const t=ALL_TRENDS.find(x=>x.id===tid);
+      if(t){const rec=await generateText("Give a one-sentence content recommendation. Direct, specific, no preamble.",`Niches: ${USER.niches.join(", ")}. Story: "${t.headline}". Best platform and format?`);RECS[tid]=rec;updateSingleCard(tid);}
+    }
+  });
+  cardEl.querySelectorAll(".ptab[data-tid]").forEach(el=>el.addEventListener("click",e=>{e.stopPropagation();AP[tid]=el.dataset.pid;AT[tid]=PTYPES[el.dataset.pid]?.[0]||"";updateSingleCard(tid);}));
+  cardEl.querySelectorAll(".ctp[data-tid]").forEach(el=>el.addEventListener("click",e=>{e.stopPropagation();AT[tid]=el.dataset.ct;updateSingleCard(tid);}));
+  cardEl.querySelectorAll(".gen-btn").forEach(el=>el.addEventListener("click",e=>{e.stopPropagation();gen(tid,false);}));
+  cardEl.querySelectorAll(".gen-all-btn").forEach(el=>el.addEventListener("click",e=>{e.stopPropagation();gen(tid,true);}));
+  cardEl.querySelectorAll(".cb[data-copy]").forEach(el=>el.addEventListener("click",e=>{e.stopPropagation();navigator.clipboard.writeText(decodeURIComponent(el.dataset.copy));el.textContent="✓ Copied";el.classList.add("copied");setTimeout(()=>{el.textContent="Copy";el.classList.remove("copied");},2000);}));
+  cardEl.querySelectorAll(".dl-btn").forEach(el=>el.addEventListener("click",e=>{e.stopPropagation();const a=document.createElement("a");a.href=el.dataset.url;a.download=el.dataset.name;document.body.appendChild(a);a.click();document.body.removeChild(a);}));
+}
+
+function bindApp(){
+  document.querySelectorAll(".ni[data-tab]").forEach(el=>el.addEventListener("click",()=>{TAB=el.dataset.tab;render();bindApp();}));
+  document.getElementById("cal-prev")?.addEventListener("click",()=>{if(CAL_M===0){CAL_M=11;CAL_Y--;}else CAL_M--;render();bindApp();});
+  document.getElementById("cal-next")?.addEventListener("click",()=>{if(CAL_M===11){CAL_M=0;CAL_Y++;}else CAL_M++;render();bindApp();});
+  document.getElementById("refresh-btn")?.addEventListener("click",()=>{ALL_TRENDS=[];render();bindApp();loadAllTrends();});
+  // Avatar = logout
+  const doLogout=()=>{if(confirm("Log out of CreatorPulse?")){clearSession();ALL_TRENDS=[];NOTIFICATIONS=[];AUTH_FORM={email:"",password:"",confirmPassword:""};AUTH_ERR="";render();}};
+  document.getElementById("avatar-btn")?.addEventListener("click",doLogout);
+  document.getElementById("logout-btn")?.addEventListener("click",doLogout);
+  // Bell
+  document.getElementById("bell-btn")?.addEventListener("click",e=>{e.stopPropagation();NOTIF_OPEN=!NOTIF_OPEN;render();bindApp();});
+  if(NOTIF_OPEN){
+    document.addEventListener("click",function closeDD(e){
+      if(!e.target.closest("#bell-wrap")){NOTIF_OPEN=false;render();bindApp();}
+      document.removeEventListener("click",closeDD);
+    },{once:true});
+  }
+  // Trends — each card binds its own scoped listeners
+  document.querySelectorAll(".tc[id^='tc-']").forEach(cardEl=>{
+    const tid=cardEl.id.replace("tc-","");
+    bindCard(cardEl,tid);
+  });
+}
+
+// ── GENERATE ──────────────────────────────────────────────────────────────────
+async function gen(tid, all) {
+  const t=ALL_TRENDS.find(x=>x.id===tid);if(!t)return;
+  const ap=AP[tid]||USER.primaryPlatform,at=AT[tid]||PTYPES[ap]?.[0]||"",accent=gc(t.niche);
+  LOAD[tid]=true;OUTS[tid]=[];updateSingleCard(tid);
+  try{
+    const types=all?(PTYPES[ap]||[]):[at];const res=[];
+    // Pre-load subject image for graphics
+    const subjectImg = await loadSubjectImage(t.headline, t.niche, t.image);
+
+    for(const ct of types){
+      if(ct==="IG Carousel"){
+        let sc=5;
+        try{const cr=await generateText('Return ONLY valid JSON: {"slideCount":number}',`Story: "${t.headline}". Recommend Instagram carousel slide count 3-7.`);sc=JSON.parse(cr).slideCount||5;}catch{}
+        let slides=[];
+        try{const sr=await generateText(`Return ONLY a valid JSON array of ${sc} objects: [{"slideNum":1,"title":"bold hook","body":"2-3 punchy sentences"}]. No markdown.`,`Create a ${sc}-slide viral Instagram carousel for ${t.niche} creator. Story: "${t.headline}". Summary: ${t.summary}`);slides=JSON.parse(sr);}
+        catch{slides=[{slideNum:1,title:t.headline,body:t.summary||""}];}
+        const images=slides.map((s,i)=>makeGraphicCanvas(s.title||t.headline,subjectImg,i+1,slides.length,accent,USER.name));
+        const cap=await generateText(SYS,`Instagram caption + 10 hashtags for ${t.niche} carousel: "${t.headline}". Punchy, ready to post.`);
+        res.push({type:"carousel",slides,images});res.push({type:"text",label:"📝 Caption + Hashtags",content:cap});
+      }else if(ct==="Thumbnail"){
+        let hl=t.headline.toUpperCase().split(" ").slice(0,5).join(" ");
+        try{const tr=await generateText('Return ONLY valid JSON: {"headline":"MAX 6 WORDS ALL CAPS SHOCKING"}',`${t.niche}: "${t.headline}". World-class YouTube thumbnail. MrBeast level.`);hl=JSON.parse(tr).headline||hl;}catch{}
+        res.push({type:"thumbnail",img:makeThumbnailCanvas(hl,subjectImg,USER.name,accent)});
+      }else if(ct==="TikTok No-Face Graphic"){
+        const hook=await generateText(SYS,"TikTok hook. MAX 6 WORDS. ALL CAPS. Shocking. Return ONLY the hook text, nothing else.");
+        const cap=await generateText(SYS,`TikTok caption + 6 hashtags for ${t.niche}: "${t.headline}". Ready to post.`);
+        res.push({type:"noface",hook:hook.trim(),caption:cap,img:makeGraphicCanvas(hook.trim()||t.headline,subjectImg,1,1,accent,USER.name)});
+      }else if(ct==="TikTok Script"){
+        let ld={length:"short",targetSeconds:30,reason:"Quick punchy take"};
+        try{const lr=await generateText('Return ONLY valid JSON: {"length":"short","targetSeconds":30,"reason":"one sentence"}',`${t.niche}: "${t.headline}". Best TikTok length?`);ld=JSON.parse(lr);}catch{}
+        const s=await generateText(SYS,`Write a ${ld.length==="long"?"60-90 second":"15-30 second"} TikTok script for a ${t.niche} creator about: "${t.headline}". Write it as continuous spoken narration exactly as the creator would say it on camera, word for word, ready for a teleprompter. Start with the hook line, flow naturally into the body, end with a call to action. Do not use headers, bullets, or labels — just the words to say, as flowing natural speech with paragraph breaks where the creator would naturally pause.`);
+        res.push({type:"text",label:`🎵 TikTok Script (${ld.length==="long"?"Long":"Short"} ~${ld.targetSeconds}s) — ${ld.reason}`,content:s});
+      }else if(ct==="Documentary Script"){
+        const s=await generateText(SYS,`Write a YouTube documentary narration script for a ${t.niche} creator about: "${t.headline}". Write it as continuous spoken narration exactly as a narrator would read it aloud, word for word, ready for a teleprompter, roughly 700-800 words. It should flow as one continuous voiceover covering the opening hook, the background story, the main conflict or development, an analysis of what it means, and a closing thought with a call to action — but written as natural spoken paragraphs, not labeled sections. You may include occasional bracketed visual notes like [show footage of X] sparingly, but the majority of the text must be pure spoken narration.`);
+        res.push({type:"text",label:"🎬 Documentary Script",content:s});
+      }else if(ct==="Long Form Script"){
+        const s=await generateText(SYS,`Write a full YouTube video script for a ${t.niche} creator about: "${t.headline}". Write it as continuous spoken narration exactly as the creator would say it on camera, word for word, ready for a teleprompter, roughly 700-900 words. Open with a strong hook, introduce the topic naturally, cover the main points as flowing spoken paragraphs, and close with a call to action. Do not use headers, bold text, bullet points, or section labels of any kind — just the natural words to say out loud, broken into paragraphs where a speaker would naturally pause for breath or transition.`);
+        res.push({type:"text",label:"▶️ Long Form Script",content:s});
+      }else if(ct==="YouTube Short Script"){
+        const s=await generateText(SYS,`Write a 45-60 second YouTube Shorts script for a ${t.niche} creator about: "${t.headline}". Write it as continuous spoken narration exactly as the creator would say it on camera, word for word, ready for a teleprompter. Open with a 3-second hook that stops the scroll, deliver the core point fast and punchy, end with a strong call to action. Plain spoken paragraphs only — no headers, no JSON, no bullet points, no labels.`);
+        res.push({type:"text",label:"▶️ YouTube Short Script",content:s});
+      }else if(ct==="Title + Description"){
+        const s=await generateText(SYS,`3 YouTube titles + SEO description for ${t.niche}. Topic: "${t.headline}". Titles: clickbait. Description: keywords + hashtags.`);
+        res.push({type:"text",label:"▶️ Title + Description",content:s});
+      }else if(ct==="Thread (5 tweets)"){
+        const s=await generateText(SYS,`Write a viral 5-tweet X thread for a ${t.niche} creator about: "${t.headline}". Format each line exactly as "Tweet 1/5: [text]" through "Tweet 5/5: [text]", max 280 characters each, punchy and natural. Last tweet ends with a call to action. Return ONLY the five tweet lines as plain text — no JSON, no markdown, no extra commentary.`);
+        res.push({type:"text",label:"𝕏 Thread",content:s});
+      }else if(ct==="IG Reel Script"){
+        const s=await generateText(SYS,`Write a 30-60 second Instagram Reel script for a ${t.niche} creator about: "${t.headline}". Write it as continuous spoken narration exactly as the creator would say it on camera, word for word, ready for a teleprompter. Open with a hook, deliver the point, close with a call to action. Plain natural spoken paragraphs only — no headers, no labels, no bullet points.`);
+        res.push({type:"text",label:"📸 IG Reel Script",content:s});
+      }else{
+        const p=PLATS.find(x=>x.id===ap);
+        const s=await generateText(SYS,`Write a "${ct}" for a ${t.niche} creator on ${p?.label||ap} about: "${t.headline}". ${t.summary}. Return ONLY the plain ready-to-post text itself — no JSON, no curly braces, no key-value wrapping, no markdown formatting, no quotation marks around the whole thing. Just the raw text exactly as it should be pasted into the post.`);
+        res.push({type:"text",label:`${p?.icon||""} ${ct}`,content:s});
+      }
+    }
+    OUTS[tid]=res;
+  }catch(e){OUTS[tid]=[{type:"text",label:"Error",content:"Generation failed: "+(e.message||"Unknown error")+"\n\nCheck that your Groq API key is set correctly in Render's environment variables."}];}
+  LOAD[tid]=false;updateSingleCard(tid);
+}
+
+// ── BOOT ──────────────────────────────────────────────────────────────────────
+(function boot(){
+  const restored = restoreSession();
+  if(restored){
+    AUTH_MODE="app";
+    render();
+    loadAllTrends();
+    loadNotifications();
+  } else {
+    AUTH_MODE="landing";
+    render();
+  }
+})();
+</script>
+</body>
+</html>
