@@ -304,7 +304,6 @@ app.get("/api/wiki-image", async (req, res) => {
     res.json({ image: null });
   }
 });
-
 // ── 🐦 NEW: TWITTER BREAKING NEWS ROUTE ──────────────────────────────────────
 app.get("/api/twitter-feed", async (req, res) => {
   const { handle } = req.query;
