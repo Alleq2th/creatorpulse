@@ -381,7 +381,7 @@ app.post("/api/generate", async (req, res) => {
         "Authorization": `Bearer ${GROQ_KEY}`,
       },
       body: JSON.stringify({
-        model: "llama3-70b-8192", // ✅ FIXED: TWO 'L's, NOT 'i'
+        model: "llama-3.3-70b-versatile", // ✅ FIXED: TWO 'L's, NOT 'i'
         messages: [
           { role: "system", content: system },
           { role: "user", content: user },
