@@ -187,6 +187,34 @@ const NICHE_RSS = {
   "default": "https://feeds.bbci.co.uk/news/rss.xml",
 };
 
+// ── 🐦 TWITTER HANDLES PER NICHE (5-6 major breaking accounts each) ──────────
+const NICHE_TWITTER_HANDLES = {
+  "Football/Soccer": ["FabrizioRomano", "ESPNFC", "SkySportsPL", "BBCSport", "Transfermarkt", "Goal"],
+  "Basketball": ["ShamsCharania", "WojESPN", "NBA", "ESPNNBA", "BleacherReport", "TheAthleticNBA"],
+  "Tennis": ["TennisChannel", "ATPWorldTour", "WTA", "TennisTV", "BBC_Tennis", "USOpen"],
+  "Cricket": ["ESPNcricinfo", "ICC", "CricketAus", "BCCI", "SkyCricket", "TheCricketGuy"],
+  "Formula 1": ["F1", "SkySportsF1", "McLarenF1", "ScuderiaFerrari", "MercedesAMGF1", "redbullracing"],
+  "Boxing": ["BoxingScene", "DAZNBoxing", "MatchroomBoxing", "Queensberry", "SkySportsBoxing"],
+  "MMA/UFC": ["ufc", "espnmma", "arielhelwani", "mmanews", "MMAFighting", "danawhite"],
+  "Music (Hip-Hop)": ["ComplexMusic", "HipHopDX", "XXL", "TheShadeRoom", "RevoltTV", "Triller"],
+  "Music (Afrobeats)": ["afrobeatsnews", "Davido", "BurnaBoy", "Wizkid", "PulseNigeria", "NotJustOk"],
+  "Music (Pop)": ["PopCrave", "Billboard", "MTV", "CapitalFM", "PopBase", "charts"],
+  "Movies & TV": ["DEADLINE", "Variety", "THR", "Netflix", "HollywoodReporter", "FilmUpdates"],
+  "AI & Tech News": ["TechCrunch", "WIRED", "TheVerge", "Arstechnica", "VentureBeat", "OpenAI"],
+  "Tech": ["TechCrunch", "WIRED", "TheVerge", "Arstechnica", "VentureBeat", "OpenAI"],
+  "Crypto": ["CoinDesk", "Cointelegraph", "CryptoSlate", "Blockworks", "ForbesCrypto", "Crypto_Potato"],
+  "Console Gaming": ["IGN", "GameSpot", "PCGamer", "Steam", "PlayStation", "Xbox"],
+  "PC Gaming": ["IGN", "GameSpot", "PCGamer", "Steam", "PlayStation", "Xbox"],
+  "Mobile Gaming": ["IGN", "GameSpot", "PCGamer", "Steam", "PlayStation", "Xbox"],
+  "Anime": ["AnimeNews", "Crunchyroll", "Funimation", "MangaUpdates", "Anime_TV", "shonenjump"],
+  "Travel": ["TravelLeisure", "CondéNast", "LonelyPlanet", "NatGeoTravel", "Booking", "TripAdvisor"],
+  "Food & Recipes": ["NYTFood", "Food52", "BonAppetit", "TastingTable", "ChefSteps", "SeriousEats"],
+  "Streetwear": ["Vogue", "GQ", "Fashionista", "WWD", "Highsnobiety", "Hypebeast"],
+  "Luxury Fashion": ["Vogue", "GQ", "Fashionista", "WWD", "Highsnobiety", "Hypebeast"],
+  "Business News": ["Bloomberg", "ReutersBiz", "FT", "WSJ", "Forbes", "BusinessInsider"],
+  "default": ["BreakingNews", "Reuters", "AP", "BBCWorld", "CNN", "SkyNews"]
+};
+
 // ── ROUTE: GET NEWS ───────────────────────────────────────────────────────────
 app.get("/api/news", async (req, res) => {
   const { niche } = req.query;
@@ -195,9 +223,9 @@ app.get("/api/news", async (req, res) => {
   const query = NICHE_QUERIES[niche] || niche;
 
   try {
-    // Try NewsAPI first
+    // Try NewsAPI first - ✅ FIX: sortBy=publishedAt for LATEST breaking news
     if (NEWS_KEY && NEWS_KEY !== "YOUR_NEWS_KEY_HERE") {
-      const url = `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&sortBy=relevancy&pageSize=10&language=en&apiKey=${NEWS_KEY}`;
+      const url = `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&sortBy=publishedAt&pageSize=15&language=en&apiKey=${NEWS_KEY}`;
       const r = await fetch(url);
       const data = await r.json();
       if (data.articles && data.articles.length > 0) {
@@ -210,19 +238,19 @@ app.get("/api/news", async (req, res) => {
           return { ...a, _matchCount: matchCount };
         }).filter(a => a._matchCount > 0)
           .sort((a, b) => b._matchCount - a._matchCount)
-          .slice(0, 6);
+          .slice(0, 8);
 
-        const finalArticles = scored.length > 0 ? scored : data.articles.slice(0, 4);
+        const finalArticles = scored.length > 0 ? scored : data.articles.slice(0, 5);
 
         const articles = finalArticles.map((a, i) => ({
-          id: `${niche.replace(/\s/g, "_")}_${i}`,
+          id: `${niche.replace(/\s/g, "_")}_${i}_${Date.now()}`,
           niche,
           headline: a.title,
           summary: a.description || a.content?.slice(0, 200) || "",
           image: a.urlToImage || null,
           url: a.url,
           source: a.source?.name || "",
-          score: Math.max(70, 99 - i * 3),
+          score: Math.max(70, 99 - i * 2),
           tags: extractTags(a.title, niche),
         }));
         return res.json({ articles });
@@ -233,7 +261,7 @@ app.get("/api/news", async (req, res) => {
     const rssUrl = NICHE_RSS[niche] || NICHE_RSS["default"];
     const feed = await parser.parseURL(rssUrl);
     const articles = (feed.items || []).slice(0, 6).map((item, i) => ({
-      id: `${niche.replace(/\s/g, "_")}_rss_${i}`,
+      id: `${niche.replace(/\s/g, "_")}_rss_${i}_${Date.now()}`,
       niche,
       headline: item.title,
       summary: item.contentSnippet || item.content?.slice(0, 200) || "",
@@ -304,31 +332,44 @@ app.get("/api/wiki-image", async (req, res) => {
     res.json({ image: null });
   }
 });
-// ── 🐦 NEW: TWITTER BREAKING NEWS ROUTE ──────────────────────────────────────
+
+// ── 🐦 TWITTER BREAKING NEWS ROUTE (UPDATED with image extraction) ──────────
 app.get("/api/twitter-feed", async (req, res) => {
   const { handle } = req.query;
   if (!handle) return res.status(400).json({ error: "handle required" });
   try {
     const rssUrl = `https://nitter.net/${handle}/rss`;
     const feed = await parser.parseURL(rssUrl);
-    const items = (feed.items || []).slice(0, 5).map((item, i) => ({
-      id: `twitter_${handle}_${Date.now()}_${i}`,
-      headline: item.title,
-      summary: item.contentSnippet || "",
-      image: null,
-      url: item.link,
-      source: `Twitter @${handle}`,
-      score: 95,
-      tags: ["Breaking", "Twitter"],
-      niche: "Breaking Sports"
-    }));
+    const items = (feed.items || []).slice(0, 5).map((item, i) => {
+      // ✅ FIX: Extract image from enclosure or media:content
+      let imageUrl = null;
+      if (item.enclosure && item.enclosure.url) {
+        imageUrl = item.enclosure.url;
+      } else if (item['media:content'] && item['media:content'].url) {
+        imageUrl = item['media:content'].url;
+      } else if (item.content) {
+        const imgMatch = item.content.match(/<img[^>]+src="([^">]+)"/);
+        if (imgMatch) imageUrl = imgMatch[1];
+      }
+      
+      return {
+        id: `twitter_${handle}_${Date.now()}_${i}`,
+        headline: item.title,
+        summary: item.contentSnippet || "",
+        image: imageUrl, // ✅ Now we have the image!
+        url: item.link,
+        source: `Twitter @${handle}`,
+        score: 95 + Math.floor(Math.random() * 5),
+        tags: ["Breaking", "Twitter"],
+        niche: "Breaking Sports"
+      };
+    });
     res.json({ articles: items });
   } catch (e) {
     console.error("Twitter RSS error:", e.message);
     res.json({ articles: [] });
   }
 });
-
 // ── ROUTE: GENERATE TEXT (GROQ) ───────────────────────────────────────────────
 app.post("/api/generate", async (req, res) => {
   const { system, user } = req.body;
@@ -340,7 +381,7 @@ app.post("/api/generate", async (req, res) => {
         "Authorization": `Bearer ${GROQ_KEY}`,
       },
       body: JSON.stringify({
-        model: "llama3-70b-8192",   // ✅ Fixed model
+        model: "llama3-70b-8192", // ✅ FIXED: TWO 'L's, NOT 'i'
         messages: [
           { role: "system", content: system },
           { role: "user", content: user },
@@ -416,7 +457,6 @@ app.get("/api/notifications", async (req, res) => {
       }
     } catch(e) {}
 
-    // Fallback to RSS
     if (!found) {
       try {
         const rssUrl = NICHE_RSS[niche] || NICHE_RSS["default"];
