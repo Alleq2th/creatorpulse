@@ -310,7 +310,6 @@ app.get("/api/twitter-feed", async (req, res) => {
   const { handle } = req.query;
   if (!handle) return res.status(400).json({ error: "handle required" });
   try {
-    // Using Nitter.net RSS (free, no API key needed)
     const rssUrl = `https://nitter.net/${handle}/rss`;
     const feed = await parser.parseURL(rssUrl);
     const items = (feed.items || []).slice(0, 5).map((item, i) => ({
@@ -342,8 +341,7 @@ app.post("/api/generate", async (req, res) => {
         "Authorization": `Bearer ${GROQ_KEY}`,
       },
       body: JSON.stringify({
-        // ✅ FIX: Valid Groq model
-        model: "llama3-70b-8192",
+        model: "llama3-70b-8192",   // ✅ Fixed model
         messages: [
           { role: "system", content: system },
           { role: "user", content: user },
@@ -394,7 +392,7 @@ app.post("/api/generate-image", async (req, res) => {
   }
 });
 
-// ── ROUTE: NOTIFICATION CHECK (✅ FIXED with RSS fallback) ─────────────────
+// ── ROUTE: NOTIFICATION CHECK (with RSS fallback) ──────────────────────────
 app.get("/api/notifications", async (req, res) => {
   const { niches } = req.query;
   const nicheList = niches ? niches.split(",") : [];
@@ -419,7 +417,7 @@ app.get("/api/notifications", async (req, res) => {
       }
     } catch(e) {}
 
-    // ✅ FIX: Fallback to RSS if NewsAPI gave nothing
+    // Fallback to RSS
     if (!found) {
       try {
         const rssUrl = NICHE_RSS[niche] || NICHE_RSS["default"];
@@ -441,4 +439,3 @@ app.get("/api/notifications", async (req, res) => {
 // ── START SERVER ──────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`CreatorPulse running on port ${PORT}`));
-```
