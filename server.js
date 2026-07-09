@@ -1,6 +1,13 @@
 require("dotenv").config();
 const path = require("path");
 const express = require("express");
+const fs = require("fs");
+console.log("📂 Current directory:", __dirname);
+console.log("📁 Files here:", fs.readdirSync(__dirname));
+console.log("📁 Public folder exists?", fs.existsSync(__dirname + "/public"));
+if (fs.existsSync(__dirname + "/public")) {
+  console.log("📁 Files in public:", fs.readdirSync(__dirname + "/public"));
+}
 const cors = require("cors");
 const fetch = require("node-fetch");
 const RSSParser = require("rss-parser");
