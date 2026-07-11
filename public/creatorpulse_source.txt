@@ -1,20 +1,3 @@
-CREATORPULSE — COMPLETE SOURCE CODE
-=====================================
-
-INSTRUCTIONS:
-1. Copy everything below the line "=== SOURCE CODE START ==="
-2. Paste into a text editor
-3. Save as "index.html" (MUST be .html extension)
-4. Open in browser or serve from your domain
-
-FILE INFO:
-- Size: 101,665 characters
-- Type: Single-file HTML app
-- Contains: CSS + HTML + JavaScript (all embedded)
-- Backend API: Required (see README.md)
-
-=== SOURCE CODE START ===
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
