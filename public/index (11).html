@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+<title>CreatorPulse — Content engine for creators</title>
+<meta name="description" content="Trending stories, scripts, thumbnails, and a schedule that actually thinks. Built for creators across 130+ niches."/>
+<meta name="theme-color" content="#0A0A0F"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0A0A0F;
+  --sf:#141420;
+  --sf2:#1c1c2b;
+  --br:rgba(255,255,255,0.08);
+  --br2:rgba(255,255,255,0.14);
+  --tx:#F5F5F7;
+  --mu:#8C8D9A;
+  --mu2:#5E5F6B;
+  --ac:#7C3AED;      /* purple primary */
+  --ac2:#9F67FF;
+  --pk:#EC4899;
+  --or:#F97316;
+  --danger:#EF4444;
+  --ok:#4ADE80;
+  --grad-num:linear-gradient(135deg,#F97316 0%,#EC4899 100%);
+  --grad-av:linear-gradient(135deg,#7C3AED 0%,#F97316 100%);
+  --tab-h:64px;
+  --r:14px;
+  --rs:10px;
+  --serif:'Fraunces',Georgia,serif;
+  --sans:'Inter','SF Pro Text',system-ui,sans-serif;
+}
+html,body{background:var(--bg);color:var(--tx);font-family:var(--sans);min-height:100vh;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+body{padding-bottom:var(--tab-h);letter-spacing:-0.005em}
+.app{max-width:520px;margin:0 auto;min-height:100vh;position:relative;background:var(--bg)}
+@media(min-width:900px){
+  body{background:linear-gradient(180deg,#0A0A0F 0%,#0d0d15 100%)}
+  .app{max-width:560px;box-shadow:0 0 0 1px var(--br),0 40px 80px rgba(0,0,0,0.4)}
+}
+.page{display:none;padding:20px 20px 100px;animation:fade .25s ease}
+.page.active{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+/* icons */
+.icon{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+.icon-sm{width:14px;height:14px}
+.icon-lg{width:22px;height:22px}
+
+/* topbar */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:8px 0 20px;border-bottom:1px solid var(--br);margin-bottom:20px}
+.brand{display:flex;align-items:center;gap:10px}
+.brand-mark{width:32px;height:32px;border-radius:9px;background:var(--tx);color:var(--bg);display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-weight:700;font-size:19px;line-height:1;letter-spacing:-0.03em}
+.brand-name{font-family:var(--serif);font-weight:600;font-size:20px;letter-spacing:-0.02em}
+.brand-sub{font-size:11px;color:var(--mu);margin-top:1px;letter-spacing:0}
+.topbar-right{display:flex;gap:6px;align-items:center}
+.iconbtn{width:34px;height:34px;border-radius:10px;background:transparent;border:1px solid var(--br);color:var(--mu);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s}
+.iconbtn:hover{color:var(--tx);border-color:var(--br2)}
+.iconbtn:active{transform:scale(.95)}
+.bell-wrap{position:relative}
+.bell-dot{position:absolute;top:6px;right:6px;width:6px;height:6px;background:var(--ac);border-radius:50%;display:none}
+.bell-dot.show{display:block}
+.notif-dd{position:absolute;top:44px;right:0;width:280px;background:var(--sf);border:1px solid var(--br2);border-radius:var(--r);box-shadow:0 20px 40px rgba(0,0,0,.5);z-index:100;display:none;padding:6px;max-height:340px;overflow-y:auto}
+.notif-dd.open{display:block}
+.notif-item{padding:10px;border-bottom:1px solid var(--br)}
+.notif-item:last-child{border-bottom:none}
+.notif-niche{font-size:9px;font-weight:700;text-transform:uppercase;color:var(--ac);letter-spacing:.5px}
+.notif-hl{font-size:12px;font-weight:500;margin-top:3px;line-height:1.4}
+.notif-time{font-size:10px;color:var(--mu);margin-top:2px}
+.notif-empty{padding:16px;text-align:center;color:var(--mu);font-size:12px}
+
+/* section headings */
+.sec-h{display:flex;align-items:baseline;justify-content:space-between;margin:14px 0 18px}
+.sec-h h2{font-family:var(--serif);font-size:24px;font-weight:600;letter-spacing:-0.02em;line-height:1.1}
+.sec-h .sec-meta{font-size:11px;color:var(--mu)}
+
+/* buttons */
+.btn{padding:9px 14px;border-radius:9px;border:1px solid transparent;cursor:pointer;font:600 12px/1 var(--sans);transition:all .15s;display:inline-flex;align-items:center;gap:6px;letter-spacing:.01em}
+.btn:active{transform:scale(.97)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.bp{background:var(--tx);color:var(--bg)}
+.bp:hover:not(:disabled){background:#fff}
+.bs{background:var(--sf);color:var(--tx);border-color:var(--br)}
+.bs:hover:not(:disabled){border-color:var(--br2)}
+.bo{background:transparent;color:var(--mu);border-color:var(--br)}
+.bo:hover:not(:disabled){color:var(--tx);border-color:var(--br2)}
+.bac{background:var(--ac);color:#fff}
+.bac:hover:not(:disabled){background:var(--ac2)}
+.bsm{padding:6px 10px;font-size:11px}
+.bxs{padding:4px 8px;font-size:10px}
+
+/* trending card */
+.tlist{display:flex;flex-direction:column;gap:14px}
+.tc{background:var(--sf);border:1px solid var(--br);border-radius:var(--r);overflow:hidden;transition:border-color .2s}
+.tc.exp{border-color:var(--br2)}
+.th{padding:14px;cursor:pointer;display:flex;gap:12px;align-items:flex-start}
+.timg{width:56px;height:56px;border-radius:8px;object-fit:cover;flex-shrink:0;background:var(--sf2);border:1px solid var(--br)}
+.timg-ph{width:56px;height:56px;border-radius:8px;flex-shrink:0;background:linear-gradient(135deg,var(--sf2),var(--sf));border:1px solid var(--br);display:flex;align-items:center;justify-content:center;color:var(--mu2)}
+.thead{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.tmeta-top{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.badge{font-size:9px;font-weight:700;padding:2px 7px;border-radius:99px;letter-spacing:.4px;text-transform:uppercase;line-height:1.5}
+.badge-hot{background:rgba(232,90,44,.12);color:var(--ac);border:1px solid rgba(232,90,44,.25)}
+.badge-niche{background:rgba(255,255,255,.04);color:var(--mu);border:1px solid var(--br)}
+.badge-src{background:transparent;color:var(--mu2);font-weight:500}
+.thl{font-family:var(--serif);font-size:15px;font-weight:600;line-height:1.35;letter-spacing:-0.015em;color:var(--tx)}
+.tmeta{display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:10px;color:var(--mu)}
+.tsep{color:var(--mu2)}
+.cv{color:var(--mu);transition:transform .2s;margin-top:2px}
+.cv.open{transform:rotate(180deg)}
+
+/* card panel */
+.cp{border-top:1px solid var(--br);padding:14px;background:rgba(0,0,0,.15)}
+.sb{font-size:12px;color:var(--mu);line-height:1.6;margin-bottom:12px;padding:10px 12px;background:rgba(255,255,255,.02);border-radius:8px;border-left:2px solid var(--ac)}
+.rec{background:rgba(255,255,255,.03);border:1px solid var(--br);border-radius:8px;padding:8px 12px;font-size:12px;color:var(--tx);margin-bottom:12px;line-height:1.5}
+.rec-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ac);margin-bottom:3px}
+
+.chips{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px}
+.chip-label{font-size:9px;color:var(--mu);text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin-bottom:6px}
+.chip{padding:5px 11px;border-radius:99px;border:1px solid var(--br);font:500 10px/1.5 var(--sans);cursor:pointer;background:transparent;color:var(--mu);transition:all .15s}
+.chip:hover{color:var(--tx);border-color:var(--br2)}
+.chip.active{background:var(--tx);color:var(--bg);border-color:var(--tx);font-weight:600}
+.chip.ac.active{background:var(--ac);color:#fff;border-color:var(--ac)}
+
+/* output */
+.oa{display:flex;flex-direction:column;gap:8px;margin-top:10px}
+.oc{background:rgba(255,255,255,.02);border:1px solid var(--br);border-radius:8px;overflow:hidden}
+.oh{padding:8px 12px;border-bottom:1px solid var(--br);display:flex;justify-content:space-between;align-items:center;gap:8px}
+.ol{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--tx)}
+.ob{padding:12px;font-size:12px;line-height:1.7;color:var(--tx);white-space:pre-wrap;font-family:var(--sans)}
+.ofoot{padding:6px 12px;border-top:1px solid var(--br);display:flex;justify-content:flex-end;gap:6px}
+
+/* loading */
+.sp{width:12px;height:12px;border:2px solid rgba(255,255,255,.08);border-top-color:var(--tx);border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-row{display:flex;align-items:center;gap:10px;padding:14px;color:var(--mu);font-size:12px}
+
+/* auth */
+.auth-wrap{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:left}
+.auth-inner{width:100%;max-width:360px}
+.auth-brand{display:flex;align-items:center;gap:10px;margin-bottom:36px;justify-content:center}
+.auth-title{font-family:var(--serif);font-size:34px;font-weight:600;letter-spacing:-0.025em;line-height:1.1;margin-bottom:8px}
+.auth-sub{font-size:14px;color:var(--mu);margin-bottom:28px;line-height:1.5}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:11px;color:var(--mu);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.input{width:100%;padding:12px 14px;background:var(--sf);border:1px solid var(--br);border-radius:9px;color:var(--tx);font:500 14px/1.4 var(--sans);transition:border-color .15s}
+.input:focus{outline:none;border-color:var(--br2)}
+.auth-err{background:rgba(232,90,44,.08);border:1px solid rgba(232,90,44,.3);color:var(--ac);padding:9px 12px;border-radius:8px;font-size:12px;margin-bottom:12px}
+.auth-switch{text-align:center;margin-top:20px;font-size:12px;color:var(--mu)}
+.auth-switch a{color:var(--tx);cursor:pointer;font-weight:600;text-decoration:underline;text-decoration-color:var(--mu2);text-underline-offset:3px}
+
+/* onboarding chips */
+.pick-grid{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;max-height:280px;overflow-y:auto;padding:2px}
+.pick{padding:7px 12px;border-radius:99px;border:1px solid var(--br);font-size:11px;cursor:pointer;background:transparent;color:var(--mu);transition:all .15s}
+.pick:hover{color:var(--tx)}
+.pick.on{background:var(--tx);color:var(--bg);border-color:var(--tx);font-weight:600}
+
+/* tab bar */
+.tabbar{position:fixed;bottom:0;left:0;right:0;background:rgba(10,10,15,.9);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-top:1px solid var(--br);display:flex;justify-content:space-around;align-items:center;height:var(--tab-h);padding-bottom:env(safe-area-inset-bottom);z-index:50;max-width:560px;margin:0 auto}
+.tab{display:flex;flex-direction:column;align-items:center;gap:3px;background:none;border:none;color:var(--mu);font:500 9px/1 var(--sans);cursor:pointer;padding:6px 10px;flex:1;letter-spacing:.02em;text-transform:uppercase}
+.tab.active{color:var(--tx)}
+.tab:active{transform:scale(.95)}
+
+/* calendar */
+.cal-hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.cal-hd h3{font-family:var(--serif);font-size:22px;font-weight:600;letter-spacing:-0.02em}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center;margin-bottom:16px}
+.cal-day-lbl{font-size:9px;color:var(--mu);font-weight:600;padding:4px 0;letter-spacing:.5px;text-transform:uppercase}
+.cal-cell{aspect-ratio:1;padding:4px;border-radius:6px;position:relative;font-size:11px;color:var(--mu);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:5px;transition:background .15s}
+.cal-cell.has{color:var(--tx)}
+.cal-cell.today{background:var(--tx);color:var(--bg);font-weight:700}
+.cal-cell .dot{position:absolute;bottom:4px;width:4px;height:4px;border-radius:50%;background:var(--ac)}
+.cal-cell.today .dot{background:var(--bg)}
+
+.event-item{padding:10px 0;border-bottom:1px solid var(--br);display:flex;gap:10px;align-items:flex-start}
+.event-item:last-child{border-bottom:none}
+.event-date-badge{width:44px;text-align:center;padding:4px;background:var(--sf2);border-radius:6px;flex-shrink:0}
+.event-date-badge .m{font-size:8px;color:var(--ac);font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+.event-date-badge .d{font-size:16px;font-weight:700;color:var(--tx);line-height:1.1}
+.event-body{flex:1;min-width:0}
+.event-title{font-size:13px;font-weight:600;line-height:1.35}
+.event-desc{font-size:11px;color:var(--mu);margin-top:3px;line-height:1.4}
+.event-tag{display:inline-block;font-size:9px;color:var(--mu);text-transform:uppercase;letter-spacing:.5px;margin-top:4px;font-weight:600}
+
+/* card */
+.card{background:var(--sf);border:1px solid var(--br);border-radius:var(--r);padding:18px;margin-bottom:16px}
+.card-h{font-family:var(--serif);font-size:16px;font-weight:600;margin-bottom:10px;letter-spacing:-0.01em}
+
+/* profile */
+.stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px}
+.stat{background:var(--sf);border:1px solid var(--br);border-radius:12px;padding:16px 10px;text-align:center}
+.stat-n{font-family:var(--serif);font-size:30px;font-weight:700;letter-spacing:-0.02em;background:var(--grad-num);-webkit-background-clip:text;background-clip:text;color:transparent;line-height:1.05}
+.stat-l{font-size:9px;color:var(--mu);text-transform:uppercase;letter-spacing:.6px;font-weight:700;margin-top:4px}
+
+.pf-head{display:flex;flex-direction:column;align-items:center;padding:8px 0 20px;text-align:center}
+.pf-avatar{width:96px;height:96px;border-radius:50%;background:var(--grad-av);display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:42px;font-weight:700;color:#fff;letter-spacing:-0.02em;box-shadow:0 12px 32px rgba(124,58,237,.35),0 0 0 4px rgba(124,58,237,.12)}
+.pf-name{font-family:var(--serif);font-size:20px;font-weight:700;margin-top:16px;letter-spacing:-0.015em}
+.pf-email{font-size:13px;color:var(--mu);margin-top:6px}
+.pf-plat-row{display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:14px}
+.pf-plat-pill{display:inline-flex;align-items:center;gap:5px;padding:6px 11px;border-radius:99px;background:rgba(124,58,237,.12);border:1px solid rgba(124,58,237,.28);font-size:11px;font-weight:600;color:var(--tx)}
+.pf-plat-pill .em{font-size:13px;line-height:1}
+
+.pf-card{background:var(--sf);border:1px solid var(--br);border-radius:var(--r);padding:16px 18px;margin-bottom:14px}
+.pf-card-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.pf-card-title{font-family:var(--serif);font-size:16px;font-weight:600;letter-spacing:-0.01em}
+.pf-edit{background:transparent;border:1px solid var(--br2);color:var(--mu);font:600 10px/1 var(--sans);padding:6px 11px;border-radius:99px;cursor:pointer;text-transform:uppercase;letter-spacing:.5px}
+.pf-edit:hover{color:var(--tx);border-color:var(--ac)}
+.niche-tags{display:flex;flex-wrap:wrap;gap:6px}
+.niche-tag{font-size:11px;font-weight:600;padding:5px 11px;border-radius:99px;line-height:1.4}
+.pf-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.pf-plat-cell{display:flex;align-items:center;gap:10px;padding:12px 12px;background:var(--sf2);border:1px solid var(--br);border-radius:10px;transition:all .15s;opacity:.45}
+.pf-plat-cell.on{opacity:1;border-color:var(--ac);box-shadow:0 0 0 1px var(--ac) inset,0 8px 20px rgba(124,58,237,.15)}
+.pf-plat-cell .em{font-size:20px}
+.pf-plat-cell .lbl{font-size:12px;font-weight:600}
+.pf-plat-cell .prim{font-size:9px;color:var(--ac);font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+.btn-signout{width:100%;padding:14px;justify-content:center;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.3);color:#F87171;border-radius:12px;font:700 13px/1 var(--sans);cursor:pointer;margin-top:6px;transition:all .15s}
+.btn-signout:hover{background:rgba(239,68,68,.14);color:#FCA5A5}
+
+/* coach */
+.coach-msg{background:var(--sf2);border:1px solid var(--br);border-radius:10px;padding:14px;font-size:13px;line-height:1.7;white-space:pre-wrap;margin-top:12px}
+
+/* toast */
+.toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--tx);color:var(--bg);padding:10px 18px;border-radius:9px;font:600 12px/1 var(--sans);z-index:9999;box-shadow:0 10px 30px rgba(0,0,0,.4);animation:fade .25s}
+
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--br2);border-radius:99px}
+</style>
+</head>
+<body>
+
+<div id="root"></div>
+
+<script>
+// ─── ICONS (Lucide-style inline SVGs) ───────────────────────────────────────
+const I = {
+  refresh: '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3.5-7.1"/><path d="M21 4v5h-5"/></svg>',
+  bell: '<svg class="icon" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>',
+  home: '<svg class="icon" viewBox="0 0 24 24"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg>',
+  cal: '<svg class="icon" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>',
+  save: '<svg class="icon" viewBox="0 0 24 24"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>',
+  user: '<svg class="icon" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+  coach: '<svg class="icon" viewBox="0 0 24 24"><path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2M20 14h2M15 13v2M9 13v2"/></svg>',
+  chevron: '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>',
+  copy: '<svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
+  dl: '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
+  bolt: '<svg class="icon icon-sm" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
+  news: '<svg class="icon" viewBox="0 0 24 24"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8M15 18h-5M10 6h8v4h-8V6Z"/></svg>',
+  plus: '<svg class="icon icon-sm" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
+  trash: '<svg class="icon icon-sm" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>'
+};
+
+// ─── DATA ───────────────────────────────────────────────────────────────────
+const NICHES = {"Sports":["Football/Soccer","Basketball","Tennis","Cricket","Formula 1","Boxing","MMA/UFC","WWE Wrestling","American Football","Baseball","Ice Hockey","Golf","Rugby","Athletics/Track","Cycling","Swimming","Esports","Volleyball"],"Entertainment":["Celebrity Gossip","Music (Afrobeats)","Music (Hip-Hop)","Music (Pop)","Music (R&B)","Music (K-Pop)","Music (Amapiano)","Movies & TV","Anime","Korean Drama","Bollywood","Pop Culture"],"Gaming":["Console Gaming","PC Gaming","Mobile Gaming","Game Reviews","Twitch Streaming","YouTube Gaming"],"Lifestyle":["Travel","Food & Recipes","Fitness & Gym","Mental Health","Relationships & Dating","Parenting","Minimalism","Home Decor","Pets"],"Fashion & Beauty":["Streetwear","Luxury Fashion","Skincare","Makeup","Haircare"],"Finance":["Personal Finance","Crypto","Stock Market","Side Hustles","Business News","Real Estate Investing","Budgeting"],"Tech":["AI & Tech News","Gadget Reviews","Coding & Dev Life","Startups","Cybersecurity","Space & Science"],"Education":["Science","History","Language Learning","Productivity","Study Tips","Philosophy","Psychology"],"Commentary":["Yapping Videos","Hot Takes","Rants","Storytelling","Political Commentary","True Crime","Mystery & Unexplained"],"Trends":["Viral Dances","Trend Reaction","Challenge Content"],"Creator":["YouTube Growth","Social Media Tips","Brand Deals","Monetization Advice"],"Professional":["Medicine & Health","Law","Marketing","Entrepreneurship","Motivational Speaking"],"Culture":["Faith & Religion","African Culture","Caribbean Culture","Astrology","Self-Development"]};
+const PLATS = [{id:"tiktok",label:"TikTok"},{id:"instagram",label:"Instagram"},{id:"youtube",label:"YouTube"},{id:"twitter",label:"X"},{id:"facebook",label:"Facebook"},{id:"linkedin",label:"LinkedIn"}];
+const PTYPES = {tiktok:["TikTok Script","TikTok No-Face Graphic","Caption + Hashtags"],instagram:["IG Reel Script","IG Carousel","Caption + Hashtags"],youtube:["Long Form Script","YouTube Short Script","Title + Description","Thumbnail"],twitter:["Hot Take Tweet","Engagement Tweet","Thread (5 tweets)"],facebook:["Long-Form Post","Engagement Post"],linkedin:["Thought Leadership","Professional Update"]};
+const TONES = [{id:"normal",label:"Neutral"},{id:"funny",label:"Banter"},{id:"educative",label:"Educative"},{id:"hype",label:"Hot Take"},{id:"storytelling",label:"Storytelling"}];
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const M_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const DAYS = ["S","M","T","W","T","F","S"];
+const NICHE_HANDLES = {"American Football":["AdamSchefter","RapSheet","MikeGarafolo","TomPelissero","FieldYates","NFL","ESPNNFL"],"Football/Soccer":["FabrizioRomano","ESPNFC","SkySportsPL","BBCSport","GoalNews","TheAthleticFC"],"Basketball":["ShamsCharania","WojESPN","NBA","ESPNNBA"],"Baseball":["MLB","Ken_Rosenthal","JeffPassan"],"Ice Hockey":["NHL","TSNBobMcKenzie","FriedgeHNIC"],"Tennis":["TennisChannel","atptour","WTA"],"Cricket":["ESPNcricinfo","ICC","BCCI"],"Formula 1":["F1","SkySportsF1","ScuderiaFerrari","McLarenF1"],"Boxing":["BoxingScene","DAZNBoxing","MikeCoppinger","MatchroomBoxing"],"MMA/UFC":["ufc","espnmma","arielhelwani","MMAFighting"],"WWE Wrestling":["WWE","FightfulSelect","WrestleVotes"],"Golf":["PGATOUR","GolfChannel","McIlroyRory"],"Rugby":["WorldRugby","SixNationsRugby"],"Esports":["esportscom","DotEsports","DBLTAP"],"Movies & TV":["DEADLINE","Variety","THR","FilmUpdates"],"Anime":["AnimeNewsNet","Crunchyroll"],"Celebrity Gossip":["PopCrave","PopBase","TMZ"],"Pop Culture":["PopCrave","PopBase"],"Music (Hip-Hop)":["ComplexMusic","HipHopDX","XXL","rapalert6"],"Music (Afrobeats)":["afrobeatsnews","notjustok","PulseNigeria247"],"Music (Pop)":["PopCrave","billboard"],"Music (K-Pop)":["allkpop","soompi","koreaboo"],"Console Gaming":["IGN","GameSpot","Wario64","PlayStation","Xbox"],"PC Gaming":["PCGamer","Wario64"],"AI & Tech News":["TechCrunch","WIRED","TheVerge","OpenAI"],"Gadget Reviews":["engadget","MKBHD","TheVerge"],"Cybersecurity":["briankrebs","TheHackersNews"],"Space & Science":["NASA","SpaceX"],"Crypto":["CoinDesk","Cointelegraph","WatcherGuru"],"Stock Market":["CNBC","MarketWatch"],"Business News":["Bloomberg","ReutersBiz","FT","CNBC"],"Travel":["TravelLeisure","CNTraveler"],"Food & Recipes":["NYTFood","bonappetit"],"Fitness & Gym":["MensHealthMag","WomensHealthMag"],"Streetwear":["Hypebeast","complex","Highsnobiety"],"Luxury Fashion":["Vogue","GQMagazine"],"True Crime":["oxygen"],"Political Commentary":["politico","axios"],"Entrepreneurship":["Inc","Entrepreneur"],"default":["BreakingNews","Reuters","AP"]};
+
+const API = window.location.origin;
+const SYS = "You are CreatorPulse AI, a scriptwriter for social media creators. Write in plain spoken language exactly as a person would say it on camera. Never use markdown: no headers, no bold, no bullets, no --- rules, no JSON unless asked. Write full sentences in natural paragraphs the way someone actually talks. Only use bracketed labels like [HOOK] or [CTA] when asked. Be specific, punchy, and direct. No meta-commentary, no preamble. Output the spoken words themselves, ready for a teleprompter.";
+
+// ─── STATE ──────────────────────────────────────────────────────────────────
+const S = {
+  mode: "boot", // boot | auth | onboard | app
+  authTab: "login", // login | signup
+  authForm: { email:"", password:"", name:"" },
+  authErr: "", authLoading: false, token: null, user: null,
+  onboard: { step:0, name:"", niches:[], platforms:[], primary:"", ppd:3 },
+  tab: "home",
+  trends: [], notifs: [], schedule: [], saved: [], eventsCache: {},
+  loading: {}, expanded: {}, plat: {}, ctype: {}, tone: {}, outs: {}, recs: {},
+  cal: { y: new Date().getFullYear(), m: new Date().getMonth() },
+  coachHandle: "", coachPlatform: "instagram", coachMetrics: "", coachAnswer: "", coachLoading: false,
+  addSched: { title:"", weekday:"friday", time:"20:00", notes:"" }
+};
+
+function saveSession(){ localStorage.setItem("cp_v2", JSON.stringify({ token:S.token, user:S.user })); }
+function restoreSession(){ try{ const j = localStorage.getItem("cp_v2"); if(j){ const {token,user} = JSON.parse(j); if(token && user){ S.token=token; S.user=user; return true; }} }catch(e){} return false; }
+function clearSession(){ localStorage.removeItem("cp_v2"); S.token=null; S.user=null; }
+
+function toast(msg){ const t=document.createElement("div"); t.className="toast"; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),2400); }
+function esc(s){ return String(s||"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+window.imgFail = function(el){ try { const ph = document.createElement('div'); ph.className = 'timg-ph'; ph.innerHTML = I.news; if(el && el.parentNode) el.parentNode.replaceChild(ph, el); else if(el) el.remove(); } catch(e){ if(el) el.remove(); } };
+
+// Niche category color map — every niche picks a color from its category
+const NC_CATEGORY_COLOR = {
+  "Sports":"#F97316","Entertainment":"#EC4899","Gaming":"#8B5CF6","Lifestyle":"#10B981",
+  "Fashion & Beauty":"#F43F5E","Finance":"#22C55E","Tech":"#3B82F6","Education":"#EAB308",
+  "Commentary":"#EF4444","Trends":"#06B6D4","Creator":"#A855F7","Professional":"#0EA5E9","Culture":"#F59E0B"
+};
+const NC = (function(){ const m = {}; Object.entries(NICHES).forEach(([cat, arr]) => arr.forEach(n => m[n] = NC_CATEGORY_COLOR[cat] || "#7C3AED")); return m; })();
+
+// Platform emoji lookup
+const PLAT_EMOJI = { tiktok:"🎵", instagram:"📸", youtube:"▶️", twitter:"🐦", facebook:"👥", linkedin:"💼" };
+
+function extractJSON(txt){ const m = String(txt).match(/\{[\s\S]*\}|\[[\s\S]*\]/); if(!m) return null; try{ return JSON.parse(m[0]); }catch(e){ return null; } }
+
+// ─── API ────────────────────────────────────────────────────────────────────
+async function api(path, opts){ const r = await fetch(API+path, opts); return r.json(); }
+async function fetchNews(niche){ return (await api(`/api/news?niche=${encodeURIComponent(niche)}&_=${Date.now()}`)).articles||[]; }
+async function fetchBlogs(niche){ return (await api(`/api/blog-feed?niche=${encodeURIComponent(niche)}&_=${Date.now()}`)).articles||[]; }
+async function fetchTwitter(handle,niche){ return (await api(`/api/twitter-feed?handle=${handle}&niche=${encodeURIComponent(niche||"")}&_=${Date.now()}`)).articles||[]; }
+async function fetchEvents(niche){ return (await api(`/api/events?niche=${encodeURIComponent(niche)}&_=${Date.now()}`)).events||[]; }
+async function generateText(system, user, tone){ const d = await api(`/api/generate`, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({system,user,tone})}); if(d.error) throw new Error(d.error); return d.text||""; }
+async function generateImage(prompt, format){ const d = await api(`/api/generate-image`, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({prompt,format})}); return d.image||null; }
+async function fetchNotifs(niches){ return (await api(`/api/notifications?niches=${encodeURIComponent(niches.join(","))}&_=${Date.now()}`)).notifications||[]; }
+
+// ─── AUTH ───────────────────────────────────────────────────────────────────
+async function doLogin(){
+  S.authLoading = true; S.authErr=""; render();
+  try {
+    const d = await api("/api/auth/login", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(S.authForm)});
+    if(d.error){ S.authErr = d.error; }
+    else {
+      S.token = d.token; S.user = d.user; saveSession();
+      if(!S.user.niches?.length){ S.mode="onboard"; S.onboard.name = S.user.name; }
+      else { S.mode="app"; bootApp(); }
+    }
+  } catch(e){ S.authErr = e.message; }
+  S.authLoading=false; render();
+}
+async function doSignup(){
+  S.authLoading = true; S.authErr=""; render();
+  try {
+    const d = await api("/api/auth/signup", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+      email: S.authForm.email, password: S.authForm.password, name: S.authForm.name,
+      niches: [], platforms: [], primaryPlatform: "", postsPerDay: 3
+    })});
+    if(d.error){ S.authErr = d.error; }
+    else {
+      // auto-login
+      const l = await api("/api/auth/login", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:S.authForm.email,password:S.authForm.password})});
+      if(l.error){ S.authErr = l.error; }
+      else {
+        S.token = l.token; S.user = l.user; saveSession();
+        S.mode="onboard"; S.onboard.name = S.authForm.name;
+      }
+    }
+  } catch(e){ S.authErr = e.message; }
+  S.authLoading=false; render();
+}
+async function saveOnboarding(){
+  const ob = S.onboard;
+  const payload = { token: S.token, name: ob.name, niches: ob.niches, platforms: ob.platforms, primaryPlatform: ob.primary || ob.platforms[0], postsPerDay: ob.ppd };
+  const d = await api("/api/auth/update-profile", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+  if(d.error){ toast(d.error); return; }
+  S.user = { ...S.user, ...payload };
+  delete S.user.token;
+  saveSession();
+  S.mode = "app";
+  bootApp();
+}
+
+// ─── APP ────────────────────────────────────────────────────────────────────
+async function bootApp(){ render(); loadTrends(); loadNotifs(); loadSchedule(); loadSaved(); }
+
+async function loadTrends(){
+  if(!S.user) return;
+  const now = Date.now(); const cutoff = now - 6*60*60*1000;
+  S.trends = []; render();
+  const all = [];
+  for(const niche of S.user.niches){
+    try { const arr = await fetchNews(niche); all.push(...arr); } catch(e){}
+    try { const arr = await fetchBlogs(niche); all.push(...arr); } catch(e){}
+    const handles = NICHE_HANDLES[niche] || NICHE_HANDLES.default;
+    for(const h of handles.slice(0,4)){
+      try {
+        const arr = await fetchTwitter(h, niche);
+        arr.forEach(a=>{ a.niche = niche; if(a.image && !/^https?:/.test(a.image)) a.image = 'https://nitter.net'+a.image; if(a.image) a.image = `${API}/api/image-proxy?url=${encodeURIComponent(a.image)}`; });
+        all.push(...arr);
+      } catch(e){}
+    }
+  }
+  // Dedupe + freshness
+  const seen = new Set();
+  S.trends = all.filter(t=>{
+    const k = (t.headline||"").toLowerCase().trim().slice(0,80);
+    if(!k || seen.has(k)) return false; seen.add(k);
+    const ts = t.timestamp || 0;
+    return ts >= cutoff;
+  }).sort((a,b)=> (b.score||0) - (a.score||0)).slice(0, 25);
+  if(S.tab === "home") render();
+}
+async function loadNotifs(){ if(!S.user) return; S.notifs = await fetchNotifs(S.user.niches).catch(()=>[]); render(); }
+async function loadSchedule(){ if(!S.token) return; try{ const d = await api(`/api/schedule?token=${S.token}&year=${S.cal.y}&month=${S.cal.m+1}`); S.schedule = d.posts||[]; render(); }catch(e){} }
+async function loadSaved(){ if(!S.token) return; try{ const d = await api(`/api/saved-posts?token=${S.token}`); S.saved = d.posts||[]; render(); }catch(e){} }
+
+// ─── TRENDING RENDER ────────────────────────────────────────────────────────
+function renderTrend(t){
+  const exp = !!S.expanded[t.id];
+  const plat = S.plat[t.id] || S.user?.primaryPlatform || "instagram";
+  const ct = S.ctype[t.id] || PTYPES[plat]?.[0] || "";
+  const tone = S.tone[t.id] || "normal";
+  const outs = S.outs[t.id] || [];
+  const rec = S.recs[t.id] || "";
+  const load = !!S.loading[t.id];
+  const img = t.image ? `<img class="timg" src="${esc(t.image)}" onerror="imgFail(this)"/>` : `<div class="timg-ph">${I.news}</div>`;
+
+  let panel = "";
+  if(exp){
+    const platChips = (S.user?.platforms||["instagram"]).map(p=>{ const P = PLATS.find(x=>x.id===p); return `<button class="chip ${plat===p?'active':''}" onclick="setPlat('${t.id}','${p}')">${esc(P?.label||p)}</button>`; }).join("");
+    const ctChips = (PTYPES[plat]||[]).map(c=>`<button class="chip ac ${ct===c?'active':''}" onclick="setCT('${t.id}','${esc(c)}')">${esc(c)}</button>`).join("");
+    const toneChips = TONES.map(x=>`<button class="chip ${tone===x.id?'active':''}" onclick="setTone('${t.id}','${x.id}')">${x.label}</button>`).join("");
+    const outsHTML = outs.map((o,i)=>renderOut(o,t.id,i)).join("");
+    panel = `<div class="cp">
+      <div class="sb">${esc(t.summary||"Tap Generate to draft this on-brand for your platform.")}</div>
+      ${rec?`<div class="rec"><div class="rec-label">Suggestion</div>${esc(rec)}</div>`:""}
+      <div class="chip-label">Platform</div>
+      <div class="chips">${platChips}</div>
+      <div class="chip-label">Format</div>
+      <div class="chips">${ctChips}</div>
+      <div class="chip-label">Tone</div>
+      <div class="chips">${toneChips}</div>
+      <div style="display:flex;gap:6px;margin-top:12px">
+        <button class="btn bp bsm" ${load?'disabled':''} onclick="gen('${t.id}',false)">${load?'<span class="sp"></span> Working…':`${I.bolt} Generate`}</button>
+        <button class="btn bo bsm" ${load?'disabled':''} onclick="gen('${t.id}',true)">All formats</button>
+      </div>
+      ${load?`<div class="loading-row"><span class="sp"></span>Crafting drafts…</div>`:""}
+      <div class="oa">${outsHTML}</div>
+    </div>`;
+  }
+  const srcTag = t.source?`<span class="tsep">·</span><span class="badge-src">${esc(t.source)}</span>`:"";
+  return `<div class="tc ${exp?'exp':''}" id="tc-${t.id}">
+    <div class="th" onclick="toggle('${t.id}')">
+      ${img}
+      <div class="thead">
+        <div class="tmeta-top">
+          <span class="badge badge-hot">${t.score||90}</span>
+          <span class="badge badge-niche">${esc(t.niche)}</span>
+        </div>
+        <div class="thl">${esc(t.headline)}</div>
+        <div class="tmeta"><span>${(t.tags||[]).slice(0,2).map(esc).join(' · ')}</span>${srcTag}</div>
+      </div>
+      <span class="cv ${exp?'open':''}">${I.chevron}</span>
+    </div>
+    ${panel}
+  </div>`;
+}
+
+function renderOut(o, tid, idx){
+  if(!o) return "";
+  if(o.type === "image"){
+    return `<div class="oc"><div class="oh"><span class="ol">Image</span></div><div style="padding:10px"><img src="${o.img}" style="width:100%;border-radius:6px"/></div><div class="ofoot"><button class="btn bo bxs" onclick="dl('${o.img}','image.jpg')">${I.dl} Download</button><button class="btn bp bxs" onclick="saveOut('${tid}',${idx})">${I.save} Save</button></div></div>`;
+  }
+  if(o.type === "carousel"){
+    const slides = (o.slides||[]).map(s=>`<div style="padding:6px 0;border-bottom:1px solid var(--br)"><div style="font-size:10px;color:var(--mu);font-weight:600">Slide ${s.slideNum}</div><div style="font-family:var(--serif);font-size:14px;font-weight:600;margin-top:2px">${esc(s.title)}</div><div style="font-size:12px;color:var(--mu);margin-top:3px;line-height:1.5">${esc(s.body)}</div></div>`).join("");
+    const cp = (o.slides||[]).map(s=>`SLIDE ${s.slideNum}: ${s.title}\n${s.body}`).join("\n\n");
+    return `<div class="oc"><div class="oh"><span class="ol">Carousel · ${o.slides?.length||0} slides</span><button class="btn bo bxs" onclick="copyTxt(\`${cp.replace(/`/g,"\\`")}\`)">${I.copy}</button></div><div style="padding:10px">${slides}</div><div class="ofoot"><button class="btn bp bxs" onclick="saveOut('${tid}',${idx})">${I.save} Save</button></div></div>`;
+  }
+  const content = String(o.content||"");
+  return `<div class="oc"><div class="oh"><span class="ol">${esc(o.label||"Draft")}</span><button class="btn bo bxs" onclick="copyTxt(\`${content.replace(/`/g,"\\`")}\`)">${I.copy}</button></div><div class="ob">${esc(content)}</div><div class="ofoot"><button class="btn bp bxs" onclick="saveOut('${tid}',${idx})">${I.save} Save</button></div></div>`;
+}
+
+window.setPlat = (tid,p) => { S.plat[tid]=p; S.ctype[tid]=PTYPES[p]?.[0]||""; render(); };
+window.setCT = (tid,c) => { S.ctype[tid]=c; render(); };
+window.setTone = (tid,t) => { S.tone[tid]=t; render(); };
+window.toggle = async (tid) => {
+  S.expanded[tid] = !S.expanded[tid];
+  if(S.expanded[tid] && !S.plat[tid]) S.plat[tid] = S.user?.primaryPlatform || "instagram";
+  if(S.expanded[tid] && !S.ctype[tid]) S.ctype[tid] = PTYPES[S.plat[tid]]?.[0] || "";
+  render();
+  if(S.expanded[tid] && !S.recs[tid]){
+    const t = S.trends.find(x=>x.id===tid); if(!t) return;
+    try { S.recs[tid] = await generateText("One-sentence content recommendation. No preamble.", `Niche: ${S.user?.niches?.join(", ")}. Story: "${t.headline}". Best platform, format, and angle?`); render(); } catch(e){}
+  }
+};
+window.copyTxt = (t) => { navigator.clipboard.writeText(t); toast("Copied"); };
+window.dl = (url, name) => { const a=document.createElement("a"); a.href=url; a.download=name; a.click(); };
+
+window.gen = async (tid, all) => {
+  const t = S.trends.find(x=>x.id===tid); if(!t) return;
+  const plat = S.plat[tid] || S.user?.primaryPlatform || "instagram";
+  const ct = S.ctype[tid] || PTYPES[plat]?.[0] || "";
+  const tone = S.tone[tid] || "normal";
+  S.loading[tid] = true; S.outs[tid] = []; render();
+  try {
+    const types = all ? (PTYPES[plat]||[]) : [ct];
+    const out = [];
+    for(const c of types){
+      if(c === "IG Carousel"){
+        const sr = await generateText(`Return ONLY a valid JSON array of 5 objects: [{"slideNum":1,"title":"hook","body":"2-3 sentences"}].`, `${S.user?.niches?.[0]||""} carousel. Story: "${t.headline}". ${t.summary||""}`, tone);
+        const slides = extractJSON(sr) || [];
+        out.push({type:"carousel", slides: Array.isArray(slides)?slides:[slides]});
+      } else if(c === "Thumbnail" || /image/i.test(c)){
+        const img = await generateImage(`${t.headline}, ${t.niche}, editorial photo, 16:9`, "square");
+        if(img) out.push({type:"image", img});
+      } else {
+        const P = PLATS.find(x=>x.id===plat);
+        const s = await generateText(SYS, `Write a "${c}" for a ${t.niche} creator on ${P?.label||plat}. Story: "${t.headline}". ${t.summary||""}. Return only the ready-to-post text.`, tone);
+        out.push({type:"text", label:`${P?.label||plat} · ${c}`, content:s});
+      }
+    }
+    S.outs[tid] = out;
+    if(out.length && S.token){
+      const today = new Date();
+      const sd = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+      const first = out[0];
+      const kind = first.type==="carousel"?"Carousel":first.type==="image"?"Image":"Script";
+      await api("/api/save-post",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:S.token,headline:t.headline,niche:t.niche,platform:plat,contentType:kind,content:first,scheduledDate:sd})});
+      loadSchedule(); loadSaved();
+    }
+  } catch(e){ S.outs[tid] = [{type:"text", label:"Error", content:"Generation failed. "+e.message}]; }
+  S.loading[tid] = false; render();
+};
+
+window.saveOut = async (tid, idx) => {
+  const t = S.trends.find(x=>x.id===tid); const o = S.outs[tid]?.[idx]; if(!t||!o) return;
+  const today = new Date(); const sd = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+  const plat = S.plat[tid] || S.user?.primaryPlatform || "instagram";
+  const kind = o.type==="carousel"?"Carousel":o.type==="image"?"Image":"Script";
+  const r = await api("/api/save-post",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:S.token,headline:t.headline,niche:t.niche,platform:plat,contentType:kind,content:o,scheduledDate:sd})});
+  if(r.success){ toast("Saved"); loadSchedule(); loadSaved(); } else toast("Error saving");
+};
+
+window.delSaved = async (id) => {
+  if(!confirm("Delete this saved item?")) return;
+  const r = await fetch(`${API}/api/delete-post?token=${S.token}&postId=${id}`, {method:"DELETE"});
+  const d = await r.json();
+  if(d.success){ toast("Deleted"); loadSaved(); loadSchedule(); }
+};
+
+// ─── COACH ──────────────────────────────────────────────────────────────────
+window.runCoach = async () => {
+  S.coachLoading = true; S.coachAnswer = ""; render();
+  try {
+    const d = await api("/api/coach", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+      handle: S.coachHandle, platform: S.coachPlatform, niche: S.user?.niches?.[0], recentMetrics: S.coachMetrics
+    })});
+    S.coachAnswer = d.text || d.error || "No response";
+  } catch(e){ S.coachAnswer = "Error: "+e.message; }
+  S.coachLoading = false; render();
+};
+
+// ─── SCHEDULE ADD ───────────────────────────────────────────────────────────
+window.addRecurring = async () => {
+  const p = S.addSched;
+  if(!p.title){ toast("Add a title"); return; }
+  const r = await api("/api/user-schedule", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:S.token,...p})});
+  if(r.success){ toast(`Scheduled ${r.added} weeks`); S.addSched={title:"",weekday:"friday",time:"20:00",notes:""}; loadSchedule(); loadSaved(); }
+  else toast(r.error||"Error");
+};
+
+// ─── RENDER (PAGES) ─────────────────────────────────────────────────────────
+function render(){
+  const root = document.getElementById("root");
+  if(S.mode === "boot"){ root.innerHTML = `<div class="auth-wrap"><div class="brand"><div class="brand-mark">C</div><div><div class="brand-name">CreatorPulse</div></div></div><div style="margin-top:20px"><span class="sp"></span></div></div>`; return; }
+  if(S.mode === "auth") return renderAuth();
+  if(S.mode === "onboard") return renderOnboard();
+  return renderApp();
+}
+
+function renderAuth(){
+  const isLogin = S.authTab === "login";
+  document.getElementById("root").innerHTML = `<div class="auth-wrap"><div class="auth-inner">
+    <div class="auth-brand"><div class="brand-mark">C</div><div class="brand-name">CreatorPulse</div></div>
+    <div class="auth-title">${isLogin?"Welcome back.":"Start creating."}</div>
+    <div class="auth-sub">${isLogin?"Sign in to pick up where you left off.":"Trending stories, scripts, and a calendar that thinks with you."}</div>
+    ${S.authErr?`<div class="auth-err">${esc(S.authErr)}</div>`:""}
+    ${!isLogin?`<div class="field"><label>Name</label><input class="input" value="${esc(S.authForm.name)}" oninput="S.authForm.name=this.value" placeholder="How should we call you?"/></div>`:""}
+    <div class="field"><label>Email</label><input class="input" type="email" value="${esc(S.authForm.email)}" oninput="S.authForm.email=this.value" placeholder="you@domain.com"/></div>
+    <div class="field"><label>Password</label><input class="input" type="password" value="${esc(S.authForm.password)}" oninput="S.authForm.password=this.value" placeholder="••••••••"/></div>
+    <button class="btn bp" style="width:100%;padding:13px;margin-top:6px;justify-content:center" ${S.authLoading?"disabled":""} onclick="${isLogin?'doLogin()':'doSignup()'}">${S.authLoading?'<span class="sp"></span>':(isLogin?"Sign in":"Create account")}</button>
+    <div class="auth-switch">${isLogin?"New here?":"Already have an account?"} <a onclick="S.authTab='${isLogin?'signup':'login'}'; S.authErr=''; render()">${isLogin?"Create one":"Sign in"}</a></div>
+  </div></div>`;
+}
+
+function renderOnboard(){
+  const ob = S.onboard;
+  const nichesFlat = Object.values(NICHES).flat();
+  let body = "";
+  if(ob.step === 0){
+    body = `<div class="auth-title">What do you make?</div>
+      <div class="auth-sub">Pick up to 5 niches. We'll only pull news that matches.</div>
+      <div class="pick-grid">${nichesFlat.map(n=>`<button class="pick ${ob.niches.includes(n)?'on':''}" onclick="obToggleN('${esc(n)}')">${esc(n)}</button>`).join("")}</div>
+      <button class="btn bp" style="width:100%;padding:13px;justify-content:center" ${!ob.niches.length?'disabled':''} onclick="ob.step=1;render()">Continue</button>`;
+  } else if(ob.step === 1){
+    body = `<div class="auth-title">Where do you post?</div>
+      <div class="auth-sub">Pick your platforms. We'll tailor formats for each.</div>
+      <div class="pick-grid">${PLATS.map(p=>`<button class="pick ${ob.platforms.includes(p.id)?'on':''}" onclick="obToggleP('${p.id}')">${p.label}</button>`).join("")}</div>
+      <div style="display:flex;gap:8px"><button class="btn bo" style="flex:1;padding:13px;justify-content:center" onclick="ob.step=0;render()">Back</button><button class="btn bp" style="flex:1;padding:13px;justify-content:center" ${!ob.platforms.length?'disabled':''} onclick="ob.step=2;render()">Continue</button></div>`;
+  } else {
+    body = `<div class="auth-title">Primary platform</div>
+      <div class="auth-sub">The one you post to most.</div>
+      <div class="pick-grid">${ob.platforms.map(p=>{ const P = PLATS.find(x=>x.id===p); return `<button class="pick ${ob.primary===p?'on':''}" onclick="ob.primary='${p}';render()">${P.label}</button>`; }).join("")}</div>
+      <div style="display:flex;gap:8px"><button class="btn bo" style="flex:1;padding:13px;justify-content:center" onclick="ob.step=1;render()">Back</button><button class="btn bp" style="flex:1;padding:13px;justify-content:center" ${!ob.primary?'disabled':''} onclick="saveOnboarding()">Finish</button></div>`;
+  }
+  document.getElementById("root").innerHTML = `<div class="auth-wrap"><div class="auth-inner">${body}</div></div>`;
+}
+window.obToggleN = n => { const i = S.onboard.niches.indexOf(n); if(i<0){ if(S.onboard.niches.length<5) S.onboard.niches.push(n); } else S.onboard.niches.splice(i,1); render(); };
+window.obToggleP = p => { const i = S.onboard.platforms.indexOf(p); if(i<0) S.onboard.platforms.push(p); else S.onboard.platforms.splice(i,1); render(); };
+window.ob = S.onboard;
+
+function renderApp(){
+  const pages = { home: pageHome(), calendar: pageCalendar(), saved: pageSaved(), coach: pageCoach(), profile: pageProfile() };
+  document.getElementById("root").innerHTML = `<div class="app">${pages[S.tab]}
+    <nav class="tabbar">
+      <button class="tab ${S.tab==='home'?'active':''}" onclick="setTab('home')">${I.home}Home</button>
+      <button class="tab ${S.tab==='calendar'?'active':''}" onclick="setTab('calendar')">${I.cal}Calendar</button>
+      <button class="tab ${S.tab==='saved'?'active':''}" onclick="setTab('saved')">${I.save}Saved</button>
+      <button class="tab ${S.tab==='coach'?'active':''}" onclick="setTab('coach')">${I.coach}Coach</button>
+      <button class="tab ${S.tab==='profile'?'active':''}" onclick="setTab('profile')">${I.user}Profile</button>
+    </nav>
+  </div>`;
+}
+window.setTab = t => { S.tab=t; render(); if(t==='calendar'){ loadSchedule(); } if(t==='saved'){ loadSaved(); } };
+
+function topBar(kicker){
+  return `<div class="topbar"><div class="brand"><div class="brand-mark">C</div><div><div class="brand-name">CreatorPulse</div><div class="brand-sub">${esc(kicker)}</div></div></div>
+    <div class="topbar-right">
+      <button class="iconbtn" title="Refresh" onclick="loadTrends();loadNotifs();toast('Refreshing')">${I.refresh}</button>
+      <div class="bell-wrap">
+        <button class="iconbtn" onclick="toggleBell(event)">${I.bell}</button>
+        <span class="bell-dot ${S.notifs.length?'show':''}"></span>
+        <div class="notif-dd" id="notif-dd">${S.notifs.length?S.notifs.map(n=>`<div class="notif-item"><div class="notif-niche">${esc(n.niche)}</div><div class="notif-hl">${esc(n.headline)}</div><div class="notif-time">${esc(n.time)}</div></div>`).join(""):'<div class="notif-empty">Nothing new right now.</div>'}</div>
+      </div>
+    </div></div>`;
+}
+window.toggleBell = (e) => { e.stopPropagation(); const dd = document.getElementById("notif-dd"); if(dd) dd.classList.toggle("open"); };
+document.addEventListener("click", (e) => { if(!e.target.closest(".bell-wrap")){ const dd = document.getElementById("notif-dd"); if(dd) dd.classList.remove("open"); } });
+
+function pageHome(){
+  const list = S.trends.length ? `<div class="tlist">${S.trends.map(renderTrend).join("")}</div>` : `<div class="loading-row"><span class="sp"></span>Reading the internet…</div>`;
+  return `<main class="page active">${topBar(`${S.trends.length||0} live stories`)}
+    <div class="sec-h"><h2>Today's edit</h2><span class="sec-meta">Ranked by relevance</span></div>
+    ${list}
+  </main>`;
+}
+
+function pageCalendar(){
+  const y = S.cal.y, m = S.cal.m;
+  const first = new Date(y,m,1).getDay(), days = new Date(y,m+1,0).getDate();
+  const today = new Date();
+  const isCur = today.getFullYear()===y && today.getMonth()===m;
+  const postsByDate = {};
+  S.schedule.forEach(p=>{ if(p.scheduled_date){ const d = new Date(p.scheduled_date).getDate(); (postsByDate[d]=postsByDate[d]||[]).push(p); } });
+  let grid = DAYS.map(d=>`<div class="cal-day-lbl">${d}</div>`).join("");
+  for(let i=0;i<first;i++) grid += `<div></div>`;
+  for(let d=1;d<=days;d++){
+    const has = !!postsByDate[d];
+    const tod = isCur && d===today.getDate();
+    grid += `<div class="cal-cell ${has?'has':''} ${tod?'today':''}">${d}${has?'<span class="dot"></span>':''}</div>`;
+  }
+  // Upcoming: pull events from cache for user niches + saved schedule
+  const combined = [];
+  (S.user?.niches||[]).forEach(n => (S.eventsCache[n]||[]).forEach(e => combined.push({date:e.date, title:e.title, desc:e.description, kind:"Event", niche:n})));
+  S.schedule.forEach(p => combined.push({date:p.scheduled_date, title:p.headline, desc:p.niche, kind:p.content_type||"Post"}));
+  combined.sort((a,b)=> new Date(a.date) - new Date(b.date));
+  const now = new Date(); const upcoming = combined.filter(x=> new Date(x.date) >= new Date(now.getFullYear(),now.getMonth(),now.getDate())).slice(0, 12);
+  const events = upcoming.map(e=>{ const dt = new Date(e.date); return `<div class="event-item"><div class="event-date-badge"><div class="m">${M_SHORT[dt.getMonth()]}</div><div class="d">${dt.getDate()}</div></div><div class="event-body"><div class="event-title">${esc(e.title)}</div>${e.desc?`<div class="event-desc">${esc(e.desc)}</div>`:""}<div class="event-tag">${esc(e.kind)}${e.niche?' · '+esc(e.niche):''}</div></div></div>`; }).join("");
+
+  const asch = S.addSched;
+  return `<main class="page active">${topBar("Schedule")}
+    <div class="sec-h"><h2>Calendar</h2></div>
+    <div class="card">
+      <div class="cal-hd">
+        <h3>${MONTHS[m]} ${y}</h3>
+        <div style="display:flex;gap:4px">
+          <button class="iconbtn" onclick="calNav(-1)">‹</button>
+          <button class="iconbtn" onclick="calNav(1)">›</button>
+        </div>
+      </div>
+      <div class="cal-grid">${grid}</div>
+    </div>
+    <div class="card">
+      <div class="card-h">Add to your schedule</div>
+      <div class="field"><label>What are you doing</label><input class="input" placeholder="Go live · Post reel · Record podcast" value="${esc(asch.title)}" oninput="S.addSched.title=this.value"/></div>
+      <div style="display:flex;gap:8px">
+        <div class="field" style="flex:1"><label>Every</label><select class="input" onchange="S.addSched.weekday=this.value">${["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"].map(d=>`<option value="${d.toLowerCase()}" ${asch.weekday===d.toLowerCase()?'selected':''}>${d}</option>`).join("")}</select></div>
+        <div class="field" style="flex:1"><label>Time</label><input class="input" type="time" value="${esc(asch.time)}" oninput="S.addSched.time=this.value"/></div>
+      </div>
+      <button class="btn bp" style="width:100%;padding:12px;justify-content:center" onclick="addRecurring()">${I.plus} Add for next 12 months</button>
+    </div>
+    <div class="card">
+      <div class="card-h">Upcoming</div>
+      ${events || `<div style="color:var(--mu);font-size:12px">Your niche events and scheduled posts will show here.</div>`}
+    </div>
+  </main>`;
+}
+window.calNav = (dir) => {
+  S.cal.m += dir;
+  if(S.cal.m < 0){ S.cal.m=11; S.cal.y--; }
+  if(S.cal.m > 11){ S.cal.m=0; S.cal.y++; }
+  loadSchedule();
+  // Prefetch events for niches
+  (S.user?.niches||[]).forEach(async n => { if(!S.eventsCache[n]) S.eventsCache[n] = await fetchEvents(n); render(); });
+};
+
+function pageSaved(){
+  const items = S.saved.filter(p=>p.content_type!=='Recurring');
+  const list = items.length ? items.map(p=>`<div class="card" style="display:flex;gap:10px;align-items:flex-start"><div style="flex:1;min-width:0"><div style="font-family:var(--serif);font-size:15px;font-weight:600;line-height:1.35">${esc(p.headline)}</div><div style="font-size:11px;color:var(--mu);margin-top:4px">${esc(p.niche)} · ${esc(p.platform)} · ${esc(p.content_type)}${p.scheduled_date?' · '+esc(p.scheduled_date):''}</div></div><button class="iconbtn" onclick="delSaved(${p.id})" title="Delete">${I.trash}</button></div>`).join("") : `<div style="color:var(--mu);font-size:12px;padding:20px 0">Your saved scripts, carousels and images will land here.</div>`;
+  return `<main class="page active">${topBar(`${items.length} saved`)}<div class="sec-h"><h2>Library</h2></div>${list}</main>`;
+}
+
+function pageCoach(){
+  return `<main class="page active">${topBar("Strategist")}<div class="sec-h"><h2>Coach</h2><span class="sec-meta">Powered by CreatorPulse AI</span></div>
+    <div class="card">
+      <div class="card-h">Get an honest audit</div>
+      <div style="font-size:12px;color:var(--mu);margin-bottom:12px;line-height:1.5">Drop your handle and recent numbers. Coach reads them like a strategist would — kind, specific, blunt.</div>
+      <div class="field"><label>Platform</label><select class="input" onchange="S.coachPlatform=this.value">${["instagram","tiktok","youtube","twitter"].map(p=>`<option value="${p}" ${S.coachPlatform===p?'selected':''}>${p[0].toUpperCase()+p.slice(1)}</option>`).join("")}</select></div>
+      <div class="field"><label>Your handle</label><input class="input" placeholder="@yourhandle" value="${esc(S.coachHandle)}" oninput="S.coachHandle=this.value"/></div>
+      <div class="field"><label>Recent metrics (paste anything)</label><textarea class="input" rows="4" placeholder="Last 5 posts: 12k, 8k, 45k, 6k, 22k views. Followers: 4,200. Avg watch time: 18s." oninput="S.coachMetrics=this.value">${esc(S.coachMetrics)}</textarea></div>
+      <button class="btn bp" style="width:100%;padding:12px;justify-content:center" ${S.coachLoading?'disabled':''} onclick="runCoach()">${S.coachLoading?'<span class="sp"></span> Thinking…':'Give me the read'}</button>
+      ${S.coachAnswer?`<div class="coach-msg">${esc(S.coachAnswer)}</div>`:""}
+    </div>
+  </main>`;
+}
+
+function pageProfile(){
+  const u = S.user || {};
+  const name = u.name || "You";
+  const initial = (name.trim()[0] || "?").toUpperCase();
+  const activePlats = u.platforms || [];
+
+  // Event count: unique dates from user niches
+  const eventCount = (u.niches||[]).reduce((n, k) => n + ((S.eventsCache[k]||[]).length), 0);
+  const liveCount = S.trends.length;
+  const savedCount = S.saved.filter(p => p.content_type !== 'Recurring').length;
+
+  const platPills = activePlats.map(p => {
+    const P = PLATS.find(x => x.id === p);
+    return `<span class="pf-plat-pill"><span class="em">${PLAT_EMOJI[p]||"◆"}</span>${esc(P?.label||p)}</span>`;
+  }).join("") || `<span style="color:var(--mu);font-size:12px">No platforms yet</span>`;
+
+  const nicheTags = (u.niches||[]).map(n => {
+    const c = NC[n] || "#7C3AED";
+    return `<span class="niche-tag" style="background:${c}22;color:${c};border:1px solid ${c}55">${esc(n)}</span>`;
+  }).join("") || `<span style="color:var(--mu);font-size:12px">None yet — add some in onboarding.</span>`;
+
+  const platCells = PLATS.map(p => {
+    const on = activePlats.includes(p.id);
+    const primary = u.primaryPlatform === p.id;
+    return `<div class="pf-plat-cell ${on?'on':''}">
+      <span class="em">${PLAT_EMOJI[p.id]||"◆"}</span>
+      <div style="flex:1;min-width:0">
+        <div class="lbl">${esc(p.label)}</div>
+        ${primary?'<div class="prim">Primary</div>':(on?'<div style="font-size:10px;color:var(--mu)">Active</div>':'<div style="font-size:10px;color:var(--mu2)">Inactive</div>')}
+      </div>
+    </div>`;
+  }).join("");
+
+  return `<main class="page active">${topBar("Account")}
+    <div class="pf-head">
+      <div class="pf-avatar">${esc(initial)}</div>
+      <div class="pf-name">${esc(name)}</div>
+      <div class="pf-email">${esc(u.email||"")}</div>
+      <div class="pf-plat-row">${platPills}</div>
+    </div>
+
+    <div class="stat-row">
+      <div class="stat"><div class="stat-n">${liveCount}</div><div class="stat-l">Live Stories</div></div>
+      <div class="stat"><div class="stat-n">${savedCount}</div><div class="stat-l">Saved Posts</div></div>
+      <div class="stat"><div class="stat-n">${eventCount}</div><div class="stat-l">My Events</div></div>
+    </div>
+
+    <div class="pf-card">
+      <div class="pf-card-head">
+        <div class="pf-card-title">My Niches</div>
+        <button class="pf-edit" onclick="editNiches()">Edit</button>
+      </div>
+      <div class="niche-tags">${nicheTags}</div>
+    </div>
+
+    <div class="pf-card">
+      <div class="pf-card-head">
+        <div class="pf-card-title">My Platforms</div>
+      </div>
+      <div class="pf-grid">${platCells}</div>
+    </div>
+
+    <button class="btn-signout" onclick="logOut()">Sign Out</button>
+  </main>`;
+}
+window.editNiches = () => { S.mode = "onboard"; S.onboard = { step:0, name:S.user?.name||"", niches:[...(S.user?.niches||[])], platforms:[...(S.user?.platforms||[])], primary:S.user?.primaryPlatform||"", ppd:S.user?.postsPerDay||3 }; window.ob = S.onboard; render(); };
+window.logOut = () => { if(confirm("Sign out?")){ clearSession(); S.mode="auth"; S.authTab="login"; S.authForm={email:"",password:"",name:""}; render(); } };
+
+// ─── BOOT ───────────────────────────────────────────────────────────────────
+(function boot(){
+  if(restoreSession()){
+    if(!S.user.niches?.length){ S.mode = "onboard"; S.onboard.name = S.user.name || ""; render(); }
+    else { S.mode = "app"; render(); bootApp(); }
+  } else {
+    S.mode = "auth"; render();
+  }
+  // Refresh trends every 20 min
+  setInterval(() => { if(S.mode==="app"){ loadTrends(); loadNotifs(); }}, 20*60*1000);
+})();
+</script>
+</body>
+</html>
