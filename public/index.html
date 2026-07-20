@@ -148,6 +148,7 @@ body{padding-bottom:var(--tab-h);letter-spacing:-0.005em}
 .input{width:100%;padding:12px 14px;background:var(--sf);border:1px solid var(--br);border-radius:9px;color:var(--tx);font:500 14px/1.4 var(--sans);transition:border-color .15s}
 .input:focus{outline:none;border-color:var(--br2)}
 .auth-err{background:rgba(232,90,44,.08);border:1px solid rgba(232,90,44,.3);color:var(--ac);padding:9px 12px;border-radius:8px;font-size:12px;margin-bottom:12px}
+.auth-msg{background:rgba(92,152,90,.1);border:1px solid rgba(92,152,90,.35);color:#5c985a;padding:9px 12px;border-radius:8px;font-size:12px;margin-bottom:12px;line-height:1.5}
 .auth-switch{text-align:center;margin-top:20px;font-size:12px;color:var(--mu)}
 .auth-switch a{color:var(--tx);cursor:pointer;font-weight:600;text-decoration:underline;text-decoration-color:var(--mu2);text-underline-offset:3px}
 
@@ -550,7 +551,7 @@ const S = {
   mode: "boot", // boot | auth | onboard | app
   authTab: "login", // login | signup
   authForm: { email:"", password:"", name:"" },
-  authErr: "", authLoading: false, token: null, user: null,
+  authErr: "", authMsg: "", authLoading: false, token: null, user: null,
   onboard: { step:0, name:"", niches:[], platforms:[], primary:"", ppd:3 },
   tab: "home",
   trends: [], notifs: [], schedule: [], saved: [], eventsCache: {},
@@ -607,7 +608,7 @@ async function fetchNotifs(niches){ return (await api(`/api/notifications?niches
 
 // ─── AUTH ───────────────────────────────────────────────────────────────────
 async function doLogin(){
-  S.authLoading = true; S.authErr=""; render();
+  S.authLoading = true; S.authErr=""; S.authMsg=""; render();
   try {
     const d = await api("/api/auth/login", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(S.authForm)});
     if(d.error){ S.authErr = d.error; }
@@ -620,7 +621,7 @@ async function doLogin(){
   S.authLoading=false; render();
 }
 async function doSignup(){
-  S.authLoading = true; S.authErr=""; render();
+  S.authLoading = true; S.authErr=""; S.authMsg=""; render();
   try {
     const d = await api("/api/auth/signup", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
       email: S.authForm.email, password: S.authForm.password, name: S.authForm.name,
@@ -628,13 +629,10 @@ async function doSignup(){
     })});
     if(d.error){ S.authErr = d.error; }
     else {
-      // auto-login
-      const l = await api("/api/auth/login", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:S.authForm.email,password:S.authForm.password})});
-      if(l.error){ S.authErr = l.error; }
-      else {
-        S.token = l.token; S.user = l.user; saveSession();
-        S.mode="onboard"; S.onboard.name = S.authForm.name;
-      }
+      // Email confirmation is required before login — don't attempt auto-login.
+      S.authMsg = d.message || "Account created. Check your email to confirm your account before signing in.";
+      S.authTab = "login";
+      S.authForm.password = "";
     }
   } catch(e){ S.authErr = e.message; }
   S.authLoading=false; render();
@@ -1004,11 +1002,12 @@ function renderAuth(){
     <div class="auth-title">${isLogin?"Welcome back.":"Start creating."}</div>
     <div class="auth-sub">${isLogin?"Sign in to pick up where you left off.":"Trending stories, scripts, and a calendar that thinks with you."}</div>
     ${S.authErr?`<div class="auth-err">${esc(S.authErr)}</div>`:""}
+    ${S.authMsg?`<div class="auth-msg">${esc(S.authMsg)}</div>`:""}
     ${!isLogin?`<div class="field"><label>Name</label><input class="input" value="${esc(S.authForm.name)}" oninput="S.authForm.name=this.value" placeholder="How should we call you?"/></div>`:""}
     <div class="field"><label>Email</label><input class="input" type="email" value="${esc(S.authForm.email)}" oninput="S.authForm.email=this.value" placeholder="you@domain.com"/></div>
     <div class="field"><label>Password</label><input class="input" type="password" value="${esc(S.authForm.password)}" oninput="S.authForm.password=this.value" placeholder="••••••••"/></div>
     <button class="btn bp" style="width:100%;padding:13px;margin-top:6px;justify-content:center" ${S.authLoading?"disabled":""} onclick="${isLogin?'doLogin()':'doSignup()'}">${S.authLoading?'<span class="sp"></span>':(isLogin?"Sign in":"Create account")}</button>
-    <div class="auth-switch">${isLogin?"New here?":"Already have an account?"} <a onclick="S.authTab='${isLogin?'signup':'login'}'; S.authErr=''; render()">${isLogin?"Create one":"Sign in"}</a></div>
+    <div class="auth-switch">${isLogin?"New here?":"Already have an account?"} <a onclick="S.authTab='${isLogin?'signup':'login'}'; S.authErr=''; S.authMsg=''; render()">${isLogin?"Create one":"Sign in"}</a></div>
   </div></div>`;
 }
 
@@ -2696,9 +2695,37 @@ function renderInspirationFeed(){
 window.editNiches = () => { S.mode = "onboard"; S.onboard = { step:0, name:S.user?.name||"", niches:[...(S.user?.niches||[])], platforms:[...(S.user?.platforms||[])], primary:S.user?.primaryPlatform||"", ppd:S.user?.postsPerDay||3 }; window.ob = S.onboard; render(); };
 window.logOut = () => { if(confirm("Sign out?")){ clearSession(); S.mode="auth"; S.authTab="login"; S.authForm={email:"",password:"",name:""}; render(); } };
 
+// ─── AUTH REDIRECT DETECTION (email confirmation / errors from Supabase) ────
+function checkAuthRedirect(){
+  try {
+    const hash = window.location.hash ? window.location.hash.substring(1) : "";
+    const hashParams = new URLSearchParams(hash);
+    const searchParams = new URLSearchParams(window.location.search);
+    const type = hashParams.get("type") || searchParams.get("type");
+    const errorDesc = hashParams.get("error_description") || searchParams.get("error_description");
+
+    if(errorDesc){
+      S.authErr = decodeURIComponent(errorDesc.replace(/\+/g," "));
+      S.authTab = "login";
+      window.history.replaceState({}, document.title, window.location.pathname);
+      return true;
+    }
+    if(type === "signup" || type === "email_change"){
+      S.authMsg = type === "signup" ? "Email confirmed! You can sign in now." : "Email address confirmed.";
+      S.authTab = "login";
+      window.history.replaceState({}, document.title, window.location.pathname);
+      return true;
+    }
+  } catch(e){ console.warn("checkAuthRedirect", e); }
+  return false;
+}
+
 // ─── BOOT ───────────────────────────────────────────────────────────────────
 (function boot(){
-  if(restoreSession()){
+  const confirmedRedirect = checkAuthRedirect();
+  if(confirmedRedirect){
+    S.mode = "auth"; render();
+  } else if(restoreSession()){
     if(!S.user.niches?.length){ S.mode = "onboard"; S.onboard.name = S.user.name || ""; render(); }
     else { S.mode = "app"; render(); bootApp(); }
   } else {
