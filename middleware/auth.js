@@ -1,5 +1,5 @@
 // Security + performance middleware for CreatorPulse.
-// helmet, express-rate-limit, and compression are REQUIRED â€” if any fail to
+// helmet, express-rate-limit, and compression are REQUIRED — if any fail to
 // load, the app crashes on startup rather than silently running unprotected.
 const helmet = require("helmet");
 const rateLimit = require("express-rate-limit");
@@ -13,6 +13,7 @@ function setupSecurity(app) {
       directives: {
         "default-src": ["'self'"],
         "script-src": ["'self'", "'unsafe-inline'", "https://apis.google.com"],
+        "script-src-attr": ["'unsafe-inline'"],
         "style-src": ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
         "font-src": ["'self'", "https://fonts.gstatic.com", "data:"],
         "img-src": ["'self'", "data:", "blob:", "https:"],
@@ -39,3 +40,4 @@ function setupSecurity(app) {
 }
 
 module.exports = { setupSecurity, rateLimit };
+
