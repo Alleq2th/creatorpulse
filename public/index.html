@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Minimal Tab Test</title>
+<style>
+  body{margin:0;font-family:system-ui,sans-serif;background:#0a0a0f;color:#fff;height:100vh;display:flex;flex-direction:column}
+  .page{flex:1;display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:700}
+  .tabbar{position:fixed;bottom:0;left:0;right:0;display:flex;background:#141420;border-top:1px solid #333}
+  .tab{flex:1;padding:18px;text-align:center;background:none;border:none;color:#888;font-size:16px;font-weight:600}
+  .tab.active{color:#fff;background:#222}
+  #counter{margin-top:20px;font-size:16px;color:#0f0}
+</style>
+</head>
+<body>
+  <div class="page" id="page">HOME<br/><span id="counter"></span></div>
+  <nav class="tabbar">
+    <button class="tab active" id="tab-home" onclick="setTab('HOME')">Home</button>
+    <button class="tab" id="tab-hooks" onclick="setTab('HOOKS')">Hooks</button>
+    <button class="tab" id="tab-cal" onclick="setTab('CALENDAR')">Calendar</button>
+    <button class="tab" id="tab-create" onclick="setTab('CREATE')">Create</button>
+    <button class="tab" id="tab-profile" onclick="setTab('PROFILE')">Profile</button>
+  </nav>
+
+<script>
+  var tapCount = 0;
+  function setTab(name){
+    tapCount++;
+    document.getElementById("page").innerHTML = name + "<br/><span id='counter'>Tap #" + tapCount + " registered ✓</span>";
+    var tabs = document.querySelectorAll(".tab");
+    for(var i=0;i<tabs.length;i++) tabs[i].classList.remove("active");
+    document.getElementById("tab-" + name.toLowerCase().replace("calendar","cal")).classList.add("active");
+  }
+</script>
+</body>
+</html>
