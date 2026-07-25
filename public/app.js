@@ -186,6 +186,20 @@ function checkAuthRedirect(){
   return false;
 }
 
+// ─── KEYBOARD TRACKING — keeps fixed-bottom sheets above the on-screen keyboard ──
+if(window.visualViewport){
+  const vv = window.visualViewport;
+  let kbTicking = false;
+  function syncKbOffset(){
+    kbTicking = false;
+    const offset = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+    document.documentElement.style.setProperty('--kb-offset', offset + 'px');
+  }
+  function scheduleSyncKb(){ if(!kbTicking){ kbTicking = true; requestAnimationFrame(syncKbOffset); } }
+  vv.addEventListener('resize', scheduleSyncKb);
+  vv.addEventListener('scroll', scheduleSyncKb);
+}
+
 // ─── BOOT ───────────────────────────────────────────────────────────────────
 (function boot(){
   const confirmedRedirect = checkAuthRedirect();
