@@ -36,6 +36,36 @@
       "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
     }
   ],
+  "screenshots": [
+    {
+      "src": "/screenshot-home.png",
+      "sizes": "720x1600",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Today's edit — your niche feed, ranked by relevance"
+    },
+    {
+      "src": "/screenshot-hooks.png",
+      "sizes": "720x1600",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Reusable hooks for every niche"
+    },
+    {
+      "src": "/screenshot-create.png",
+      "sizes": "720x1600",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Record with camera zoom and teleprompter"
+    },
+    {
+      "src": "/screenshot-profile.png",
+      "sizes": "720x1600",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Your account and niches"
+    }
+  ],
   "icons": [
     {
       "src": "/icon-192.png",
