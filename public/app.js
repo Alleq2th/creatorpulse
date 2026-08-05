@@ -224,7 +224,16 @@ if(window.visualViewport){
     S.mode = "auth"; render();
   } else if(restoreSession()){
     if(!S.user.niches?.length){ S.mode = "onboard"; S.onboard.name = S.user.name || ""; render(); }
-    else { S.mode = "app"; render(); bootApp(); }
+    else {
+      S.mode = "app";
+      // Home-screen shortcut support (long-press app icon → New Recording / Hooks / Calendar)
+      const requestedTab = new URLSearchParams(window.location.search).get("tab");
+      if(requestedTab && ["home","hooks","calendar","create","profile"].includes(requestedTab)){
+        S.tab = requestedTab;
+        try { window.history.replaceState({}, document.title, window.location.pathname); } catch(e){}
+      }
+      render(); bootApp();
+    }
   } else {
     S.mode = "auth"; render();
   }

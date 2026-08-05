@@ -3,6 +3,8 @@
   "name": "CreatorPulse",
   "short_name": "CreatorPulse",
   "description": "AI Content Engine for Creators",
+  "lang": "en",
+  "dir": "ltr",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -11,6 +13,29 @@
   "theme_color": "#7C3AED",
   "orientation": "portrait",
   "categories": ["productivity", "social", "video"],
+  "shortcuts": [
+    {
+      "name": "New Recording",
+      "short_name": "Record",
+      "description": "Jump straight into the camera to record",
+      "url": "/?tab=create",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Today's Hooks",
+      "short_name": "Hooks",
+      "description": "See today's content hooks",
+      "url": "/?tab=hooks",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Calendar",
+      "short_name": "Calendar",
+      "description": "View your content calendar",
+      "url": "/?tab=calendar",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ],
   "icons": [
     {
       "src": "/icon-192.png",
