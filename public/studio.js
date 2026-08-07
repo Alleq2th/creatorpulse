@@ -146,16 +146,26 @@ function CS_ICON(name){
 // ─── DEVICE PROFILE ─────────────────────────────────────────────────────────
 // Drives export resolution/fps. ffmpeg.wasm is single-threaded in the default
 // build, so resolution matters more than it did with hardware MediaRecorder.
+const CS_QUALITY_PRESETS = {
+  "540p":  { width: 540,  height: 960,  fps: 24, crf: 27, preset: "ultrafast", label: "540p",  bitrate: 1_500_000 },
+  "720p":  { width: 720,  height: 1280, fps: 30, crf: 25, preset: "ultrafast", label: "720p",  bitrate: 2_500_000 },
+  "1080p": { width: 1080, height: 1920, fps: 30, crf: 23, preset: "veryfast",  label: "1080p", bitrate: 4_500_000 },
+  "2160p": { width: 2160, height: 3840, fps: 30, crf: 21, preset: "veryfast",  label: "4K",    bitrate: 12_000_000 },
+};
 const CS_DEVICE = (() => {
   const cores = navigator.hardwareConcurrency || 4;
   const mem   = navigator.deviceMemory || 4;
   const tier  = (cores >= 8 && mem >= 6) ? "high" : (cores >= 4 && mem >= 3) ? "mid" : "low";
-  const prof = {
-    high: { W:1080, H:1920, fps:30, crf:23, preset:"veryfast", label:"1080p" },
-    mid:  { W: 720, H:1280, fps:30, crf:25, preset:"ultrafast", label:"720p"  },
-    low:  { W: 540, H: 960, fps:24, crf:27, preset:"ultrafast", label:"540p"  },
-  }[tier];
-  return { tier, cores, mem, ...prof };
+  const autoQuality = tier === "high" ? "1080p" : tier === "mid" ? "720p" : "540p";
+  const mimeCandidates = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+  const mime = mimeCandidates.find(m => window.MediaRecorder && MediaRecorder.isTypeSupported(m)) || 'video/webm';
+  return {
+    tier, cores, mem, mime,
+    // st.quality (set by the resolution picker) overrides the auto-detected tier when present.
+    get capture(){ return CS_QUALITY_PRESETS[S.studio?.quality || autoQuality]; },
+    get encode(){ return CS_QUALITY_PRESETS[S.studio?.quality || autoQuality]; },
+    get label(){ return CS_QUALITY_PRESETS[S.studio?.quality || autoQuality].label; },
+  };
 })();
 
 const CS_PX = 0.06;                 // timeline px per ms
@@ -199,10 +209,22 @@ function camView(st){
       <button class="cs-icon-btn" onclick="csExitCamera()" aria-label="Close">${CS_ICON('close')}</button>
       <div class="cs-title">${esc(st.projectName)}</div>
       <div class="cs-topbar-r">
-        <span class="cs-chip">${CS_DEVICE.label}</span>
+        <button class="cs-chip" onclick="csOpenSheet('quality')">${CS_DEVICE.label}</button>
         <button class="cs-cta" ${clips?'':'disabled'} onclick="csGoToEditor()">Next</button>
       </div>
     </div>
+    ${st.sheet==='quality' ? `<div class="cs-sheet-inline">
+      <div class="cs-sheet-h"><h4>Recording quality</h4><button class="done" onclick="csCloseSheet()">Done</button></div>
+      <div class="cs-sheet-body">
+        ${Object.entries(CS_QUALITY_PRESETS).map(([key,p])=>`
+          <button class="cs-text-btn ${(st.quality||CS_DEVICE.tier==='high'&&'1080p'||CS_DEVICE.tier==='mid'&&'720p'||'540p')===key?'on':''}"
+            style="width:100%;justify-content:space-between;padding:14px 4px" onclick="csSetQuality('${key}')">
+            <span>${p.label}${key==='2160p'?' (4K)':''}</span>
+            <span class="cs-foot-meta">${p.width}×${p.height}</span>
+          </button>`).join('')}
+        <div class="cs-foot-meta" style="padding:8px 4px 0">Higher quality uses more storage and may be slower to export on older phones.</div>
+      </div>
+    </div>` : ''}
 
     <div class="cs-cam-stage ${rec?'is-rec':''}" id="cs-cam-stage">
       <video id="cs-cam-live" playsinline muted autoplay
@@ -1312,6 +1334,16 @@ window.csOpenSheet = (name) => {
   S.studio.sheet = name; render();
   if(window.pushBackState) window.pushBackState(() => window.csCloseSheet());
 };
+window.csSetQuality = (key) => {
+  if(!CS_QUALITY_PRESETS[key]) return;
+  S.studio.quality = key;
+  S.studio.sheet = null;
+  toast('Recording quality: ' + CS_QUALITY_PRESETS[key].label);
+  render();
+  // Re-open the camera at the new resolution if it's already running.
+  if(S.studio.mode === 'camera') csOpenCamera();
+};
+
 window.csCloseSheet = () => { S.studio.sheet = null; S.studio.editText = null; render(); };
 
 // Live preview styling (filters + adjust) — media layer only.

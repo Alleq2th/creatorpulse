@@ -442,6 +442,8 @@ function csAfterRender(){
   try {
     const fbBtn = document.getElementById('cp-fb-btn');
     if(fbBtn) fbBtn.style.display = (S.tab === 'create') ? 'none' : '';
+    const coachBtn = document.getElementById('fab-coach');
+    if(coachBtn) coachBtn.style.display = (S.tab === 'create') ? 'none' : '';
     if(!S.studio || S.tab !== 'create') return;
     // ── Camera mode: reattach live stream + rebind timer/prompter loops ──
     if(S.studio.mode === 'camera'){

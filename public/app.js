@@ -2,7 +2,7 @@
 function renderFloatingCoach(){
   if(S.mode !== "app") return "";
   const open = !!S.coachOpen;
-  return `<button class="fab-coach" onclick="S.coachOpen=true;render()" aria-label="AI Coach">${I.sparkle}<span>Coach</span></button>
+  return `<button id="fab-coach" class="fab-coach" onclick="S.coachOpen=true;render()" aria-label="AI Coach">${I.sparkle}<span>Coach</span></button>
     ${open ? `<div class="sheet-overlay open" onclick="if(event.target===this){S.coachOpen=false;render()}">
       <div class="sheet"><div class="sheet-grip"></div>
         <div class="sheet-h"><h3>AI Coach</h3><button class="sheet-close" onclick="S.coachOpen=false;render()">×</button></div>
