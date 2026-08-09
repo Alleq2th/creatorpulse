@@ -283,15 +283,22 @@ function startGlobalTimer(){
   }, 30000);
 }
 
+// 2-hour bucket key (UTC) — matches the bucketing server.js uses for /api/daily-digest,
+// so the digest is treated as "new" again every 2 hours instead of staying dismissed all day.
+function digestBucketKey(){
+  const now = new Date();
+  const bucketHour = Math.floor(now.getUTCHours() / 2) * 2;
+  return 'cp_digest_seen_' + now.toISOString().slice(0,10) + '-' + String(bucketHour).padStart(2,'0');
+}
 async function loadDigest(){
   if(!S.user?.niches?.length) return;
-  const key = 'cp_digest_seen_' + new Date().toISOString().slice(0,10);
-  if(localStorage.getItem(key)) { S.digestDismissed = true; }
+  const key = digestBucketKey();
+  S.digestDismissed = !!localStorage.getItem(key); // reflects current bucket only — resets when bucket rolls over
   try { const d = await api(`/api/daily-digest?niches=${encodeURIComponent(S.user.niches.join(','))}`); S.digest = d.digest; render(); } catch(e){}
 }
 window.dismissDigest = async () => {
   // OPTIMISTIC: hide the digest instantly, revert if the server rejects it.
-  const key = 'cp_digest_seen_' + new Date().toISOString().slice(0,10);
+  const key = digestBucketKey();
   const prev = S.digestDismissed;
   S.digestDismissed = true;
   delete S.errors.digest;

@@ -243,8 +243,8 @@ window.addEventListener("pagehide", () => { if(window.saveCaches) window.saveCac
   } else {
     S.mode = "auth"; render();
   }
-  // Refresh trends every 20 min
-  setInterval(() => { if(S.mode==="app"){ loadTrends(); loadNotifs(); }}, 20*60*1000);
+  // Refresh trends every 20 min (digest included so the 2-hour bucket rollover is caught while the app is open)
+  setInterval(() => { if(S.mode==="app"){ loadTrends(); loadNotifs(); loadDigest(); }}, 20*60*1000);
 })();
 
 /* ═══════════════════════════════════════════════════════════════════════════
