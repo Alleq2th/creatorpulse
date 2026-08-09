@@ -449,8 +449,9 @@ function csAfterRender(){
     if(S.studio.mode === 'camera'){
       const v = document.getElementById('cs-cam-live');
       if(v){
-        if(window._st && window._st.stream && v.srcObject !== window._st.stream){
-          v.srcObject = window._st.stream;
+        const liveStream = (typeof CSCAM !== 'undefined' && CSCAM.stream) ? CSCAM.stream : (window._st && window._st.stream);
+        if(liveStream && v.srcObject !== liveStream){
+          v.srcObject = liveStream;
           v.muted = true; v.playsInline = true;
           v.play().catch(()=>{});
         }

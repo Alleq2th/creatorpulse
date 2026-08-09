@@ -836,7 +836,7 @@ window.csOverlayPointerDown = (e, id) => {
       return;
     }
     const dx = ev.clientX - CSPTR.base.x, dy = ev.clientY - CSPTR.base.y;
-    if(Math.abs(dx) > 3 || Math.abs(dy) > 3) CSPTR.base.moved = true;
+    if(Math.abs(dx) > 9 || Math.abs(dy) > 9) CSPTR.base.moved = true;
     // Free positioning across the whole frame (1%–99%, both axes).
     const nx = Math.max(1, Math.min(99, CSPTR.base.px + (dx / CSPTR.base.rect.width) * 100));
     const ny = Math.max(1, Math.min(99, CSPTR.base.py + (dy / CSPTR.base.rect.height) * 100));
@@ -1406,6 +1406,17 @@ function csCloseCamera(){
   cancelAnimationFrame(CSCAM.prompter); CSCAM.prompter = null;
 }
 window.csExitCamera = () => {
+  const st = S.studio;
+  if(st.clips && st.clips.length){
+    const ok = window.confirm(st.clips.length === 1
+      ? "Discard this recording? It hasn't been saved."
+      : `Discard these ${st.clips.length} clips? They haven't been saved.`);
+    if(!ok) return; // stay in camera, keep the clips
+    st.clips.forEach(c => { if(c.url) csDropUrl(c.url); });
+    st.clips = [];
+    st.overlays = [];
+    st.captions = [];
+  }
   csCloseCamera();
   S.studio.mode = 'idle';
   S.page = 'home';
