@@ -12,6 +12,8 @@ const fetch = require("node-fetch");
 const RSSParser = require("rss-parser");
 const { createClient } = require("@supabase/supabase-js");
 const { google } = require("googleapis");
+const multer = require("multer");
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 // v1.8 pre-beta: security + performance middleware
 let helmet, rateLimit, compression;
 try { helmet = require("helmet"); } catch (_) { helmet = null; }
@@ -1486,15 +1488,15 @@ app.post("/api/contact", contactLimiter, async (req, res) => {
 app.post(
   "/api/transcribe",
   heavyLimiter,
-  express.raw({ type: "*/*", limit: "25mb" }),
+  upload.single("file"),
   async (req, res) => {
     try {
       if (!GROQ_KEY) return res.status(503).json({ error: "Transcription not configured." });
-      const buf = req.body;
-      if (!buf || !buf.length) return res.status(400).json({ error: "Empty audio body." });
-      if (buf.length > 25 * 1024 * 1024) return res.status(413).json({ error: "Audio too large (25MB max)." });
+      const file = req.file;
+      if (!file || !file.buffer || !file.buffer.length) return res.status(400).json({ error: "Empty audio body." });
+      if (file.buffer.length > 25 * 1024 * 1024) return res.status(413).json({ error: "Audio too large (25MB max)." });
 
-      const ct = (req.headers["content-type"] || "audio/wav").toLowerCase();
+      const ct = (file.mimetype || "audio/webm").toLowerCase();
       const ext = ct.includes("mp4") ? "mp4"
                 : ct.includes("mpeg") || ct.includes("mp3") ? "mp3"
                 : ct.includes("webm") ? "webm"
@@ -1502,20 +1504,24 @@ app.post(
                 : ct.includes("m4a") ? "m4a"
                 : "wav";
 
+      // Frontend can request word-level timing (for word-by-word captions) via
+      // the `granularity` field; default to requesting both word + segment so
+      // older and newer caption code paths both get what they need.
+      const wantWord = (req.body?.granularity || "word") === "word";
+
       const fd = new FormData();
-      fd.append("file", new Blob([buf], { type: ct }), `clip.${ext}`);
+      fd.append("file", new Blob([file.buffer], { type: ct }), `clip.${ext}`);
       fd.append("model", "whisper-large-v3");
       fd.append("response_format", "verbose_json");
       fd.append("timestamp_granularities[]", "segment");
+      if (wantWord) fd.append("timestamp_granularities[]", "word");
 
       const ctrl = new AbortController();
       const to = setTimeout(() => ctrl.abort(), 60000);
       let r;
       try {
-        // node-fetch@2 (imported as `fetch` at the top of this file) doesn't know how to
-        // read Node's native FormData/Blob correctly — it was sending a broken multipart
-        // Content-Type header, which Groq rejected outright. globalThis.fetch is Node's
-        // built-in native fetch, which handles native FormData properly.
+        // Node's native fetch (not node-fetch@2) — required for it to correctly
+        // set multipart headers for native FormData/Blob.
         r = await globalThis.fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
           method: "POST",
           headers: { Authorization: `Bearer ${GROQ_KEY}` },
@@ -1542,7 +1548,14 @@ app.post(
             text: String(s.text || "").trim(),
           })).filter(s => s.text)
         : (data.text ? [{ start: 0, end: 0, text: String(data.text).trim() }] : []);
-      res.json({ segments, text: data.text || segments.map(s => s.text).join(" ") });
+      const words = Array.isArray(data.words)
+        ? data.words.map(w => ({
+            word: String(w.word || "").trim(),
+            start: Number(w.start) || 0,
+            end: Number(w.end) || 0,
+          })).filter(w => w.word)
+        : [];
+      res.json({ segments, words, text: data.text || segments.map(s => s.text).join(" ") });
     } catch (e) {
       console.error("[transcribe]", e && e.message);
       res.status(500).json({ error: "Unexpected error." });
