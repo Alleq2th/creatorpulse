@@ -23,6 +23,11 @@ try { compression = require("compression"); } catch (_) { compression = null; }
 const app = express();
 const parser = new RSSParser({ timeout: 8000, headers: { "User-Agent": "Mozilla/5.0 CreatorPulseBot/1.0" } });
 
+// Feature routes kept in their own files under routes/, so each concern
+// (digest, and future ones like push notifications) can be found and fixed
+// without hunting through this whole file. Each router's paths are relative to /api.
+app.use("/api", require("./routes/digest"));
+
 // Behind Render/Cloudflare — trust the proxy so req.ip + secure work
 app.set("trust proxy", 1);
 
@@ -1275,22 +1280,6 @@ app.get("/api/hooks", (req, res) => {
   const _payload = { hooks: HOOK_TEMPLATES.map((h,i)=>({ id:i, text: h.replace(/\{topic\}/g, topic) })) };
   cacheSet(_ck, _payload, 60*60*1000);
   res.json(_payload);
-});
-
-// ── DAILY DIGEST ────────────────────────────────────────────────────────────
-app.get("/api/daily-digest", async (req, res) => {
-  const niches = (req.query.niches || "").split(",").filter(Boolean);
-  if (!niches.length) return res.json({ digest: null });
-  const stories = [];
-  for (const n of niches.slice(0, 5)) {
-    try {
-      const rssUrl = NICHE_RSS[n] || NICHE_RSS.default;
-      const feed = await parser.parseURL(rssUrl);
-      const item = (feed.items || [])[0];
-      if (item) stories.push({ niche: n, headline: item.title, url: item.link });
-    } catch (e) {}
-  }
-  res.json({ digest: { date: new Date().toISOString().slice(0,10), stories } });
 });
 
 // ── v1.7 PRE-BETA: feedback, analytics, kill-switches ───────────────────────
