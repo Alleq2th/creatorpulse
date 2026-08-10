@@ -1287,12 +1287,16 @@ app.get("/api/daily-digest", async (req, res) => {
       // Use the full per-niche feed list (NICHE_BLOG_RSS) instead of the
       // 6-entry NICHE_RSS map — that map fell back to a shared "default"
       // feed for most niches, causing identical headlines across categories.
+      const matched = !!NICHE_BLOG_RSS[n];
       const feeds = NICHE_BLOG_RSS[n] || NICHE_BLOG_RSS.default;
       const rssUrl = feeds[Math.floor(Math.random() * feeds.length)];
+      console.log(`[digest] niche="${n}" matched=${matched} url=${rssUrl}`); // TEMP diagnostic — remove after confirming fix
       const feed = await parser.parseURL(rssUrl);
       const items = (feed.items || []).slice(0, 2);
       items.forEach(item => stories.push({ niche: n, headline: item.title, url: item.link }));
-    } catch (e) {}
+    } catch (e) {
+      console.log(`[digest] niche="${n}" ERROR: ${e.message}`); // TEMP diagnostic — remove after confirming fix
+    }
   }
   // 2-hour bucket instead of a full day, so the digest is treated as "new"
   // again every 2 hours on the client (see cp_digest_seen_ key in core.js).
