@@ -27,6 +27,7 @@ const parser = new RSSParser({ timeout: 8000, headers: { "User-Agent": "Mozilla/
 // (digest, and future ones like push notifications) can be found and fixed
 // without hunting through this whole file. Each router's paths are relative to /api.
 app.use("/api", require("./routes/digest"));
+app.use("/api", require("./routes/push"));
 
 // Behind Render/Cloudflare — trust the proxy so req.ip + secure work
 app.set("trust proxy", 1);
@@ -158,9 +159,8 @@ const oauth2Client = GOOGLE_CLIENT_ID
   ? new google.auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI)
   : null;
 
-const supabase = SUPABASE_URL && SUPABASE_KEY
-  ? createClient(SUPABASE_URL, SUPABASE_KEY)
-  : null;
+// Supabase client — shared module, also used by routes/push.js
+const { supabase } = require("./config/supabase");
 
 // ── AUTH ────────────────────────────────────────────────────────────────────
 app.post("/api/auth/signup", async (req, res) => {
