@@ -153,4 +153,3 @@ const NICHE_BLOG_RSS = {
 };
 
 module.exports = { parser, googleNews, NICHE_QUERIES, NICHE_RSS, NICHE_BLOG_RSS };
-  
