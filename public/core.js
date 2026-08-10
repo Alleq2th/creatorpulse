@@ -266,7 +266,35 @@ async function saveOnboarding(){
 }
 
 // ─── APP ────────────────────────────────────────────────────────────────────
-async function bootApp(){ render(); loadTrends(); loadNotifs(); loadSchedule(); loadSaved(); loadDigest(); startGlobalTimer(); }
+async function bootApp(){ render(); loadTrends(); loadNotifs(); loadSchedule(); loadSaved(); loadDigest(); startGlobalTimer(); initPush(); }
+
+// ─── PUSH NOTIFICATIONS ─────────────────────────────────────────────────────
+// Public key only — safe to embed client-side. Must match VAPID_PUBLIC_KEY on the server.
+const VAPID_PUBLIC_KEY = "BABGi6-NsT4cTN6RflTShVW7uT4KzJip1rnBPdzcnzXq7pcrG3Mz85qOr9K0QmYkgqeCBN9n8Q26eWXmG0rZHFY";
+function urlBase64ToUint8Array(base64String){
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g,'+').replace(/_/g,'/');
+  const raw = atob(base64);
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+async function initPush(){
+  if(!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  if(localStorage.getItem('cp_push_subscribed')) return; // already done, don't re-prompt every boot
+  if(Notification.permission === 'denied') return;
+  try {
+    const perm = await Notification.requestPermission();
+    if(perm !== 'granted') return;
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if(!sub){
+      sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY) });
+    }
+    if(S.token){
+      const r = await api('/api/push-subscribe', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ token: S.token, subscription: sub.toJSON() }) });
+      if(r && !r.error) localStorage.setItem('cp_push_subscribed','1');
+    }
+  } catch(e){ console.log('[push] subscribe failed:', e.message); }
+}
 
 // ─── GLOBAL COUNTDOWN TIMER (one interval, updates DOM directly) ────────
 let _cpTimer = null;
