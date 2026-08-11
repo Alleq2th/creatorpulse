@@ -52,6 +52,7 @@ const S = {
   cal: { y: new Date().getFullYear(), m: new Date().getMonth() },
   coachHandle: "", coachPlatform: "instagram", coachMetrics: "", coachAnswer: "", coachLoading: false,
   addSched: { title:"", weekday:"friday", time:"20:00", notes:"" },
+  quickAdd: null, // { date: "YYYY-MM-DD", title: "" } — set when a specific calendar day is tapped
   hooksNiche: null, hooksSearch: "", hooksCache: {},
   sheet: null, remixCache: {}, titleCache: {},
   digest: null, digestDismissed: false,
@@ -601,6 +602,21 @@ window.addRecurring = async () => {
   if(r.success){ toast(`Scheduled ${r.added} weeks`); S.addSched={title:"",weekday:"friday",time:"20:00",notes:""}; loadSchedule(); loadSaved(); }
   else toast(r.error||"Error");
 };
+window.openQuickAdd = (dateIso) => { S.quickAdd = { date: dateIso, title: "" }; render(); };
+window.saveQuickAdd = async () => {
+  const q = S.quickAdd;
+  if(!q?.title){ toast("Add a title"); return; }
+  const niche = (S.user?.niches||[])[0] || "";
+  const platform = S.user?.primaryPlatform || (S.user?.platforms||[])[0] || "instagram";
+  try {
+    const r = await api("/api/save-post", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+      token: S.token, headline: q.title, niche, platform, contentType: "Reminder",
+      content: { note: q.title }, scheduledDate: q.date
+    })});
+    if(r.success){ toast("Added to " + q.date); S.quickAdd = null; loadSchedule(); loadSaved(); }
+    else toast(r.error || "Couldn't add");
+  } catch(e){ toast("Couldn't add"); }
+};
 
 // ─── RENDER (PAGES) ─────────────────────────────────────────────────────────
 function render(){
@@ -887,12 +903,18 @@ function pageCalendar(){
   const isCur = today.getFullYear()===y && today.getMonth()===m;
   const postsByDate = {};
   S.schedule.forEach(p=>{ if(p.scheduled_date){ const d = new Date(p.scheduled_date).getDate(); (postsByDate[d]=postsByDate[d]||[]).push(p); } });
+  // Niche events also mark a dot on their date, not just saved posts.
+  (S.user?.niches||[]).forEach(n => (S.eventsCache[n]||[]).forEach(e => {
+    const ed = new Date(e.date);
+    if(ed.getFullYear()===y && ed.getMonth()===m) (postsByDate[ed.getDate()]=postsByDate[ed.getDate()]||[]).push({event:true});
+  }));
   let grid = DAYS.map(d=>`<div class="cal-day-lbl">${d}</div>`).join("");
   for(let i=0;i<first;i++) grid += `<div></div>`;
   for(let d=1;d<=days;d++){
     const has = !!postsByDate[d];
     const tod = isCur && d===today.getDate();
-    grid += `<div class="cal-cell ${has?'has':''} ${tod?'today':''}">${d}${has?'<span class="dot"></span>':''}</div>`;
+    const iso = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    grid += `<div class="cal-cell ${has?'has':''} ${tod?'today':''}" onclick="openQuickAdd('${iso}')">${d}${has?'<span class="dot"></span>':''}</div>`;
   }
   // Upcoming: pull events from cache for user niches + saved schedule
   const combined = [];
@@ -915,6 +937,14 @@ function pageCalendar(){
       </div>
       <div class="cal-grid">${grid}</div>
     </div>
+    ${S.quickAdd ? `<div class="card">
+      <div class="card-h">Add to ${esc(S.quickAdd.date)}</div>
+      <div class="field"><label>What are you doing</label><input class="input" placeholder="Go live · Post reel · Record podcast" value="${esc(S.quickAdd.title)}" oninput="S.quickAdd.title=this.value" autofocus/></div>
+      <div style="display:flex;gap:8px">
+        <button class="btn bp" style="flex:1;padding:12px;justify-content:center" onclick="saveQuickAdd()">${I.plus} Add</button>
+        <button class="btn" style="padding:12px 16px" onclick="S.quickAdd=null; render();">Cancel</button>
+      </div>
+    </div>` : ''}
     <div class="card">
       <div class="card-h">Add to your schedule</div>
       <div class="field"><label>What are you doing</label><input class="input" placeholder="Go live · Post reel · Record podcast" value="${esc(asch.title)}" oninput="S.addSched.title=this.value"/></div>
