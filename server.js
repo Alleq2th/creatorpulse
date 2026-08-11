@@ -376,11 +376,26 @@ const NICHE_BLOG_RSS = {
 
 const NICHE_EVENTS = {
   "Football/Soccer": [
-    { title: "Premier League matchday", date: "2026-08-15", description: "Opening weekend of the 2026-27 season." },
-    { title: "Champions League Final", date: "2027-06-05", description: "UEFA Champions League Final." },
-    { title: "FA Cup Final", date: "2027-05-22", description: "FA Cup Final at Wembley." },
-    { title: "Community Shield", date: "2026-08-08", description: "Season curtain-raiser." },
-    { title: "FIFA World Cup qualifiers", date: "2026-11-12", description: "Qualification round." }
+    { title: "Carabao Cup (EFL Cup) begins", date: "2026-08-07", description: "First round of England's League Cup." },
+    { title: "La Liga season begins", date: "2026-08-16", description: "Spain's top flight kicks off." },
+    { title: "Community Shield", date: "2026-08-16", description: "England's season curtain-raiser, Cardiff." },
+    { title: "Premier League season begins", date: "2026-08-21", description: "Friday Night Football opener, full matchday 1 runs through Aug 23." },
+    { title: "Bundesliga season begins", date: "2026-08-09", description: "Germany's top flight kicks off." },
+    { title: "Serie A season begins", date: "2026-08-23", description: "Italy's top flight kicks off." },
+    { title: "Ligue 1 season begins", date: "2026-08-23", description: "France's top flight kicks off." },
+    { title: "Champions League league phase draw", date: "2026-08-27", description: "36-team draw in Monaco." },
+    { title: "Top-5 league transfer windows close", date: "2026-09-01", description: "Deadline day across Premier League and most of Europe." },
+    { title: "Champions League matchday 1", date: "2026-09-08", description: "League phase kicks off, runs Sept 8-10." },
+    { title: "FA Cup First Round", date: "2026-11-07", description: "Non-league and lower-division clubs enter." },
+    { title: "Spanish Super Cup Final", date: "2027-02-07", description: "Semifinals Feb 2, final Feb 7." },
+    { title: "Carabao Cup Final", date: "2027-03-21", description: "Wembley Stadium." },
+    { title: "Copa del Rey Final", date: "2027-04-24", description: "Spain's domestic cup final." },
+    { title: "FA Cup Final", date: "2027-05-22", description: "Wembley Stadium." },
+    { title: "Ligue 1 season ends", date: "2027-05-29", description: "Final matchday." },
+    { title: "Premier League season ends", date: "2027-05-30", description: "Final matchday, all games kick off simultaneously." },
+    { title: "La Liga season ends", date: "2027-05-30", description: "Final matchday." },
+    { title: "Serie A season ends", date: "2027-05-30", description: "Final matchday." },
+    { title: "Champions League Final", date: "2027-06-05", description: "Metropolitano Stadium, Madrid." }
   ],
   "Basketball": [
     { title: "NBA regular season tip-off", date: "2026-10-20", description: "Opening night." },
@@ -388,6 +403,12 @@ const NICHE_EVENTS = {
     { title: "NBA All-Star Weekend", date: "2027-02-13", description: "All-Star festivities." },
     { title: "NBA Playoffs begin", date: "2027-04-18", description: "First round." },
     { title: "NBA Finals tip-off", date: "2027-06-03", description: "Championship series." }
+  ],
+  "Tennis": [
+    { title: "Australian Open", date: "2027-01-17", description: "First Grand Slam of the year, Melbourne Park, runs through Jan 31." },
+    { title: "Roland Garros (French Open)", date: "2027-05-23", description: "Clay-court major in Paris, runs through June 6." },
+    { title: "Wimbledon", date: "2027-06-28", description: "Grass-court major in London, runs through July 11." },
+    { title: "US Open", date: "2027-08-29", description: "Hard-court major in New York, runs through Sept 12." }
   ],
   "Formula 1": [
     { title: "Bahrain Grand Prix", date: "2027-03-07", description: "Season opener." },
