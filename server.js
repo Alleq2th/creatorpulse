@@ -5,6 +5,15 @@
 //                         GOOGLE_REDIRECT_URI, FRONTEND_URL
 
 require("dotenv").config();
+
+// Safety net: an uncaught error or unhandled promise rejection anywhere in
+// the app used to kill the entire Node process (this is exactly what happened
+// when routes/push.js hit a bad request — it took down hooks, calendar,
+// digest, everything, for every user, until Render restarted it). Now it just
+// gets logged instead of crashing the server for everyone over one bad request.
+process.on("unhandledRejection", (err) => { console.error("[unhandledRejection]", err); });
+process.on("uncaughtException", (err) => { console.error("[uncaughtException]", err); });
+
 const path = require("path");
 const express = require("express");
 const cors = require("cors");
@@ -22,12 +31,6 @@ try { compression = require("compression"); } catch (_) { compression = null; }
 
 const app = express();
 const parser = new RSSParser({ timeout: 8000, headers: { "User-Agent": "Mozilla/5.0 CreatorPulseBot/1.0" } });
-
-// Feature routes kept in their own files under routes/, so each concern
-// (digest, and future ones like push notifications) can be found and fixed
-// without hunting through this whole file. Each router's paths are relative to /api.
-app.use("/api", require("./routes/digest"));
-app.use("/api", require("./routes/push"));
 
 // Behind Render/Cloudflare — trust the proxy so req.ip + secure work
 app.set("trust proxy", 1);
@@ -84,6 +87,14 @@ app.use(cors({
 }));
 
 app.use(express.json({ limit: "2mb" }));
+
+// Feature routes kept in their own files under routes/, so each concern
+// (digest, and future ones like push notifications) can be found and fixed
+// without hunting through this whole file. Mounted AFTER express.json() —
+// mounting before the body-parser meant req.body was always undefined here,
+// which crashed the whole server on any POST to these routes.
+app.use("/api", require("./routes/digest"));
+app.use("/api", require("./routes/push"));
 
 app.use((req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
