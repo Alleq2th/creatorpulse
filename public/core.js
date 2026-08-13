@@ -44,7 +44,7 @@ const S = {
   mode: "boot", // boot | auth | onboard | app
   authTab: "login", // login | signup
   authForm: { email:"", password:"", name:"" },
-  authErr: "", authMsg: "", authLoading: false, token: null, user: null,
+  authErr: "", authMsg: "", authLoading: false, token: null, refreshToken: null, user: null,
   onboard: { step:0, name:"", niches:[], platforms:[], primary:"", ppd:3 },
   tab: "home",
   trends: [], notifs: [], schedule: [], saved: [], eventsCache: {},
@@ -60,9 +60,9 @@ const S = {
   errors: {} // inline error-boundary messages, keyed by section
 };
 
-function saveSession(){ localStorage.setItem("cp_v2", JSON.stringify({ token:S.token, user:S.user, connections:S.connections||{} })); }
-function restoreSession(){ try{ const j = localStorage.getItem("cp_v2"); if(j){ const {token,user,connections} = JSON.parse(j); if(token && user){ S.token=token; S.user=user; S.connections=connections||{}; return true; }} }catch(e){} return false; }
-function clearSession(){ localStorage.removeItem("cp_v2"); S.token=null; S.user=null; S.connections={}; }
+function saveSession(){ localStorage.setItem("cp_v2", JSON.stringify({ token:S.token, refreshToken:S.refreshToken, user:S.user, connections:S.connections||{} })); }
+function restoreSession(){ try{ const j = localStorage.getItem("cp_v2"); if(j){ const {token,refreshToken,user,connections} = JSON.parse(j); if(token && user){ S.token=token; S.refreshToken=refreshToken||null; S.user=user; S.connections=connections||{}; return true; }} }catch(e){} return false; }
+function clearSession(){ localStorage.removeItem("cp_v2"); S.token=null; S.refreshToken=null; S.user=null; S.connections={}; }
 
 // ─── PERSISTENT CACHE (additive, survives reload) ──────────────────────────
 const CACHE_KEY = "cp_cache_v1";
@@ -129,8 +129,10 @@ const PLAT_EMOJI = { tiktok:"🎵", instagram:"📸", youtube:"▶️", twitter:
   st.id = "cp-ux-styles";
   st.textContent = `
   @keyframes cp-shimmer { 0%{background-position:-320px 0} 100%{background-position:320px 0} }
-  .sk { background:var(--sk,#e9e9ee); background-image:linear-gradient(90deg,rgba(255,255,255,0) 0,rgba(255,255,255,.55) 50%,rgba(255,255,255,0) 100%);
-        background-repeat:no-repeat; background-size:320px 100%; animation:cp-shimmer 1.2s infinite linear; border-radius:6px; }
+  @keyframes cp-pulse { 0%,100%{opacity:1} 50%{opacity:.55} }
+  .sk { background:#2a2a30; background-image:linear-gradient(90deg,rgba(255,255,255,0) 0,rgba(255,255,255,.35) 50%,rgba(255,255,255,0) 100%);
+        background-repeat:no-repeat; background-size:320px 100%;
+        animation:cp-shimmer 1.2s infinite linear, cp-pulse 1.6s ease-in-out infinite; border-radius:6px; }
   .sk-line { height:11px; margin:7px 0; }
   .sk-line.w90{width:90%} .sk-line.w70{width:70%} .sk-line.w50{width:50%} .sk-line.w35{width:35%}
   .sk-img { width:64px; height:64px; border-radius:8px; flex:0 0 auto; }
@@ -145,12 +147,20 @@ const PLAT_EMOJI = { tiktok:"🎵", instagram:"📸", youtube:"▶️", twitter:
               display:flex; gap:10px; align-items:center; justify-content:space-between; }
   .err-card .err-retry { border:1px solid currentColor; background:transparent; color:inherit; border-radius:7px;
               padding:5px 10px; font-size:11px; font-weight:700; cursor:pointer; flex:0 0 auto; }
+  img.brand-mark { background:none; object-fit:cover; }
+  .cal-cell.has { aspect-ratio:unset; min-height:52px; padding-bottom:4px; }
+  .cal-daynum { line-height:1; }
+  .cal-tag { margin-top:3px; font-size:8px; line-height:1.15; font-weight:700; padding:2px 3px; border-radius:3px;
+             max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .cal-tag-event { background:rgba(168,69,44,.16); color:#c85a37; } /* niche event — brick accent */
+  .cal-tag-post { background:rgba(86,117,75,.18); color:#6fa062; } /* user-added — forest accent */
+  .cal-cell.today .cal-tag-event { background:rgba(255,255,255,.22); color:#fff; }
+  .cal-cell.today .cal-tag-post { background:rgba(255,255,255,.22); color:#fff; }
   .tipbtn { position:relative; }
   .tipbtn::after { content:attr(data-tip); position:absolute; bottom:calc(100% + 6px); left:50%; transform:translateX(-50%) translateY(3px);
               background:#111; color:#fff; font-size:10.5px; font-weight:600; white-space:nowrap; padding:4px 7px; border-radius:6px;
               opacity:0; pointer-events:none; transition:opacity .15s, transform .15s; z-index:60; }
-  .tipbtn:hover::after, .tipbtn:focus-visible::after, .tipbtn.tip-hold::after { opacity:1; transform:translateX(-50%) translateY(0); }
-  @media (prefers-color-scheme: dark){ .sk { background:#2a2a30; } }`;
+  .tipbtn:hover::after, .tipbtn:focus-visible::after, .tipbtn.tip-hold::after { opacity:1; transform:translateX(-50%) translateY(0); }`;
   document.head.appendChild(st);
 })();
 
@@ -189,7 +199,7 @@ window.clearErr = (key) => { delete S.errors[key]; render(); };
 function extractJSON(txt){ const m = String(txt).match(/\{[\s\S]*\}|\[[\s\S]*\]/); if(!m) return null; try{ return JSON.parse(m[0]); }catch(e){ return null; } }
 
 // ─── API ────────────────────────────────────────────────────────────────────
-async function api(path, opts){
+async function api(path, opts, _isRetry){
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), 60000); // 60s — covers Render free-tier cold start
   try {
@@ -199,11 +209,30 @@ async function api(path, opts){
     try { data = text ? JSON.parse(text) : {}; }
     catch(e){ throw new Error(`Server returned an unexpected response (status ${r.status}). This usually means the endpoint isn't available or the server is still starting up.`); }
     if(!r.ok && !data.error) data.error = data.message || `Request failed (status ${r.status})`;
+    // Access token expired mid-session — silently refresh once and retry the
+    // same request, instead of surfacing "Invalid token" to the user.
+    if(r.status === 401 && !_isRetry && S.refreshToken && !path.startsWith('/api/auth/')){
+      const refreshed = await tryRefreshToken();
+      if(refreshed){
+        const retryOpts = opts?.body ? { ...opts, body: opts.body.replace(/"token":"[^"]*"/, `"token":"${S.token}"`) } : opts;
+        return api(path, retryOpts, true);
+      }
+    }
     return data;
   } catch(e){
     if(e.name === "AbortError") throw new Error("Request timed out — the server may be waking up from sleep. Try again in a moment.");
     throw e;
   } finally { clearTimeout(timer); }
+}
+async function tryRefreshToken(){
+  if(!S.refreshToken) return false;
+  try {
+    const r = await fetch(API+'/api/auth/refresh', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ refreshToken: S.refreshToken }) });
+    const d = await r.json();
+    if(d.token){ S.token = d.token; S.refreshToken = d.refreshToken || S.refreshToken; saveSession(); return true; }
+  } catch(e){}
+  clearSession(); S.mode = 'auth'; render();
+  return false;
 }
 async function fetchNews(niche){ return (await api(`/api/news?niche=${encodeURIComponent(niche)}&_=${Date.now()}`)).articles||[]; }
 async function fetchBlogs(niche){ return (await api(`/api/blog-feed?niche=${encodeURIComponent(niche)}&_=${Date.now()}`)).articles||[]; }
@@ -230,7 +259,7 @@ async function doLogin(){
     const d = await api("/api/auth/login", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(S.authForm)});
     if(d.error){ S.authErr = d.error; }
     else {
-      S.token = d.token; S.user = d.user; saveSession();
+      S.token = d.token; S.refreshToken = d.refreshToken || null; S.user = d.user; saveSession();
       if(!S.user.niches?.length){ S.mode="onboard"; S.onboard.name = S.user.name; }
       else { S.mode="app"; bootApp(); }
     }
@@ -627,7 +656,7 @@ function render(){
     const ev = document.getElementById("cs-ed-video");
     if(ev){ window.__csKeep.edTime = ev.currentTime || window.__csKeep.edTime; window.__csKeep.edCid = ev.dataset.cid || window.__csKeep.edCid; }
   } catch(_){}
-  if(S.mode === "boot"){ root.innerHTML = `<div class="auth-wrap"><div class="brand"><div class="brand-mark">C</div><div><div class="brand-name">CreatorPulse</div></div></div><div style="margin-top:20px"><span class="sp"></span></div></div>`; return; }
+  if(S.mode === "boot"){ root.innerHTML = `<div class="auth-wrap"><div class="brand"><img src="/logo-64.png" class="brand-mark" alt="CreatorPulse"/><div><div class="brand-name">CreatorPulse</div></div></div><div style="margin-top:20px"><span class="sp"></span></div></div>`; return; }
   if(S.mode === "auth") { renderAuth(); return csAfterRender(); }
   if(S.mode === "onboard") { renderOnboard(); return csAfterRender(); }
   renderApp();
@@ -702,7 +731,7 @@ function csAfterRender(){
 function renderAuth(){
   const isLogin = S.authTab === "login";
   document.getElementById("root").innerHTML = `<div class="auth-wrap"><div class="auth-inner">
-    <div class="auth-brand"><div class="brand-mark">C</div><div class="brand-name">CreatorPulse</div></div>
+    <div class="auth-brand"><img src="/logo-64.png" class="brand-mark" alt="CreatorPulse"/><div class="brand-name">CreatorPulse</div></div>
     <div class="auth-title">${isLogin?"Welcome back.":"Start creating."}</div>
     <div class="auth-sub">${isLogin?"Sign in to pick up where you left off.":"Trending stories, scripts, and a calendar that thinks with you."}</div>
     ${S.authErr?`<div class="auth-err">${esc(S.authErr)}</div>`:""}
@@ -759,13 +788,13 @@ function renderApp(){
 window.setTab = t => {
   const prev = S.tab;
   if(t !== prev && window.pushBackState){
-    window.pushBackState(() => { S.tab = prev; render(); if(prev==='calendar'){ loadSchedule(); } if(prev==='profile'){ loadSaved(); } });
+    window.pushBackState(() => { S.tab = prev; render(); if(prev==='calendar'){ loadSchedule(); loadCalendarEvents(); } if(prev==='profile'){ loadSaved(); } });
   }
-  S.tab=t; render(); if(t==='calendar'){ loadSchedule(); } if(t==='profile'){ loadSaved(); }
+  S.tab=t; render(); if(t==='calendar'){ loadSchedule(); loadCalendarEvents(); } if(t==='profile'){ loadSaved(); }
 };
 
 function topBar(kicker){
-  return `<div class="topbar"><div class="brand"><div class="brand-mark">C</div><div><div class="brand-name">CreatorPulse</div><div class="brand-sub">${esc(kicker)}</div></div></div>
+  return `<div class="topbar"><div class="brand"><img src="/logo-64.png" class="brand-mark" alt="CreatorPulse"/><div><div class="brand-name">CreatorPulse</div><div class="brand-sub">${esc(kicker)}</div></div></div>
     <div class="topbar-right">
       <button class="iconbtn tipbtn" data-tip="Refresh trends" title="Refresh trends" aria-label="Refresh trends" onclick="loadTrends();loadNotifs();toast('Refreshing')">${I.refresh}</button>
       <div class="bell-wrap">
@@ -901,20 +930,21 @@ function pageCalendar(){
   const first = new Date(y,m,1).getDay(), days = new Date(y,m+1,0).getDate();
   const today = new Date();
   const isCur = today.getFullYear()===y && today.getMonth()===m;
-  const postsByDate = {};
-  S.schedule.forEach(p=>{ if(p.scheduled_date){ const d = new Date(p.scheduled_date).getDate(); (postsByDate[d]=postsByDate[d]||[]).push(p); } });
-  // Niche events also mark a dot on their date, not just saved posts.
+  const itemsByDate = {}; // d -> [{label, kind}] kind: "post" (user-added) or "event" (niche event)
+  S.schedule.forEach(p=>{ if(p.scheduled_date){ const dt = new Date(p.scheduled_date); if(dt.getFullYear()===y && dt.getMonth()===m){ const d = dt.getDate(); (itemsByDate[d]=itemsByDate[d]||[]).push({label:p.headline, kind:'post'}); } } });
   (S.user?.niches||[]).forEach(n => (S.eventsCache[n]||[]).forEach(e => {
     const ed = new Date(e.date);
-    if(ed.getFullYear()===y && ed.getMonth()===m) (postsByDate[ed.getDate()]=postsByDate[ed.getDate()]||[]).push({event:true});
+    if(ed.getFullYear()===y && ed.getMonth()===m) (itemsByDate[ed.getDate()]=itemsByDate[ed.getDate()]||[]).push({label:e.title, kind:'event'});
   }));
   let grid = DAYS.map(d=>`<div class="cal-day-lbl">${d}</div>`).join("");
   for(let i=0;i<first;i++) grid += `<div></div>`;
   for(let d=1;d<=days;d++){
-    const has = !!postsByDate[d];
+    const items = itemsByDate[d]||[];
+    const first_ = items[0];
     const tod = isCur && d===today.getDate();
     const iso = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    grid += `<div class="cal-cell ${has?'has':''} ${tod?'today':''}" onclick="openQuickAdd('${iso}')">${d}${has?'<span class="dot"></span>':''}</div>`;
+    const tag = first_ ? `<div class="cal-tag cal-tag-${first_.kind}">${esc(first_.label.length>16?first_.label.slice(0,15)+'…':first_.label)}</div>` : '';
+    grid += `<div class="cal-cell ${items.length?'has':''} ${tod?'today':''}" onclick="openQuickAdd('${iso}')"><span class="cal-daynum">${d}</span>${tag}</div>`;
   }
   // Upcoming: pull events from cache for user niches + saved schedule
   const combined = [];
@@ -938,10 +968,10 @@ function pageCalendar(){
       <div class="cal-grid">${grid}</div>
     </div>
     ${S.quickAdd ? `<div class="card">
-      <div class="card-h">Add to ${esc(S.quickAdd.date)}</div>
+      <div class="card-h">Add something for ${esc(new Date(S.quickAdd.date+'T00:00:00').toLocaleDateString('en-US',{month:'long',day:'numeric'}))}?</div>
       <div class="field"><label>What are you doing</label><input class="input" placeholder="Go live · Post reel · Record podcast" value="${esc(S.quickAdd.title)}" oninput="S.quickAdd.title=this.value" autofocus/></div>
       <div style="display:flex;gap:8px">
-        <button class="btn bp" style="flex:1;padding:12px;justify-content:center" onclick="saveQuickAdd()">${I.plus} Add</button>
+        <button class="btn bp" style="flex:1;padding:12px;justify-content:center" onclick="saveQuickAdd()">${I.plus} Yes, add it</button>
         <button class="btn" style="padding:12px 16px" onclick="S.quickAdd=null; render();">Cancel</button>
       </div>
     </div>` : ''}
@@ -965,7 +995,9 @@ window.calNav = (dir) => {
   if(S.cal.m < 0){ S.cal.m=11; S.cal.y--; }
   if(S.cal.m > 11){ S.cal.m=0; S.cal.y++; }
   loadSchedule();
-  // Prefetch events for niches
-  (S.user?.niches||[]).forEach(async n => { if(!S.eventsCache[n]){ try { cacheSet("eventsCache", n, await fetchEvents(n)); } catch(e){} } render(); });
+  loadCalendarEvents();
 };
+function loadCalendarEvents(){
+  (S.user?.niches||[]).forEach(async n => { if(!S.eventsCache[n]){ try { cacheSet("eventsCache", n, await fetchEvents(n)); } catch(e){} } render(); });
+}
 
