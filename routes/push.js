@@ -21,9 +21,9 @@ if (pushConfigured) {
 router.post("/push-subscribe", async (req, res) => {
   if (!supabase) return res.status(503).json({ error: "Database not configured" });
   if (!pushConfigured) return res.status(503).json({ error: "Push not configured" });
-  const { token, subscription } = req.body;
-  if (!token || !subscription?.endpoint) return res.status(400).json({ error: "Missing token or subscription" });
   try {
+    const { token, subscription } = req.body || {};
+    if (!token || !subscription?.endpoint) return res.status(400).json({ error: "Missing token or subscription" });
     const { data: userData, error: userError } = await supabase.auth.getUser(token);
     if (userError) return res.status(401).json({ error: "Invalid token" });
     const { error } = await supabase.from("push_subscriptions").upsert({
@@ -38,9 +38,9 @@ router.post("/push-subscribe", async (req, res) => {
 
 router.post("/push-unsubscribe", async (req, res) => {
   if (!supabase) return res.status(503).json({ error: "Database not configured" });
-  const { endpoint } = req.body;
-  if (!endpoint) return res.status(400).json({ error: "Missing endpoint" });
   try {
+    const { endpoint } = req.body || {};
+    if (!endpoint) return res.status(400).json({ error: "Missing endpoint" });
     await supabase.from("push_subscriptions").delete().eq("endpoint", endpoint);
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
