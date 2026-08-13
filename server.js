@@ -209,6 +209,7 @@ app.post("/api/auth/login", async (req, res) => {
     const meta = data.user?.user_metadata || {};
     res.json({
       token: data.session?.access_token,
+      refreshToken: data.session?.refresh_token,
       user: {
         name: meta.name || email.split("@")[0],
         niches: meta.niches || [],
@@ -218,6 +219,19 @@ app.post("/api/auth/login", async (req, res) => {
         email
       }
     });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Access tokens expire (~1h). Client calls this with the stored refresh token
+// to get a new access token without forcing the user to log in again.
+app.post("/api/auth/refresh", async (req, res) => {
+  if (!supabase) return res.status(503).json({ error: "Auth not configured" });
+  try {
+    const { refreshToken } = req.body || {};
+    if (!refreshToken) return res.status(400).json({ error: "Missing refresh token" });
+    const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
+    if (error || !data.session) return res.status(401).json({ error: "Refresh failed — please log in again" });
+    res.json({ token: data.session.access_token, refreshToken: data.session.refresh_token });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
