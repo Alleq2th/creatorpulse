@@ -631,7 +631,7 @@ window.addRecurring = async () => {
   if(r.success){ toast(`Scheduled ${r.added} weeks`); S.addSched={title:"",weekday:"friday",time:"20:00",notes:""}; loadSchedule(); loadSaved(); }
   else toast(r.error||"Error");
 };
-window.openQuickAdd = (dateIso) => { S.quickAdd = { date: dateIso, title: "" }; render(); };
+window.openQuickAdd = (dateIso, existing) => { S.quickAdd = { date: dateIso, title: "", existing: existing||[] }; render(); };
 window.saveQuickAdd = async () => {
   const q = S.quickAdd;
   if(!q?.title){ toast("Add a title"); return; }
@@ -645,6 +645,16 @@ window.saveQuickAdd = async () => {
     if(r.success){ toast("Added to " + q.date); S.quickAdd = null; loadSchedule(); loadSaved(); }
     else toast(r.error || "Couldn't add");
   } catch(e){ toast("Couldn't add"); }
+};
+window.deleteScheduleItem = async (postId) => {
+  try {
+    const r = await api(`/api/delete-post?token=${encodeURIComponent(S.token)}&postId=${encodeURIComponent(postId)}`, {method:"DELETE"});
+    if(r.success){
+      toast("Removed");
+      if(S.quickAdd) S.quickAdd.existing = (S.quickAdd.existing||[]).filter(x=>x.id!==postId);
+      loadSchedule(); loadSaved(); render();
+    } else toast(r.error || "Couldn't remove");
+  } catch(e){ toast("Couldn't remove"); }
 };
 
 // ─── RENDER (PAGES) ─────────────────────────────────────────────────────────
@@ -930,8 +940,8 @@ function pageCalendar(){
   const first = new Date(y,m,1).getDay(), days = new Date(y,m+1,0).getDate();
   const today = new Date();
   const isCur = today.getFullYear()===y && today.getMonth()===m;
-  const itemsByDate = {}; // d -> [{label, kind}] kind: "post" (user-added) or "event" (niche event)
-  S.schedule.forEach(p=>{ if(p.scheduled_date){ const dt = new Date(p.scheduled_date); if(dt.getFullYear()===y && dt.getMonth()===m){ const d = dt.getDate(); (itemsByDate[d]=itemsByDate[d]||[]).push({label:p.headline, kind:'post'}); } } });
+  const itemsByDate = {}; // d -> [{label, kind, id?}] kind: "post" (user-added, deletable) or "event" (niche event, fixed)
+  S.schedule.forEach(p=>{ if(p.scheduled_date){ const dt = new Date(p.scheduled_date); if(dt.getFullYear()===y && dt.getMonth()===m){ const d = dt.getDate(); (itemsByDate[d]=itemsByDate[d]||[]).push({label:p.headline, kind:'post', id:p.id}); } } });
   (S.user?.niches||[]).forEach(n => (S.eventsCache[n]||[]).forEach(e => {
     const ed = new Date(e.date);
     if(ed.getFullYear()===y && ed.getMonth()===m) (itemsByDate[ed.getDate()]=itemsByDate[ed.getDate()]||[]).push({label:e.title, kind:'event'});
@@ -944,15 +954,15 @@ function pageCalendar(){
     const tod = isCur && d===today.getDate();
     const iso = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
     const tag = first_ ? `<div class="cal-tag cal-tag-${first_.kind}">${esc(first_.label.length>16?first_.label.slice(0,15)+'…':first_.label)}</div>` : '';
-    grid += `<div class="cal-cell ${items.length?'has':''} ${tod?'today':''}" onclick="openQuickAdd('${iso}')"><span class="cal-daynum">${d}</span>${tag}</div>`;
+    grid += `<div class="cal-cell ${items.length?'has':''} ${tod?'today':''}" onclick='openQuickAdd("${iso}", ${JSON.stringify(items.filter(x=>x.kind==='post')).replace(/'/g,"&#39;")})'><span class="cal-daynum">${d}</span>${tag}</div>`;
   }
   // Upcoming: pull events from cache for user niches + saved schedule
   const combined = [];
   (S.user?.niches||[]).forEach(n => (S.eventsCache[n]||[]).forEach(e => combined.push({date:e.date, title:e.title, desc:e.description, kind:"Event", niche:n})));
-  S.schedule.forEach(p => combined.push({date:p.scheduled_date, title:p.headline, desc:p.niche, kind:p.content_type||"Post"}));
+  S.schedule.forEach(p => combined.push({date:p.scheduled_date, title:p.headline, desc:p.niche, kind:p.content_type||"Post", id:p.id}));
   combined.sort((a,b)=> new Date(a.date) - new Date(b.date));
   const now = new Date(); const upcoming = combined.filter(x=> new Date(x.date) >= new Date(now.getFullYear(),now.getMonth(),now.getDate())).slice(0, 12);
-  const events = upcoming.map(e=>{ const dt = new Date(e.date); return `<div class="event-item"><div class="event-date-badge"><div class="m">${M_SHORT[dt.getMonth()]}</div><div class="d">${dt.getDate()}</div></div><div class="event-body"><div class="event-title">${esc(e.title)}</div>${e.desc?`<div class="event-desc">${esc(e.desc)}</div>`:""}<div class="event-tag">${esc(e.kind)}${e.niche?' · '+esc(e.niche):''}</div></div></div>`; }).join("");
+  const events = upcoming.map(e=>{ const dt = new Date(e.date); return `<div class="event-item"><div class="event-date-badge"><div class="m">${M_SHORT[dt.getMonth()]}</div><div class="d">${dt.getDate()}</div></div><div class="event-body"><div class="event-title">${esc(e.title)}</div>${e.desc?`<div class="event-desc">${esc(e.desc)}</div>`:""}<div class="event-tag">${esc(e.kind)}${e.niche?' · '+esc(e.niche):''}</div></div>${e.id?`<button class="iconbtn tipbtn" data-tip="Remove" title="Remove" aria-label="Remove ${esc(e.title)}" onclick="deleteScheduleItem('${e.id}')">${I.trash}</button>`:''}</div>`; }).join("");
 
   const asch = S.addSched;
   return `<main class="page active">${topBar("Schedule")}
@@ -969,6 +979,7 @@ function pageCalendar(){
     </div>
     ${S.quickAdd ? `<div class="card">
       <div class="card-h">Add something for ${esc(new Date(S.quickAdd.date+'T00:00:00').toLocaleDateString('en-US',{month:'long',day:'numeric'}))}?</div>
+      ${(S.quickAdd.existing||[]).length ? `<div style="margin-bottom:12px">${S.quickAdd.existing.map(x=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--br,#2c2c2c)"><span style="font-size:13px">${esc(x.label)}</span><button class="iconbtn tipbtn" data-tip="Remove" title="Remove" aria-label="Remove ${esc(x.label)}" onclick="deleteScheduleItem('${x.id}')">${I.trash||'✕'}</button></div>`).join("")}</div>` : ''}
       <div class="field"><label>What are you doing</label><input class="input" placeholder="Go live · Post reel · Record podcast" value="${esc(S.quickAdd.title)}" oninput="S.quickAdd.title=this.value" autofocus/></div>
       <div style="display:flex;gap:8px">
         <button class="btn bp" style="flex:1;padding:12px;justify-content:center" onclick="saveQuickAdd()">${I.plus} Yes, add it</button>
