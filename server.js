@@ -95,6 +95,7 @@ app.use(express.json({ limit: "2mb" }));
 // which crashed the whole server on any POST to these routes.
 app.use("/api", require("./routes/digest"));
 app.use("/api", require("./routes/push"));
+app.use("/api", require("./routes/uniqueness"));
 
 app.use((req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
