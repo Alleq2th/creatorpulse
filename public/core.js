@@ -53,7 +53,7 @@ const S = {
   coachHandle: "", coachPlatform: "instagram", coachMetrics: "", coachAnswer: "", coachLoading: false,
   addSched: { title:"", weekday:"friday", time:"20:00", notes:"" },
   quickAdd: null, // { date: "YYYY-MM-DD", title: "" } — set when a specific calendar day is tapped
-  hooksNiche: null, hooksSearch: "", hooksCache: {},
+  hooksNiche: null, hooksSearch: "", hooksCache: {}, uqCheck: { text:"", loading:false, result:null },
   sheet: null, remixCache: {}, titleCache: {},
   digest: null, digestDismissed: false,
   inspiration: [],
@@ -148,6 +148,10 @@ const PLAT_EMOJI = { tiktok:"🎵", instagram:"📸", youtube:"▶️", twitter:
   .err-card .err-retry { border:1px solid currentColor; background:transparent; color:inherit; border-radius:7px;
               padding:5px 10px; font-size:11px; font-weight:700; cursor:pointer; flex:0 0 auto; }
   img.brand-mark { background:none; object-fit:cover; }
+  .uq-result { margin-top:12px; padding:10px 12px; border-radius:8px; font-size:12.5px; line-height:1.5; }
+  .uq-unique { background:rgba(86,117,75,.15); color:#6fa062; }
+  .uq-some_overlap { background:rgba(214,158,46,.15); color:#d69e2e; }
+  .uq-too_similar { background:rgba(220,68,68,.15); color:#e05c5c; }
   .cal-cell.has { aspect-ratio:unset; min-height:52px; padding-bottom:4px; }
   .cal-daynum { line-height:1; }
   .cal-tag { margin-top:3px; font-size:8px; line-height:1.15; font-weight:700; padding:2px 3px; border-radius:3px;
@@ -798,10 +802,15 @@ function renderApp(){
 window.setTab = t => {
   const prev = S.tab;
   if(t !== prev && window.pushBackState){
-    window.pushBackState(() => { S.tab = prev; render(); if(prev==='calendar'){ loadSchedule(); loadCalendarEvents(); } if(prev==='profile'){ loadSaved(); } });
+    window.pushBackState(() => { S.tab = prev; render(); if(prev==='calendar'){ loadSchedule(); loadCalendarEvents(); } if(prev==='profile'){ loadSaved(); } if(prev==='hooks'){ loadActiveHooks(); } });
   }
-  S.tab=t; render(); if(t==='calendar'){ loadSchedule(); loadCalendarEvents(); } if(t==='profile'){ loadSaved(); }
+  S.tab=t; render(); if(t==='calendar'){ loadSchedule(); loadCalendarEvents(); } if(t==='profile'){ loadSaved(); } if(t==='hooks'){ loadActiveHooks(); }
 };
+function loadActiveHooks(){
+  const userNiches = S.user?.niches || [];
+  if(!S.hooksNiche && userNiches.length) S.hooksNiche = userNiches[0];
+  if(S.hooksNiche) window.setHooksNiche(S.hooksNiche);
+}
 
 function topBar(kicker){
   return `<div class="topbar"><div class="brand"><img src="/logo-64.png" class="brand-mark" alt="CreatorPulse"/><div><div class="brand-name">CreatorPulse</div><div class="brand-sub">${esc(kicker)}</div></div></div>
@@ -842,7 +851,7 @@ function pageHooks(){
   const q = (S.hooksSearch||"").toLowerCase();
   const filtered = q ? hooks.filter(h=>h.text.toLowerCase().includes(q)) : hooks;
   const list = filtered.length
-    ? filtered.map((h,i)=>`<div class="hook-card"><div class="num">${i+1}</div><div class="txt">${esc(h.text)}</div><div class="hook-actions"><button class="tiny-copy" onclick="copyTxt(\`${h.text.replace(/`/g,'\\`')}\`)">Copy</button><button class="tiny-copy" onclick="prefillHook(\`${h.text.replace(/`/g,'\\`')}\`)">Use</button></div></div>`).join("")
+    ? filtered.map((h,i)=>`<div class="hook-card"><div class="num">${i+1}</div><div class="txt">${esc(h.text)}</div><div class="hook-actions"><button class="tiny-copy" onclick="copyTxt(\`${h.text.replace(/`/g,'\\`')}\`)">Copy</button><button class="tiny-copy" onclick="prefillHook(\`${h.text.replace(/`/g,'\\`')}\`)">Use</button><button class="tiny-copy" onclick="openBlueprint(\`${h.text.replace(/`/g,'\\`')}\`,'${esc(active)}')">Blueprint</button></div></div>`).join("")
     : hooks.length ? `<div style="color:var(--mu);font-size:12px;padding:20px 0;text-align:center">No hooks match "${esc(S.hooksSearch)}".</div>`
     : skHookList(6);
   return `<main class="page active">${topBar("Reusable hooks")}
@@ -851,8 +860,40 @@ function pageHooks(){
     ${sectionErr("hooks", `setHooksNiche('${esc(active||"")}')`)}
     <div class="hook-niche-row">${nicheChips || '<span style="color:var(--mu);font-size:12px">Add niches in Profile to see hooks.</span>'}</div>
     ${list}
+    <div class="card" style="margin-top:18px">
+      <div class="card-h">Check your script's uniqueness</div>
+      <div style="font-size:12px;color:var(--mu);margin-bottom:10px">Paste the script you wrote yourself. We'll check it against other scripts submitted in ${esc(active||"this niche")} so you're not accidentally too close to someone else's.</div>
+      <textarea class="input" rows="5" placeholder="Paste your finished script here…" style="resize:vertical;width:100%" oninput="S.uqCheck.text=this.value">${esc(S.uqCheck.text)}</textarea>
+      <button class="btn bp" style="width:100%;padding:12px;justify-content:center;margin-top:10px" onclick="checkUniqueness('${esc(active||"")}')" ${S.uqCheck.loading?'disabled':''}>${S.uqCheck.loading?'Checking…':'Check uniqueness'}</button>
+      ${S.uqCheck.result ? `<div class="uq-result uq-${S.uqCheck.result.verdict}"><strong>${S.uqCheck.result.similarity}% similar</strong> to another submission — ${esc(S.uqCheck.result.message)}</div>` : ''}
+      ${S.uqCheck.error ? `<div class="uq-result uq-too_similar">${esc(S.uqCheck.error)}</div>` : ''}
+    </div>
   </main>`;
 }
+window.openBlueprint = async (hookText, niche) => {
+  S.sheet = { kind:"blueprint", loading:true, data:null, hookText, niche };
+  render();
+  try {
+    const raw = await generateText(
+      "You write SCRIPT STRUCTURE, never finished sentences. Return ONLY valid JSON: {\"beats\":[{\"label\":\"Hook (0-3s)\",\"guidance\":\"...\"},{\"label\":\"Setup\",\"guidance\":\"...\"},{\"label\":\"Turn\",\"guidance\":\"...\"},{\"label\":\"Payoff/CTA\",\"guidance\":\"...\"}]}. Each 'guidance' field tells the creator WHAT to say and in what order — never the exact words to say. No markdown, no example dialogue, no quotes of what they should literally say.",
+      `Niche: ${niche}. Hook/topic: "${hookText}". Give me a 4-beat script structure for a short-form video built around this hook, as guidance only — this needs to work for thousands of different creators writing their own words from the same structure, so it must never suggest literal phrasing.`
+    );
+    const parsed = extractJSON(raw) || { beats: [] };
+    S.sheet.data = parsed;
+  } catch(e){ S.sheet.data = { beats: [] }; S.sheet.error = "Something went wrong — try again."; }
+  S.sheet.loading = false; render();
+};
+window.checkUniqueness = async (niche) => {
+  const text = S.uqCheck.text.trim();
+  if(text.split(/\s+/).length < 15){ S.uqCheck.error = "Paste at least ~15 words of your script to check."; S.uqCheck.result = null; render(); return; }
+  S.uqCheck.loading = true; S.uqCheck.error = null; S.uqCheck.result = null; render();
+  try {
+    const r = await api("/api/check-uniqueness", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:S.token, niche, text})});
+    if(r.error){ S.uqCheck.error = r.error; }
+    else { S.uqCheck.result = r; }
+  } catch(e){ S.uqCheck.error = "Couldn't check right now — try again."; }
+  S.uqCheck.loading = false; render();
+};
 window.setHooksNiche = async (n) => {
   S.hooksNiche = n; render();
   if(!S.hooksCache[n]){
@@ -915,6 +956,11 @@ function renderSheet(){
       const cp = (x.angle+" — "+x.desc).replace(/`/g,'\`');
       return `<div class="remix-item"><div class="idx">${i+1}</div><div class="body"><div style="font-weight:600;margin-bottom:3px">${angle}</div><div style="color:var(--mu);font-size:12px">${desc}</div></div><button class="tiny-copy" onclick="copyTxt(\`${cp}\`)">Copy</button></div>`;
     }).join("") : `<div style="color:var(--mu);font-size:12px">No angles — try again.</div>`;
+  } else if(sh.kind==='blueprint'){
+    const beats = (sh.data?.beats||[]);
+    body = beats.length ? `<div style="font-size:12px;color:var(--mu);margin-bottom:14px">This is structure, not a script — write each beat in your own words. That's what keeps it yours.</div>` +
+      beats.map((b,i)=>`<div class="remix-item"><div class="idx">${i+1}</div><div class="body"><div style="font-weight:600;margin-bottom:3px">${esc(b.label||"")}</div><div style="color:var(--mu);font-size:12px">${esc(b.guidance||"")}</div></div></div>`).join("")
+      : `<div style="color:var(--mu);font-size:12px">Couldn't build a structure — try again.</div>`;
   } else {
     const d = sh.data||{};
     const titles = (d.titles||[]).map((t,i)=>{
@@ -925,10 +971,11 @@ function renderSheet(){
     const tagsHTML = tags.length ? `<div style="margin-top:14px"><div class="chip-label" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">Hashtags · ${tags.length}<button class="tiny-copy" onclick='copyAllHashtags(${JSON.stringify(tags).replace(/'/g,"&#39;")})'>Copy All</button></div><div class="hashwrap">${tags.map(t=>`<span class="h" onclick="copyTxt('#${esc(t.replace(/^#/,''))}')">#${esc(t.replace(/^#/,''))}</span>`).join("")}</div></div>` : "";
     body = titles + tagsHTML;
   }
-  const sheetErr = sh.error ? errCard(sh.error, sh.kind==='remix'?`openRemix('${sh.tid}')`:`openTitles('${sh.tid}')`) : "";
+  const sheetErr = sh.error ? errCard(sh.error, sh.kind==='remix'?`openRemix('${sh.tid}')`:sh.kind==='blueprint'?`openBlueprint(\`${(sh.hookText||'').replace(/`/g,'\\`')}\`,'${esc(sh.niche||'')}')`:`openTitles('${sh.tid}')`) : "";
+  const sheetTitle = sh.kind==='remix'?'Remix — 5 angles':sh.kind==='blueprint'?'Script Blueprint':'Title Pack';
   return `<div class="sheet-overlay open" onclick="if(event.target===this)closeSheet()">
     <div class="sheet"><div class="sheet-grip"></div>
-      <div class="sheet-h"><h3>${sh.kind==='remix'?'Remix — 5 angles':'Title Pack'}</h3><button class="sheet-close" onclick="closeSheet()">×</button></div>
+      <div class="sheet-h"><h3>${sheetTitle}</h3><button class="sheet-close" onclick="closeSheet()">×</button></div>
       ${sheetErr}
       ${body}
     </div>
