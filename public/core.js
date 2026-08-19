@@ -481,6 +481,7 @@ function renderTrend(t){
         <button class="action-btn primary" ${load?'disabled':''} onclick="gen('${t.id}',false)">${load?'<span class="sp"></span>':I.bolt}<span>${load?'…':'Generate'}</span></button>
         <button class="action-btn" onclick="openRemix('${t.id}')">${I.remix}<span>Remix</span></button>
         <button class="action-btn" onclick="openTitles('${t.id}')">${I.title}<span>Titles</span></button>
+        ${plat!=='twitter' ? `<button class="action-btn" onclick="openVideoBlueprint('${t.id}')">${I.bolt}<span>Blueprint</span></button>` : ''}
         <button class="action-btn" onclick="quickSaveTrend('${t.id}')">${I.save}<span>Save</span></button>
       </div>
       ${load?skDraftBlock():""}
@@ -870,6 +871,23 @@ function pageHooks(){
     </div>
   </main>`;
 }
+window.openVideoBlueprint = async (tid) => {
+  const t = S.trends.find(x=>x.id===tid); if(!t) return;
+  const plat = S.plat[tid] || S.user?.primaryPlatform || "instagram";
+  const ct = S.ctype[tid] || PTYPES[plat]?.[0] || "";
+  const platLabel = PLATS.find(x=>x.id===plat)?.label || plat;
+  S.sheet = { kind:"blueprint", loading:true, data:null, videoBP:true, tid, plat };
+  render();
+  try {
+    const raw = await generateText(
+      "You write VIDEO STRUCTURE, never finished sentences or example dialogue. Return ONLY valid JSON: {\"beats\":[{\"label\":\"Opening (0-3s)\",\"guidance\":\"...\"},{\"label\":\"Body\",\"guidance\":\"...\"},{\"label\":\"Purpose / close\",\"guidance\":\"...\"}]}. 'guidance' tells the creator WHAT to cover and in what order — never the literal words to say, never a quote they could copy-paste. This must work for thousands of different creators building their own video from the same story, so it has to force original wording every time.",
+      `Platform: ${platLabel}. Format: ${ct}. Niche: ${t.niche}. Story: "${t.headline}". ${t.summary?('Context: '+t.summary):''}\n\nGive me a 3-part video blueprint specific to this story and this platform's format:\n1. Opening — what the first few seconds needs to establish to stop the scroll for THIS story\n2. Body — what needs to be explained, in what order, to actually deliver on the opening\n3. Purpose/close — what the video should leave the viewer with and how it should wrap up\nMake the guidance specific to this exact story, not generic advice that could apply to anything.`
+    );
+    const parsed = extractJSON(raw) || { beats: [] };
+    S.sheet.data = parsed;
+  } catch(e){ S.sheet.data = { beats: [] }; S.sheet.error = "Something went wrong — try again."; }
+  S.sheet.loading = false; render();
+};
 window.openBlueprint = async (hookText, niche) => {
   S.sheet = { kind:"blueprint", loading:true, data:null, hookText, niche };
   render();
@@ -971,8 +989,8 @@ function renderSheet(){
     const tagsHTML = tags.length ? `<div style="margin-top:14px"><div class="chip-label" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">Hashtags · ${tags.length}<button class="tiny-copy" onclick='copyAllHashtags(${JSON.stringify(tags).replace(/'/g,"&#39;")})'>Copy All</button></div><div class="hashwrap">${tags.map(t=>`<span class="h" onclick="copyTxt('#${esc(t.replace(/^#/,''))}')">#${esc(t.replace(/^#/,''))}</span>`).join("")}</div></div>` : "";
     body = titles + tagsHTML;
   }
-  const sheetErr = sh.error ? errCard(sh.error, sh.kind==='remix'?`openRemix('${sh.tid}')`:sh.kind==='blueprint'?`openBlueprint(\`${(sh.hookText||'').replace(/`/g,'\\`')}\`,'${esc(sh.niche||'')}')`:`openTitles('${sh.tid}')`) : "";
-  const sheetTitle = sh.kind==='remix'?'Remix — 5 angles':sh.kind==='blueprint'?'Script Blueprint':'Title Pack';
+  const sheetErr = sh.error ? errCard(sh.error, sh.kind==='remix'?`openRemix('${sh.tid}')`:sh.kind==='blueprint'?(sh.videoBP?`openVideoBlueprint('${sh.tid}')`:`openBlueprint(\`${(sh.hookText||'').replace(/`/g,'\\`')}\`,'${esc(sh.niche||'')}')`):`openTitles('${sh.tid}')`) : "";
+  const sheetTitle = sh.kind==='remix'?'Remix — 5 angles':sh.kind==='blueprint'?(sh.videoBP?'Video Blueprint':'Script Blueprint'):'Title Pack';
   return `<div class="sheet-overlay open" onclick="if(event.target===this)closeSheet()">
     <div class="sheet"><div class="sheet-grip"></div>
       <div class="sheet-h"><h3>${sheetTitle}</h3><button class="sheet-close" onclick="closeSheet()">×</button></div>
