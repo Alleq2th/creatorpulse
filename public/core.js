@@ -244,6 +244,19 @@ async function fetchTwitter(handle,niche){ return (await api(`/api/twitter-feed?
 async function fetchEvents(niche){ return (await api(`/api/events?niche=${encodeURIComponent(niche)}&_=${Date.now()}`)).events||[]; }
 async function generateText(system, user, tone){ const d = await api(`/api/generate`, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({system,user,tone})}); if(d.error) throw new Error(d.error); return d.text||""; }
 async function generateImage(prompt, format, count){ const d = await api(`/api/generate-image`, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({prompt,format,count:count||1})}); return count && count>1 ? (d.images||[]) : (d.image||null); }
+// A raw headline sentence is NOT a usable image prompt — diffusion models have
+// no concrete subject to render from "Riot Games has confirmed development
+// will cease" and end up hallucinating unrelated dark/dramatic art instead.
+// This turns the headline into an actual visual scene description first.
+async function sceneForHeadline(headline, niche){
+  try {
+    const raw = await generateText(
+      "You describe ONE concrete photographable scene in under 25 words. No captions, no text-in-image, no abstract concepts, no quotes — just what a camera would physically see: a real setting, a real subject, an action. Return ONLY the scene description, nothing else.",
+      `Niche: ${niche}. Story: "${headline}". What's a real photograph that would visually represent this story?`
+    );
+    return raw.trim().replace(/^["']|["']$/g,'') || `${niche} news`;
+  } catch(e){ return `${niche} news scene`; }
+}
 // Map platform + format label → aspect ratio hint for image gen
 function aspectForContent(platform, contentType){
   const ct = (contentType||"").toLowerCase();
@@ -549,17 +562,22 @@ window.gen = async (tid, all) => {
     const out = [];
     for(const c of types){
       if(c === "IG Carousel"){
-        const sr = await generateText(`Return ONLY a valid JSON array of 5 objects: [{"slideNum":1,"title":"hook","body":"2-3 sentences"}].`, `${S.user?.niches?.[0]||""} carousel. Story: "${t.headline}". ${t.summary||""}`, tone);
+        const sr = await generateText(`Return ONLY a valid JSON array of 5 objects: [{"slideNum":1,"title":"hook","body":"2-3 sentences","stat":"a number/figure from the story if one genuinely exists, else null","statLabel":"what the stat measures, else null"}]. Only include a real stat if the story actually has one — never invent a number.`, `${S.user?.niches?.[0]||""} carousel. Story: "${t.headline}". ${t.summary||""}`, tone);
         const slides = extractJSON(sr) || [];
         const slideArr = Array.isArray(slides)?slides:[slides];
-        // Also generate 5 matching images for the carousel
-        let imgs = [];
-        try { imgs = await generateImage(`${t.headline}, ${t.niche}, editorial magazine photo, cinematic`, "carousel", 5); } catch(e){}
-        slideArr.forEach((s,i)=>{ if(imgs[i]) s.img = imgs[i]; });
-        out.push({type:"carousel", slides: slideArr, images: imgs});
+        // Real cards (actual text, actual numbers) — not AI-generated art, which
+        // can't reliably render legible text. See services/statCard.js.
+        let cardImgs = [];
+        try {
+          const cd = await api("/api/generate-cards", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({slides: slideArr, niche: t.niche, palette: "default"})});
+          cardImgs = cd.images || [];
+        } catch(e){}
+        slideArr.forEach((s,i)=>{ if(cardImgs[i]) s.img = cardImgs[i]; });
+        out.push({type:"carousel", slides: slideArr, images: cardImgs});
       } else if(c === "Thumbnail" || /image/i.test(c)){
         const aspect = aspectForContent(plat, c);
-        const img = await generateImage(`${t.headline}, ${t.niche}, bold editorial thumbnail, dramatic lighting`, aspect);
+        const scene = await sceneForHeadline(t.headline, t.niche);
+        const img = await generateImage(`${scene}. Real photograph, natural lighting, photojournalism style, no text, no logo, no watermark`, aspect);
         if(img) out.push({type:"image", img, aspect});
       } else {
         const P = PLATS.find(x=>x.id===plat);
