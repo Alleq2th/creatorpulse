@@ -96,6 +96,9 @@ app.use(express.json({ limit: "2mb" }));
 app.use("/api", require("./routes/digest"));
 app.use("/api", require("./routes/push"));
 app.use("/api", require("./routes/uniqueness"));
+app.use("/api", require("./routes/image"));
+app.use("/api", require("./routes/cards"));
+app.use("/api", require("./routes/stockphoto"));
 
 app.use((req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
@@ -984,8 +987,9 @@ app.post("/api/generate", heavyLimiter, async (req, res) => {
 });
 
 // ── IMAGE GENERATION ────────────────────────────────────────────────────────
-// Aspect ratios: "square" 1:1, "portrait"/"reel"/"tiktok"/"story" 9:16,
-// "thumbnail"/"youtube" 16:9, "carousel" 4:5
+// Moved to services/imageGen.js (provider logic) + routes/image.js (endpoint),
+// mounted near the top of the file with the other route imports.
+if (false) {
 function dimsForFormat(format) {
   const f = String(format || "square").toLowerCase();
   if (f.includes("thumbnail") || f.includes("youtube") || f.includes("16:9")) return { w: 1280, h: 720 };
@@ -1059,6 +1063,7 @@ app.post("/api/generate-image", heavyLimiter, async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
+}
 
 // ── NOTIFICATIONS ───────────────────────────────────────────────────────────
 app.get("/api/notifications", async (req, res) => {
