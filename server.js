@@ -798,12 +798,16 @@ app.get("/api/news", async (req, res) => {
     const kept = filterAndScoreArticles(normalized, niche).slice(0, 8);
     const filteredItems = kept.map((k, i) => {
       const item = k._raw;
+      let sourceImage = null;
+      if (item.enclosure?.url) sourceImage = item.enclosure.url;
+      else if (item['media:content']?.url) sourceImage = item['media:content'].url;
+      else if (item['media:content'] && Array.isArray(item['media:content'])) sourceImage = item['media:content'][0]?.url || null;
       return {
         id: `${niche.replace(/\s/g, "_")}_rss_${i}_${Date.now()}`,
         niche,
         headline: item.title,
         summary: item.contentSnippet || (item.content ? item.content.slice(0, 200) : ""),
-        image: null,
+        image: sourceImage,
         url: item.link,
         source: feed.title || "",
         score: Math.floor(Math.random() * 15) + 80,
