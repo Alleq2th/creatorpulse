@@ -524,7 +524,10 @@ function renderTrend(t){
 function renderOut(o, tid, idx){
   if(!o) return "";
   if(o.type === "image"){
-    return `<div class="oc"><div class="oh"><span class="ol">Image</span></div><div style="padding:10px"><img loading="lazy" decoding="async" src="${o.img}" style="width:100%;border-radius:6px"/></div><div class="ofoot"><button class="btn bo bxs tipbtn" data-tip="Download image" title="Download image" aria-label="Download image" onclick="dl('${o.img}','image.jpg')">${I.dl} Download</button><button class="btn bp bxs tipbtn" data-tip="Save to library" title="Save to library" aria-label="Save to library" onclick="saveOut('${tid}',${idx})">${I.save} Save</button></div></div>`;
+    const badge = o.isRealPhoto
+      ? `<span class="ol" style="color:#6fa062">Real photo${o.sourceLabel?' · '+esc(o.sourceLabel):''}</span>`
+      : `<span class="ol">AI-generated</span>`;
+    return `<div class="oc"><div class="oh">${badge}</div><div style="padding:10px"><img loading="lazy" decoding="async" src="${o.img}" style="width:100%;border-radius:6px"/></div><div class="ofoot"><button class="btn bo bxs tipbtn" data-tip="Download image" title="Download image" aria-label="Download image" onclick="dl('${o.img}','image.jpg')">${I.dl} Download</button><button class="btn bo bxs tipbtn" data-tip="Get a detailed prompt for ChatGPT/DALL-E" title="ChatGPT prompt" aria-label="Get ChatGPT prompt" onclick="getChatGPTPrompt('${tid}')">${I.bolt} ChatGPT Prompt</button><button class="btn bp bxs tipbtn" data-tip="Save to library" title="Save to library" aria-label="Save to library" onclick="saveOut('${tid}',${idx})">${I.save} Save</button></div></div>`;
   }
   if(o.type === "carousel"){
     const slides = (o.slides||[]).map(s=>`<div style="padding:8px 0;border-bottom:1px solid var(--br)"><div style="font-size:10px;color:var(--mu);font-weight:600">Slide ${s.slideNum}</div>${s.img?`<img loading="lazy" decoding="async" src="${s.img}" style="width:100%;border-radius:6px;margin-top:6px;aspect-ratio:4/5;object-fit:cover"/>`:""}<div style="font-family:var(--serif);font-size:14px;font-weight:600;margin-top:6px">${esc(s.title)}</div><div style="font-size:12px;color:var(--mu);margin-top:3px;line-height:1.5">${esc(s.body)}</div></div>`).join("");
@@ -576,9 +579,25 @@ window.gen = async (tid, all) => {
         out.push({type:"carousel", slides: slideArr, images: cardImgs});
       } else if(c === "Thumbnail" || /image/i.test(c)){
         const aspect = aspectForContent(plat, c);
-        const scene = await sceneForHeadline(t.headline, t.niche);
-        const img = await generateImage(`${scene}. Real photograph, natural lighting, photojournalism style, no text, no logo, no watermark`, aspect);
-        if(img) out.push({type:"image", img, aspect});
+        if(t.image){
+          // The article/post this trend came from already has a real photo —
+          // use that instead of generating a fake one. Proxied through our
+          // server so download/hotlinking always works reliably.
+          out.push({type:"image", img: `${API}/api/image-proxy?url=${encodeURIComponent(t.image)}`, aspect, isRealPhoto:true, sourceLabel: t.source||""});
+        } else {
+          let realPhoto = null;
+          try {
+            const sp = await api(`/api/stock-photo?query=${encodeURIComponent(t.niche+' '+(t.tags||[]).join(' '))}&count=1`);
+            realPhoto = sp.photos?.[0] || null;
+          } catch(e){}
+          if(realPhoto){
+            out.push({type:"image", img: realPhoto.url, aspect, isRealPhoto:true, sourceLabel: `Photo: ${realPhoto.credit}`});
+          } else {
+            const scene = await sceneForHeadline(t.headline, t.niche);
+            const img = await generateImage(`${scene}. Real photograph, natural lighting, photojournalism style, no text, no logo, no watermark`, aspect);
+            if(img) out.push({type:"image", img, aspect, isRealPhoto:false});
+          }
+        }
       } else {
         const P = PLATS.find(x=>x.id===plat);
         const s = await generateText(SYS, `Write a "${c}" for a ${t.niche} creator on ${P?.label||plat}. Story: "${t.headline}". ${t.summary||""}. Return only the ready-to-post text.`, tone);
@@ -906,6 +925,21 @@ window.openVideoBlueprint = async (tid) => {
   } catch(e){ S.sheet.data = { beats: [] }; S.sheet.error = "Something went wrong — try again."; }
   S.sheet.loading = false; render();
 };
+window.getChatGPTPrompt = async (tid) => {
+  const t = S.trends.find(x=>x.id===tid); if(!t) return;
+  const plat = S.plat[tid] || S.user?.primaryPlatform || "instagram";
+  const platLabel = PLATS.find(x=>x.id===plat)?.label || plat;
+  S.sheet = { kind:"gptprompt", loading:true, data:null, tid };
+  render();
+  try {
+    const raw = await generateText(
+      "You write ONE extremely detailed image-generation prompt for ChatGPT/DALL-E — the kind of prompt a professional would write, with specific composition, subject description, lighting, mood, and framing. If the story centers on a specific real person or named character, describe them by role/appearance/context (jersey number, team colors, setting) rather than assuming the model knows exactly who they are — that's normal practice for image prompts, not a limitation to apologize for. Return ONLY the prompt text, nothing else — no preamble, no quotes around it.",
+      `Platform: ${platLabel}. Story: "${t.headline}". Niche: ${t.niche}. ${t.summary?('Context: '+t.summary):''}\n\nWrite the image prompt someone would paste into ChatGPT to generate a scroll-stopping ${platLabel} thumbnail/image for this exact story.`
+    );
+    S.sheet.data = raw.trim();
+  } catch(e){ S.sheet.error = "Something went wrong — try again."; }
+  S.sheet.loading = false; render();
+};
 window.openBlueprint = async (hookText, niche) => {
   S.sheet = { kind:"blueprint", loading:true, data:null, hookText, niche };
   render();
@@ -997,6 +1031,12 @@ function renderSheet(){
     body = beats.length ? `<div style="font-size:12px;color:var(--mu);margin-bottom:14px">This is structure, not a script — write each beat in your own words. That's what keeps it yours.</div>` +
       beats.map((b,i)=>`<div class="remix-item"><div class="idx">${i+1}</div><div class="body"><div style="font-weight:600;margin-bottom:3px">${esc(b.label||"")}</div><div style="color:var(--mu);font-size:12px">${esc(b.guidance||"")}</div></div></div>`).join("")
       : `<div style="color:var(--mu);font-size:12px">Couldn't build a structure — try again.</div>`;
+  } else if(sh.kind==='gptprompt'){
+    const txt = sh.data || "";
+    body = txt ? `<div style="font-size:12px;color:var(--mu);margin-bottom:12px">Paste this into ChatGPT, DALL-E, or any image tool you already have access to — for when you need an exact face or character our free generator can't nail.</div>
+      <div class="field"><textarea class="input" rows="8" readonly style="width:100%;resize:vertical;font-size:13px">${esc(txt)}</textarea></div>
+      <button class="btn bp" style="width:100%;padding:12px;justify-content:center;margin-top:10px" onclick="copyTxt(\`${txt.replace(/`/g,'\\`')}\`)">${I.dl} Copy prompt</button>`
+      : `<div style="color:var(--mu);font-size:12px">Couldn't write a prompt — try again.</div>`;
   } else {
     const d = sh.data||{};
     const titles = (d.titles||[]).map((t,i)=>{
@@ -1007,8 +1047,8 @@ function renderSheet(){
     const tagsHTML = tags.length ? `<div style="margin-top:14px"><div class="chip-label" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">Hashtags · ${tags.length}<button class="tiny-copy" onclick='copyAllHashtags(${JSON.stringify(tags).replace(/'/g,"&#39;")})'>Copy All</button></div><div class="hashwrap">${tags.map(t=>`<span class="h" onclick="copyTxt('#${esc(t.replace(/^#/,''))}')">#${esc(t.replace(/^#/,''))}</span>`).join("")}</div></div>` : "";
     body = titles + tagsHTML;
   }
-  const sheetErr = sh.error ? errCard(sh.error, sh.kind==='remix'?`openRemix('${sh.tid}')`:sh.kind==='blueprint'?(sh.videoBP?`openVideoBlueprint('${sh.tid}')`:`openBlueprint(\`${(sh.hookText||'').replace(/`/g,'\\`')}\`,'${esc(sh.niche||'')}')`):`openTitles('${sh.tid}')`) : "";
-  const sheetTitle = sh.kind==='remix'?'Remix — 5 angles':sh.kind==='blueprint'?(sh.videoBP?'Video Blueprint':'Script Blueprint'):'Title Pack';
+  const sheetErr = sh.error ? errCard(sh.error, sh.kind==='remix'?`openRemix('${sh.tid}')`:sh.kind==='blueprint'?(sh.videoBP?`openVideoBlueprint('${sh.tid}')`:`openBlueprint(\`${(sh.hookText||'').replace(/`/g,'\\`')}\`,'${esc(sh.niche||'')}')`):sh.kind==='gptprompt'?`getChatGPTPrompt('${sh.tid}')`:`openTitles('${sh.tid}')`) : "";
+  const sheetTitle = sh.kind==='remix'?'Remix — 5 angles':sh.kind==='blueprint'?(sh.videoBP?'Video Blueprint':'Script Blueprint'):sh.kind==='gptprompt'?'Prompt for ChatGPT/DALL-E':'Title Pack';
   return `<div class="sheet-overlay open" onclick="if(event.target===this)closeSheet()">
     <div class="sheet"><div class="sheet-grip"></div>
       <div class="sheet-h"><h3>${sheetTitle}</h3><button class="sheet-close" onclick="closeSheet()">×</button></div>
