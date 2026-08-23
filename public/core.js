@@ -31,6 +31,24 @@ const NICHES = {"Sports":["Football/Soccer","Basketball","Tennis","Cricket","For
 const PLATS = [{id:"tiktok",label:"TikTok"},{id:"instagram",label:"Instagram"},{id:"youtube",label:"YouTube"},{id:"twitter",label:"X"},{id:"facebook",label:"Facebook"},{id:"linkedin",label:"LinkedIn"}];
 const PTYPES = {tiktok:["TikTok Script","TikTok No-Face Graphic","Caption + Hashtags"],instagram:["IG Reel Script","IG Carousel","Caption + Hashtags"],youtube:["Long Form Script","YouTube Short Script","Title + Description","Thumbnail"],twitter:["Hot Take Tweet","Engagement Tweet","Thread (5 tweets)"],facebook:["Long-Form Post","Engagement Post"],linkedin:["Thought Leadership","Professional Update"]};
 const TONES = [{id:"normal",label:"Neutral"},{id:"funny",label:"Banter"},{id:"educative",label:"Educative"},{id:"hype",label:"Hot Take"},{id:"storytelling",label:"Storytelling"}];
+// Gradient palette options exposed to the user — must match the PALETTE keys
+// in services/statCard.js.
+const PALETTES = [
+  {id:"noir", label:"Noir"}, {id:"ember", label:"Ember"}, {id:"sunset", label:"Sunset"},
+  {id:"ocean", label:"Ocean"}, {id:"forest", label:"Forest"}, {id:"royal", label:"Royal"}
+];
+// Auto-generated CTA outro slide — the story arc always ends on a call to
+// action, not just wherever the AI's last body slide happened to stop.
+const CTA_TEMPLATES = [
+  {title:"Follow for daily [NICHE] breakdowns", body:"New stories every day."},
+  {title:"Which side of this are you on?", body:"Drop your take below."},
+  {title:"Follow for more [NICHE] like this", body:"You don't want to miss the next one."},
+  {title:"Save this for later", body:"You'll want it when this plays out."}
+];
+function ctaOutroSlide(niche){
+  const tpl = CTA_TEMPLATES[Math.floor(Math.random()*CTA_TEMPLATES.length)];
+  return { role:"outro", title: tpl.title.replace("[NICHE]", niche||"this"), body: tpl.body };
+}
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const M_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const DAYS = ["S","M","T","W","T","F","S"];
@@ -48,7 +66,7 @@ const S = {
   onboard: { step:0, name:"", niches:[], platforms:[], primary:"", ppd:3 },
   tab: "home",
   trends: [], notifs: [], schedule: [], saved: [], eventsCache: {},
-  loading: {}, expanded: {}, plat: {}, ctype: {}, tone: {}, outs: {}, recs: {},
+  loading: {}, expanded: {}, plat: {}, ctype: {}, tone: {}, palette: {}, outs: {}, recs: {},
   cal: { y: new Date().getFullYear(), m: new Date().getMonth() },
   coachHandle: "", coachPlatform: "instagram", coachMetrics: "", coachAnswer: "", coachLoading: false,
   addSched: { title:"", weekday:"friday", time:"20:00", notes:"" },
@@ -485,6 +503,9 @@ function renderTrend(t){
     const platChips = (S.user?.platforms||["instagram"]).map(p=>{ const P = PLATS.find(x=>x.id===p); return `<button class="chip ${plat===p?'active':''}" onclick="setPlat('${t.id}','${p}')">${esc(P?.label||p)}</button>`; }).join("");
     const ctChips = (PTYPES[plat]||[]).map(c=>`<button class="chip ac ${ct===c?'active':''}" onclick="setCT('${t.id}','${esc(c)}')">${esc(c)}</button>`).join("");
     const toneChips = TONES.map(x=>`<button class="chip ${tone===x.id?'active':''}" onclick="setTone('${t.id}','${x.id}')">${x.label}</button>`).join("");
+    const palette = S.palette[t.id] || "noir";
+    const paletteChips = PALETTES.map(x=>`<button class="chip ${palette===x.id?'active':''}" onclick="setPalette('${t.id}','${x.id}')">${x.label}</button>`).join("");
+    const showPalette = ct === "IG Carousel";
     const outsHTML = outs.map((o,i)=>renderOut(o,t.id,i)).join("");
     panel = `<div class="cp">
       <div class="countdown">
@@ -500,6 +521,7 @@ function renderTrend(t){
       <div class="chips">${ctChips}</div>
       <div class="chip-label">Tone</div>
       <div class="chips">${toneChips}</div>
+      ${showPalette ? `<div class="chip-label">Card color</div><div class="chips">${paletteChips}</div>` : ""}
       <div class="action-row">
         <button class="action-btn primary" ${load?'disabled':''} onclick="gen('${t.id}',false)">${load?'<span class="sp"></span>':I.bolt}<span>${load?'…':'Generate'}</span></button>
         <button class="action-btn" onclick="openRemix('${t.id}')">${I.remix}<span>Remix</span></button>
@@ -553,6 +575,7 @@ function renderOut(o, tid, idx){
 window.setPlat = (tid,p) => { S.plat[tid]=p; S.ctype[tid]=PTYPES[p]?.[0]||""; render(); };
 window.setCT = (tid,c) => { S.ctype[tid]=c; render(); };
 window.setTone = (tid,t) => { S.tone[tid]=t; render(); };
+window.setPalette = (tid,p) => { S.palette[tid]=p; render(); };
 window.toggle = async (tid) => {
   S.expanded[tid] = !S.expanded[tid];
   if(S.expanded[tid] && !S.plat[tid]) S.plat[tid] = S.user?.primaryPlatform || "instagram";
@@ -583,14 +606,19 @@ window.gen = async (tid, all) => {
         const sr = await generateText(`Return ONLY a valid JSON array of 5 objects: [{"slideNum":1,"title":"hook","body":"2-3 sentences","stat":"a number/figure from the story if one genuinely exists, else null","statLabel":"what the stat measures, else null"}]. Only include a real stat if the story actually has one — never invent a number.`, `${S.user?.niches?.[0]||""} carousel. Story: "${t.headline}". ${t.summary||""}`, tone);
         const slides = extractJSON(sr) || [];
         const slideArr = Array.isArray(slides)?slides:[slides];
+        // First beat is the hook, last is a CTA outro we append ourselves —
+        // this way the story always has a proper ending regardless of what
+        // the model returned, instead of just trailing off on slide 5.
+        if(slideArr[0]) slideArr[0].role = "hook";
+        slideArr.push(ctaOutroSlide(t.niche));
         // Real cards (actual text, actual numbers) — not AI-generated art, which
         // can't reliably render legible text. See services/statCard.js.
         let cardImgs = [];
         try {
-          const cd = await api("/api/generate-cards", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({slides: slideArr, niche: t.niche, palette: "default", format: plat})});
+          const cd = await api("/api/generate-cards", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({slides: slideArr, niche: t.niche, palette: S.palette[tid] || "noir", format: plat})});
           cardImgs = cd.images || [];
         } catch(e){}
-        slideArr.forEach((s,i)=>{ if(cardImgs[i]) s.img = cardImgs[i]; });
+        slideArr.forEach((s,i)=>{ s.slideNum = i+1; if(cardImgs[i]) s.img = cardImgs[i]; });
         out.push({type:"carousel", slides: slideArr, images: cardImgs});
       } else if(c === "Thumbnail" || /image/i.test(c)){
         const aspect = aspectForContent(plat, c);
