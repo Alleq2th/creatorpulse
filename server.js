@@ -18,6 +18,11 @@ const path = require("path");
 const express = require("express");
 const cors = require("cors");
 const fetch = require("node-fetch");
+
+// Belt-and-braces: also install the bundled stat-card fonts here, in case
+// the Render environment ever runs start without running postinstall first
+// (e.g. a cached build). See scripts/setupFonts.js for why this is needed.
+try { require("./scripts/setupFonts").installFonts(); } catch (e) { console.log("[fonts] boot install skipped:", e.message); }
 const RSSParser = require("rss-parser");
 const { createClient } = require("@supabase/supabase-js");
 const { google } = require("googleapis");
