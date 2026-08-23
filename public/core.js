@@ -428,18 +428,28 @@ async function loadTrends(){
   const now = Date.now(); const cutoff = now - 6*60*60*1000;
   S.trends = []; render();
   const all = [];
+  // Was: nested for-loops with `await` inside — every niche/handle fetch ran
+  // one at a time (up to ~18 sequential round trips for 3 niches). Now all
+  // requests fire together and we just wait for whichever finish, in
+  // whatever order — this is why "Today's edit" was slow to load.
+  const jobs = [];
   for(const niche of S.user.niches){
-    try { const arr = await fetchNews(niche); all.push(...arr); } catch(e){}
-    try { const arr = await fetchBlogs(niche); all.push(...arr); } catch(e){}
+    jobs.push(fetchNews(niche).catch(()=>[]));
+    jobs.push(fetchBlogs(niche).catch(()=>[]));
     const handles = NICHE_HANDLES[niche] || NICHE_HANDLES.default;
     for(const h of handles.slice(0,4)){
-      try {
-        const arr = await fetchTwitter(h, niche);
-        arr.forEach(a=>{ a.niche = niche; if(a.image && !/^https?:/.test(a.image)) a.image = 'https://nitter.net'+a.image; if(a.image) a.image = `${API}/api/image-proxy?url=${encodeURIComponent(a.image)}`; });
-        all.push(...arr);
-      } catch(e){}
+      jobs.push(
+        fetchTwitter(h, niche)
+          .then(arr=>{
+            arr.forEach(a=>{ a.niche = niche; if(a.image && !/^https?:/.test(a.image)) a.image = 'https://nitter.net'+a.image; if(a.image) a.image = `${API}/api/image-proxy?url=${encodeURIComponent(a.image)}`; });
+            return arr;
+          })
+          .catch(()=>[])
+      );
     }
   }
+  const results = await Promise.all(jobs);
+  results.forEach(arr => all.push(...arr));
   // Dedupe + freshness
   const seen = new Set();
   S.trends = all.filter(t=>{
@@ -530,9 +540,11 @@ function renderOut(o, tid, idx){
     return `<div class="oc"><div class="oh">${badge}</div><div style="padding:10px"><img loading="lazy" decoding="async" src="${o.img}" style="width:100%;border-radius:6px"/></div><div class="ofoot"><button class="btn bo bxs tipbtn" data-tip="Download image" title="Download image" aria-label="Download image" onclick="dl('${o.img}','image.jpg')">${I.dl} Download</button><button class="btn bo bxs tipbtn" data-tip="Get a detailed prompt for ChatGPT/DALL-E" title="ChatGPT prompt" aria-label="Get ChatGPT prompt" onclick="getChatGPTPrompt('${tid}')">${I.bolt} ChatGPT Prompt</button><button class="btn bp bxs tipbtn" data-tip="Save to library" title="Save to library" aria-label="Save to library" onclick="saveOut('${tid}',${idx})">${I.save} Save</button></div></div>`;
   }
   if(o.type === "carousel"){
-    const slides = (o.slides||[]).map(s=>`<div style="padding:8px 0;border-bottom:1px solid var(--br)"><div style="font-size:10px;color:var(--mu);font-weight:600">Slide ${s.slideNum}</div>${s.img?`<img loading="lazy" decoding="async" src="${s.img}" style="width:100%;border-radius:6px;margin-top:6px;aspect-ratio:4/5;object-fit:cover"/>`:""}<div style="font-family:var(--serif);font-size:14px;font-weight:600;margin-top:6px">${esc(s.title)}</div><div style="font-size:12px;color:var(--mu);margin-top:3px;line-height:1.5">${esc(s.body)}</div></div>`).join("");
+    const slides = (o.slides||[]).map(s=>`<div style="padding:8px 0;border-bottom:1px solid var(--br)"><div style="display:flex;align-items:center;justify-content:space-between"><div style="font-size:10px;color:var(--mu);font-weight:600">Slide ${s.slideNum}</div>${s.img?`<button class="btn bo bxs tipbtn" data-tip="Download this slide" title="Download this slide" aria-label="Download slide ${s.slideNum}" onclick="dl('${s.img}','slide-${s.slideNum}.png')" style="padding:3px 8px">${I.dl}</button>`:""}</div>${s.img?`<img loading="lazy" decoding="async" src="${s.img}" style="width:100%;border-radius:6px;margin-top:6px;aspect-ratio:4/5;object-fit:cover"/>`:""}<div style="font-family:var(--serif);font-size:14px;font-weight:600;margin-top:6px">${esc(s.title)}</div><div style="font-size:12px;color:var(--mu);margin-top:3px;line-height:1.5">${esc(s.body)}</div></div>`).join("");
     const cp = (o.slides||[]).map(s=>`SLIDE ${s.slideNum}: ${s.title}\n${s.body}`).join("\n\n");
-    return `<div class="oc"><div class="oh"><span class="ol">Carousel · ${o.slides?.length||0} slides</span><button class="btn bo bxs tipbtn" data-tip="Copy carousel text" title="Copy carousel text" aria-label="Copy carousel text" onclick="copyTxt(\`${cp.replace(/`/g,"\\`")}\`)">${I.copy}</button></div><div style="padding:10px">${slides}</div><div class="ofoot"><button class="btn bp bxs tipbtn" data-tip="Save to library" title="Save to library" aria-label="Save to library" onclick="saveOut('${tid}',${idx})">${I.save} Save</button></div></div>`;
+    const imgs = (o.slides||[]).map(s=>s.img).filter(Boolean);
+    const dlAllBtn = imgs.length ? `<button class="btn bo bxs tipbtn" data-tip="Download all slide images" title="Download all slides" aria-label="Download all slides" onclick='dlAll(${JSON.stringify(imgs)})'>${I.dl} All</button>` : "";
+    return `<div class="oc"><div class="oh"><span class="ol">Carousel · ${o.slides?.length||0} slides</span><div style="display:flex;gap:6px">${dlAllBtn}<button class="btn bo bxs tipbtn" data-tip="Copy carousel text" title="Copy carousel text" aria-label="Copy carousel text" onclick="copyTxt(\`${cp.replace(/`/g,"\\`")}\`)">${I.copy}</button></div></div><div style="padding:10px">${slides}</div><div class="ofoot"><button class="btn bp bxs tipbtn" data-tip="Save to library" title="Save to library" aria-label="Save to library" onclick="saveOut('${tid}',${idx})">${I.save} Save</button></div></div>`;
   }
   const content = String(o.content||"");
   return `<div class="oc"><div class="oh"><span class="ol">${esc(o.label||"Draft")}</span><button class="btn bo bxs tipbtn" data-tip="Copy draft" title="Copy draft" aria-label="Copy draft" onclick="copyTxt(\`${content.replace(/`/g,"\\`")}\`)">${I.copy}</button></div><div class="ob">${esc(content)}</div><div class="ofoot"><button class="btn bp bxs tipbtn" data-tip="Save to library" title="Save to library" aria-label="Save to library" onclick="saveOut('${tid}',${idx})">${I.save} Save</button></div></div>`;
@@ -553,6 +565,9 @@ window.toggle = async (tid) => {
 };
 window.copyTxt = (t) => { navigator.clipboard.writeText(t); toast("Copied"); };
 window.dl = (url, name) => { const a=document.createElement("a"); a.href=url; a.download=name; a.click(); };
+// Staggered so mobile browsers don't drop/block downloads fired back-to-back
+// from a single tap.
+window.dlAll = (urls) => { (urls||[]).forEach((u,i)=> setTimeout(()=> window.dl(u, `slide-${i+1}.png`), i*350)); toast(`Downloading ${urls?.length||0} slides`); };
 
 window.gen = async (tid, all) => {
   const t = S.trends.find(x=>x.id===tid); if(!t) return;
