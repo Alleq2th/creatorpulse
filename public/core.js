@@ -34,20 +34,33 @@ const TONES = [{id:"normal",label:"Neutral"},{id:"funny",label:"Banter"},{id:"ed
 // Gradient palette options exposed to the user — must match the PALETTE keys
 // in services/statCard.js.
 const PALETTES = [
-  {id:"noir", label:"Noir"}, {id:"ember", label:"Ember"}, {id:"sunset", label:"Sunset"},
-  {id:"ocean", label:"Ocean"}, {id:"forest", label:"Forest"}, {id:"royal", label:"Royal"}
+  {id:"noir_orange", label:"Noir Orange"}, {id:"electric_blue", label:"Electric Blue"}, {id:"emerald", label:"Emerald"},
+  {id:"violet", label:"Violet"}, {id:"crimson", label:"Crimson"}, {id:"gold", label:"Gold"}
 ];
+// Maps a niche to one of the original icon glyphs in services/statCard.js.
+// Anything not listed falls back to the generic icon — this only changes
+// which small badge icon shows in the card header, never real brand marks.
+const NICHE_ICON_SLUG = {
+  "Football/Soccer":"football","Basketball":"basketball","Formula 1":"formula_1","American Football":"football",
+  "Fitness & Gym":"fitness","Skincare":"beauty","Makeup":"beauty","Haircare":"beauty",
+  "AI & Tech News":"tech","Gadget Reviews":"tech","Coding & Dev Life":"tech","Cybersecurity":"tech","Startups":"tech",
+  "Personal Finance":"finance","Crypto":"finance","Stock Market":"finance","Business News":"finance","Real Estate Investing":"finance","Budgeting":"finance",
+  "Console Gaming":"gaming","PC Gaming":"gaming","Mobile Gaming":"gaming","Game Reviews":"gaming","Twitch Streaming":"gaming","YouTube Gaming":"gaming",
+  "Entrepreneurship":"business","Marketing":"business",
+  "Movies & TV":"entertainment","Celebrity Gossip":"entertainment","Anime":"entertainment","Pop Culture":"entertainment"
+};
+function nicheToCategory(niche){ return { name: niche || "", slug: NICHE_ICON_SLUG[niche] || "default" }; }
 // Auto-generated CTA outro slide — the story arc always ends on a call to
 // action, not just wherever the AI's last body slide happened to stop.
 const CTA_TEMPLATES = [
-  {title:"Follow for daily [NICHE] breakdowns", body:"New stories every day."},
-  {title:"Which side of this are you on?", body:"Drop your take below."},
-  {title:"Follow for more [NICHE] like this", body:"You don't want to miss the next one."},
-  {title:"Save this for later", body:"You'll want it when this plays out."}
+  {headline:"FOLLOW FOR DAILY [NICHE] UPDATES", supportingText:"New stories every day.", emphasisLine:1},
+  {headline:"MORE CONTEXT. MORE STORIES.\nFOLLOW.", supportingText:"", emphasisLine:1},
+  {headline:"FOLLOW FOR MORE [NICHE] STORIES", supportingText:"You don't want to miss the next one.", emphasisLine:1},
+  {headline:"STAY AHEAD. FOLLOW FOR MORE.", supportingText:"You'll want it when this plays out.", emphasisLine:0}
 ];
 function ctaOutroSlide(niche){
   const tpl = CTA_TEMPLATES[Math.floor(Math.random()*CTA_TEMPLATES.length)];
-  return { role:"outro", title: tpl.title.replace("[NICHE]", niche||"this"), body: tpl.body };
+  return { type:"outro", headline: tpl.headline.replace("[NICHE]", (niche||"this").toUpperCase()), supportingText: tpl.supportingText, emphasisLine: tpl.emphasisLine };
 }
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const M_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -562,8 +575,9 @@ function renderOut(o, tid, idx){
     return `<div class="oc"><div class="oh">${badge}</div><div style="padding:10px"><img loading="lazy" decoding="async" src="${o.img}" style="width:100%;border-radius:6px"/></div><div class="ofoot"><button class="btn bo bxs tipbtn" data-tip="Download image" title="Download image" aria-label="Download image" onclick="dl('${o.img}','image.jpg')">${I.dl} Download</button><button class="btn bo bxs tipbtn" data-tip="Get a detailed prompt for ChatGPT/DALL-E" title="ChatGPT prompt" aria-label="Get ChatGPT prompt" onclick="getChatGPTPrompt('${tid}')">${I.bolt} ChatGPT Prompt</button><button class="btn bp bxs tipbtn" data-tip="Save to library" title="Save to library" aria-label="Save to library" onclick="saveOut('${tid}',${idx})">${I.save} Save</button></div></div>`;
   }
   if(o.type === "carousel"){
-    const slides = (o.slides||[]).map(s=>`<div style="padding:8px 0;border-bottom:1px solid var(--br)"><div style="display:flex;align-items:center;justify-content:space-between"><div style="font-size:10px;color:var(--mu);font-weight:600">Slide ${s.slideNum}</div>${s.img?`<button class="btn bo bxs tipbtn" data-tip="Download this slide" title="Download this slide" aria-label="Download slide ${s.slideNum}" onclick="dl('${s.img}','slide-${s.slideNum}.png')" style="padding:3px 8px">${I.dl}</button>`:""}</div>${s.img?`<img loading="lazy" decoding="async" src="${s.img}" style="width:100%;border-radius:6px;margin-top:6px;aspect-ratio:4/5;object-fit:cover"/>`:""}<div style="font-family:var(--serif);font-size:14px;font-weight:600;margin-top:6px">${esc(s.title)}</div><div style="font-size:12px;color:var(--mu);margin-top:3px;line-height:1.5">${esc(s.body)}</div></div>`).join("");
-    const cp = (o.slides||[]).map(s=>`SLIDE ${s.slideNum}: ${s.title}\n${s.body}`).join("\n\n");
+    const slideText = s => [s.headline, s.stat && s.statLabel ? `${s.stat} — ${s.statLabel}` : s.stat, s.sectionLabel, s.body, s.supportingText].filter(Boolean).join("\n");
+    const slides = (o.slides||[]).map(s=>`<div style="padding:8px 0;border-bottom:1px solid var(--br)"><div style="display:flex;align-items:center;justify-content:space-between"><div style="font-size:10px;color:var(--mu);font-weight:600">Slide ${s.slideNumber} · ${esc(s.type||"")}</div>${s.img?`<button class="btn bo bxs tipbtn" data-tip="Download this slide" title="Download this slide" aria-label="Download slide ${s.slideNumber}" onclick="dl('${s.img}','slide-${s.slideNumber}.png')" style="padding:3px 8px">${I.dl}</button>`:""}</div>${s.img?`<img loading="lazy" decoding="async" src="${s.img}" style="width:100%;border-radius:6px;margin-top:6px;aspect-ratio:4/5;object-fit:cover"/>`:""}<div style="font-family:var(--serif);font-size:14px;font-weight:600;margin-top:6px">${esc(s.headline)}</div>${s.stat?`<div style="font-size:12px;color:var(--ac);margin-top:2px;font-weight:700">${esc(s.stat)}${s.statLabel?` — ${esc(s.statLabel)}`:""}</div>`:""}<div style="font-size:12px;color:var(--mu);margin-top:3px;line-height:1.5">${esc(s.body||s.supportingText||"")}</div></div>`).join("");
+    const cp = (o.slides||[]).map(s=>`SLIDE ${s.slideNumber}: ${slideText(s)}`).join("\n\n");
     const imgs = (o.slides||[]).map(s=>s.img).filter(Boolean);
     const dlAllBtn = imgs.length ? `<button class="btn bo bxs tipbtn" data-tip="Download all slide images" title="Download all slides" aria-label="Download all slides" onclick='dlAll(${JSON.stringify(imgs)})'>${I.dl} All</button>` : "";
     return `<div class="oc"><div class="oh"><span class="ol">Carousel · ${o.slides?.length||0} slides</span><div style="display:flex;gap:6px">${dlAllBtn}<button class="btn bo bxs tipbtn" data-tip="Copy carousel text" title="Copy carousel text" aria-label="Copy carousel text" onclick="copyTxt(\`${cp.replace(/`/g,"\\`")}\`)">${I.copy}</button></div></div><div style="padding:10px">${slides}</div><div class="ofoot"><button class="btn bp bxs tipbtn" data-tip="Save to library" title="Save to library" aria-label="Save to library" onclick="saveOut('${tid}',${idx})">${I.save} Save</button></div></div>`;
@@ -603,22 +617,25 @@ window.gen = async (tid, all) => {
     const out = [];
     for(const c of types){
       if(c === "IG Carousel"){
-        const sr = await generateText(`Return ONLY a valid JSON array of 5 objects: [{"slideNum":1,"title":"hook","body":"2-3 sentences","stat":"a number/figure from the story if one genuinely exists, else null","statLabel":"what the stat measures, else null"}]. Only include a real stat if the story actually has one — never invent a number.`, `${S.user?.niches?.[0]||""} carousel. Story: "${t.headline}". ${t.summary||""}`, tone);
-        const slides = extractJSON(sr) || [];
-        const slideArr = Array.isArray(slides)?slides:[slides];
-        // First beat is the hook, last is a CTA outro we append ourselves —
-        // this way the story always has a proper ending regardless of what
-        // the model returned, instead of just trailing off on slide 5.
-        if(slideArr[0]) slideArr[0].role = "hook";
-        slideArr.push(ctaOutroSlide(t.niche));
+        const category = nicheToCategory(t.niche);
+        const sr = await generateText(
+          `Return ONLY a valid JSON array of 4 body-slide objects (the hook and outro slides are added separately, don't include them): [{"headline":"short punchy headline (max ~6 words)","sectionLabel":"short label like BACKGROUND or WHAT HAPPENED, else null","body":"1-3 concise sentences, else null","stat":"a number/figure from the story if one genuinely exists, else null","statLabel":"what the stat measures, else null","tag":"a short context tag like a team/event name, else null"}]. Only include a real stat if the story actually has one — never invent a number. Never force a stat onto every slide — at most 1-2 of the 4 should have one.`,
+          `${category.name} carousel. Story: "${t.headline}". ${t.summary||""}`, tone
+        );
+        const bodySlides = (extractJSON(sr) || []).map(s => ({ ...s, type: "body" }));
+        // Hook and outro are always added by us, not left to the model —
+        // this guarantees every carousel has a proper opening beat and a
+        // proper CTA ending, matching the fixed slide-role system.
+        const hookSlide = { type: "hook", headline: t.headline, supportingText: t.summary ? String(t.summary).split(/(?<=[.!?])\s/)[0] : "", emphasisLine: 1 };
+        const slideArr = [hookSlide, ...bodySlides, ctaOutroSlide(t.niche)];
         // Real cards (actual text, actual numbers) — not AI-generated art, which
         // can't reliably render legible text. See services/statCard.js.
         let cardImgs = [];
         try {
-          const cd = await api("/api/generate-cards", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({slides: slideArr, niche: t.niche, palette: S.palette[tid] || "noir", format: plat, imageUrl: t.image || null})});
+          const cd = await api("/api/generate-cards", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({slides: slideArr, category, palette: S.palette[tid] || "noir_orange", format: plat, imageUrl: t.image || null})});
           cardImgs = cd.images || [];
         } catch(e){}
-        slideArr.forEach((s,i)=>{ s.slideNum = i+1; if(cardImgs[i]) s.img = cardImgs[i]; });
+        slideArr.forEach((s,i)=>{ s.slideNumber = i+1; if(cardImgs[i]) s.img = cardImgs[i]; });
         out.push({type:"carousel", slides: slideArr, images: cardImgs});
       } else if(c === "Thumbnail" || /image/i.test(c)){
         const aspect = aspectForContent(plat, c);
