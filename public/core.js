@@ -615,7 +615,7 @@ window.gen = async (tid, all) => {
         // can't reliably render legible text. See services/statCard.js.
         let cardImgs = [];
         try {
-          const cd = await api("/api/generate-cards", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({slides: slideArr, niche: t.niche, palette: S.palette[tid] || "noir", format: plat})});
+          const cd = await api("/api/generate-cards", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({slides: slideArr, niche: t.niche, palette: S.palette[tid] || "noir", format: plat, imageUrl: t.image || null})});
           cardImgs = cd.images || [];
         } catch(e){}
         slideArr.forEach((s,i)=>{ s.slideNum = i+1; if(cardImgs[i]) s.img = cardImgs[i]; });
