@@ -771,7 +771,7 @@ app.get("/api/news", async (req, res) => {
           summary: a.description || (a.content ? a.content.slice(0, 200) : ""),
           _raw: a
         }));
-        const kept = filterAndScoreArticles(normalized, niche).slice(0, 12);
+        const kept = filterAndScoreArticles(normalized, niche).slice(0, 20);
         if (kept.length) {
           const articles = kept.map((k, i) => {
             const a = k._raw;
@@ -820,7 +820,7 @@ app.get("/api/news", async (req, res) => {
         timestamp: new Date(item.isoDate || Date.now()).getTime()
       };
     });
-    cacheSet(_ck, { articles: filteredItems }, 10*60*1000); res.json({ articles: filteredItems });
+    cacheSet(_ck, { articles: filteredItems }, 90*60*1000); res.json({ articles: filteredItems });
   } catch (e) {
     console.error("News error:", e.message);
     res.status(500).json({ error: e.message });
@@ -834,12 +834,15 @@ app.get("/api/blog-feed", async (req, res) => {
   const _ck = "blog:" + niche;
   const _hit = cacheGet(_ck);
   if (_hit) return res.json(_hit);
-  const feeds = [...(NICHE_BLOG_RSS[niche] || []), googleNews(NICHE_QUERIES[niche] || niche)].slice(0, 5);
+  // No cap here — every configured source for the niche gets fetched every
+  // refresh (previously capped to the first 5, which silently dropped any
+  // niche's later feeds once we expanded the source lists past 5 entries).
+  const feeds = [...(NICHE_BLOG_RSS[niche] || []), googleNews(NICHE_QUERIES[niche] || niche)];
   let allArticles = [];
   await Promise.allSettled(feeds.map(async feedUrl => {
     try {
       const feed = await parser.parseURL(feedUrl);
-      const items = (feed.items || []).slice(0, 4).map((item, i) => {
+      const items = (feed.items || []).slice(0, 6).map((item, i) => {
         let imageUrl = null;
         if (item.enclosure?.url) imageUrl = item.enclosure.url;
         else if (item['media:content']?.url) imageUrl = item['media:content'].url;
@@ -871,7 +874,7 @@ app.get("/api/blog-feed", async (req, res) => {
     if (!key || seen.has(key)) return false;
     seen.add(key); return true;
   });
-  const _payload = { articles: filteredBlogs.slice(0, 10) }; cacheSet(_ck, _payload, 15*60*1000); res.json(_payload);
+  const _payload = { articles: filteredBlogs.slice(0, 25) }; cacheSet(_ck, _payload, 90*60*1000); res.json(_payload);
 });
 
 // ── TWITTER (Nitter) ────────────────────────────────────────────────────────
@@ -882,7 +885,7 @@ app.get("/api/twitter-feed", async (req, res) => {
   for (const base of NITTER_MIRRORS) {
     try {
       const feed = await parser.parseURL(`${base}/${handle}/rss`);
-      const items = (feed.items || []).slice(0, 5).map((item, i) => {
+      const items = (feed.items || []).slice(0, 8).map((item, i) => {
         let imageUrl = null;
         if (item.enclosure?.url) imageUrl = item.enclosure.url;
         else if (item['media:content']?.url) imageUrl = item['media:content'].url;
