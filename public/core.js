@@ -35,7 +35,9 @@ const TONES = [{id:"normal",label:"Neutral"},{id:"funny",label:"Banter"},{id:"ed
 // in services/statCard.js.
 const PALETTES = [
   {id:"noir_orange", label:"Noir Orange"}, {id:"electric_blue", label:"Electric Blue"}, {id:"emerald", label:"Emerald"},
-  {id:"violet", label:"Violet"}, {id:"crimson", label:"Crimson"}, {id:"gold", label:"Gold"}
+  {id:"violet", label:"Violet"}, {id:"crimson", label:"Crimson"}, {id:"gold", label:"Gold"},
+  {id:"hot_pink", label:"Hot Pink"}, {id:"sky_blue", label:"Sky Blue"}, {id:"deep_teal", label:"Deep Teal"},
+  {id:"royal_indigo", label:"Royal Indigo"}, {id:"sunset_coral", label:"Sunset Coral"}, {id:"white_platinum", label:"White Platinum"}
 ];
 // Maps a niche to one of the original icon glyphs in services/statCard.js.
 // Anything not listed falls back to the generic icon — this only changes
@@ -79,7 +81,7 @@ const S = {
   onboard: { step:0, name:"", niches:[], platforms:[], primary:"", ppd:3 },
   tab: "home",
   trends: [], notifs: [], schedule: [], saved: [], eventsCache: {},
-  loading: {}, expanded: {}, plat: {}, ctype: {}, tone: {}, palette: {}, outs: {}, recs: {},
+  loading: {}, expanded: {}, plat: {}, ctype: {}, tone: {}, palette: {}, slideCount: {}, outs: {}, recs: {},
   cal: { y: new Date().getFullYear(), m: new Date().getMonth() },
   coachHandle: "", coachPlatform: "instagram", coachMetrics: "", coachAnswer: "", coachLoading: false,
   addSched: { title:"", weekday:"friday", time:"20:00", notes:"" },
@@ -516,9 +518,12 @@ function renderTrend(t){
     const platChips = (S.user?.platforms||["instagram"]).map(p=>{ const P = PLATS.find(x=>x.id===p); return `<button class="chip ${plat===p?'active':''}" onclick="setPlat('${t.id}','${p}')">${esc(P?.label||p)}</button>`; }).join("");
     const ctChips = (PTYPES[plat]||[]).map(c=>`<button class="chip ac ${ct===c?'active':''}" onclick="setCT('${t.id}','${esc(c)}')">${esc(c)}</button>`).join("");
     const toneChips = TONES.map(x=>`<button class="chip ${tone===x.id?'active':''}" onclick="setTone('${t.id}','${x.id}')">${x.label}</button>`).join("");
-    const palette = S.palette[t.id] || "noir";
+    const palette = S.palette[t.id] || "noir_orange";
     const paletteChips = PALETTES.map(x=>`<button class="chip ${palette===x.id?'active':''}" onclick="setPalette('${t.id}','${x.id}')">${x.label}</button>`).join("");
-    const showPalette = ct === "IG Carousel";
+    const showPalette = ct === "IG Carousel" || ct === "TikTok No-Face Graphic";
+    const slideCount = S.slideCount[t.id] || 4;
+    const slideCountChips = [1,2,3,4,5,6].map(n=>`<button class="chip ${slideCount===n?'active':''}" onclick="setSlideCount('${t.id}',${n})">${n}</button>`).join("");
+    const showSlideCount = ct === "IG Carousel";
     const outsHTML = outs.map((o,i)=>renderOut(o,t.id,i)).join("");
     panel = `<div class="cp">
       <div class="countdown">
@@ -535,6 +540,7 @@ function renderTrend(t){
       <div class="chip-label">Tone</div>
       <div class="chips">${toneChips}</div>
       ${showPalette ? `<div class="chip-label">Card color</div><div class="chips">${paletteChips}</div>` : ""}
+      ${showSlideCount ? `<div class="chip-label">Number of slides</div><div class="chips">${slideCountChips}</div>` : ""}
       <div class="action-row">
         <button class="action-btn primary" ${load?'disabled':''} onclick="gen('${t.id}',false)">${load?'<span class="sp"></span>':I.bolt}<span>${load?'…':'Generate'}</span></button>
         <button class="action-btn" onclick="openRemix('${t.id}')">${I.remix}<span>Remix</span></button>
@@ -590,6 +596,7 @@ window.setPlat = (tid,p) => { S.plat[tid]=p; S.ctype[tid]=PTYPES[p]?.[0]||""; re
 window.setCT = (tid,c) => { S.ctype[tid]=c; render(); };
 window.setTone = (tid,t) => { S.tone[tid]=t; render(); };
 window.setPalette = (tid,p) => { S.palette[tid]=p; render(); };
+window.setSlideCount = (tid,n) => { S.slideCount[tid]=n; render(); };
 window.toggle = async (tid) => {
   S.expanded[tid] = !S.expanded[tid];
   if(S.expanded[tid] && !S.plat[tid]) S.plat[tid] = S.user?.primaryPlatform || "instagram";
@@ -616,27 +623,44 @@ window.gen = async (tid, all) => {
     const types = all ? (PTYPES[plat]||[]) : [ct];
     const out = [];
     for(const c of types){
-      if(c === "IG Carousel"){
+      if(c === "IG Carousel" || c === "TikTok No-Face Graphic"){
         const category = nicheToCategory(t.niche);
-        const sr = await generateText(
-          `Return ONLY a valid JSON array of 4 body-slide objects (the hook and outro slides are added separately, don't include them): [{"headline":"short punchy headline (max ~6 words)","sectionLabel":"short label like BACKGROUND or WHAT HAPPENED, else null","body":"1-3 concise sentences, else null","stat":"a number/figure from the story if one genuinely exists, else null","statLabel":"what the stat measures, else null","tag":"a short context tag like a team/event name, else null"}]. Only include a real stat if the story actually has one — never invent a number. Never force a stat onto every slide — at most 1-2 of the 4 should have one.`,
-          `${category.name} carousel. Story: "${t.headline}". ${t.summary||""}`, tone
-        );
-        const bodySlides = (extractJSON(sr) || []).map(s => ({ ...s, type: "body" }));
-        // Hook and outro are always added by us, not left to the model —
-        // this guarantees every carousel has a proper opening beat and a
-        // proper CTA ending, matching the fixed slide-role system.
-        const hookSlide = { type: "hook", headline: t.headline, supportingText: t.summary ? String(t.summary).split(/(?<=[.!?])\s/)[0] : "", emphasisLine: 1 };
-        const slideArr = [hookSlide, ...bodySlides, ctaOutroSlide(t.niche)];
+        const isSingle = c === "TikTok No-Face Graphic";
+        const cardFormat = isSingle ? "tiktok" : plat;
+        const requestedCount = isSingle ? 1 : (S.slideCount[tid] || 4);
+        const bodyCount = Math.max(0, requestedCount - 2);
+        let slideArr;
+        if(requestedCount === 1){
+          // 1 slide = essential detail only, no hook/outro structure (per
+          // the story-length rule: never stretch a short story artificially).
+          slideArr = [{ type: "hook", headline: t.headline, supportingText: t.summary ? String(t.summary).split(/(?<=[.!?])\s/)[0] : "", emphasisLine: 1 }];
+        } else if(bodyCount === 0){
+          // 2 slides = hook (why care) + outro (takeaway), no body needed.
+          slideArr = [
+            { type: "hook", headline: t.headline, supportingText: t.summary ? String(t.summary).split(/(?<=[.!?])\s/)[0] : "", emphasisLine: 1 },
+            ctaOutroSlide(t.niche)
+          ];
+        } else {
+          const sr = await generateText(
+            `Return ONLY a valid JSON array of exactly ${bodyCount} body-slide objects (the hook and outro slides are added separately, don't include them): [{"headline":"short punchy headline (max ~6 words)","sectionLabel":"short label like BACKGROUND or WHAT HAPPENED, else null","body":"1-3 concise sentences, else null","stat":"a number/figure from the story if one genuinely exists, else null","statLabel":"what the stat measures, else null","tag":"a short context tag like a team/event name, else null"}]. Only include a real stat if the story actually has one — never invent a number. Never force a stat onto every slide.`,
+            `${category.name} carousel. Story: "${t.headline}". ${t.summary||""}`, tone
+          );
+          const bodySlides = (extractJSON(sr) || []).map(s => ({ ...s, type: "body" }));
+          // Hook and outro are always added by us, not left to the model —
+          // this guarantees every carousel has a proper opening beat and a
+          // proper CTA ending, matching the fixed slide-role system.
+          const hookSlide = { type: "hook", headline: t.headline, supportingText: t.summary ? String(t.summary).split(/(?<=[.!?])\s/)[0] : "", emphasisLine: 1 };
+          slideArr = [hookSlide, ...bodySlides, ctaOutroSlide(t.niche)];
+        }
         // Real cards (actual text, actual numbers) — not AI-generated art, which
         // can't reliably render legible text. See services/statCard.js.
         let cardImgs = [];
         try {
-          const cd = await api("/api/generate-cards", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({slides: slideArr, category, palette: S.palette[tid] || "noir_orange", format: plat, imageUrl: t.image || null})});
+          const cd = await api("/api/generate-cards", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({slides: slideArr, category, palette: S.palette[tid] || "noir_orange", format: cardFormat, imageUrl: t.image || null})});
           cardImgs = cd.images || [];
         } catch(e){}
         slideArr.forEach((s,i)=>{ s.slideNumber = i+1; if(cardImgs[i]) s.img = cardImgs[i]; });
-        out.push({type:"carousel", slides: slideArr, images: cardImgs});
+        out.push(isSingle ? {type:"image", img: cardImgs[0], aspect: "tiktok", isCard:true} : {type:"carousel", slides: slideArr, images: cardImgs});
       } else if(c === "Thumbnail" || /image/i.test(c)){
         const aspect = aspectForContent(plat, c);
         if(t.image){
