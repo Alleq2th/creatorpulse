@@ -18,6 +18,8 @@
 // ─────────────────────────────────────────────────────────────────────────
 const sharp = require("sharp");
 const fetch = require("node-fetch");
+const fs = require("fs");
+const path = require("path");
 
 const FONT_SERIF = "'DM Serif Display', Georgia, serif"; // hook + outro headlines (italic)
 const FONT_SANS = "Inter, sans-serif";                    // everything else — weight via font-weight
@@ -31,7 +33,7 @@ const FORMATS = {
     hookHeadlineY: 0.37, hookHeadlineSize: 84, hookHeadlineLine: 92, hookHeadlineChars: 13, hookMaxLines: 4,
     hookSupportGap: 56, hookSupportSize: 32, hookSupportLine: 44, hookSupportChars: 46,
     statY: 470, statSize: 210, statLabelGap: 46, statLabelSize: 26,
-    bodyHeadlineSize: 52, bodyHeadlineLine: 60, bodyHeadlineChars: 22, bodyHeadlineMaxLines: 3,
+    bodyHeadlineSize: 66, bodyHeadlineLine: 74, bodyHeadlineChars: 18, bodyHeadlineMaxLines: 3,
     sectionLabelSize: 24, bodyTextSize: 30, bodyTextLine: 42, bodyTextChars: 40, bodyTextMaxLines: 3,
     outroHeadlineSize: 76, outroHeadlineLine: 84, outroHeadlineChars: 14, outroMaxLines: 4,
   },
@@ -42,7 +44,7 @@ const FORMATS = {
     hookHeadlineY: 0.36, hookHeadlineSize: 92, hookHeadlineLine: 100, hookHeadlineChars: 12, hookMaxLines: 4,
     hookSupportGap: 60, hookSupportSize: 34, hookSupportLine: 46, hookSupportChars: 42,
     statY: 620, statSize: 240, statLabelGap: 50, statLabelSize: 28,
-    bodyHeadlineSize: 58, bodyHeadlineLine: 66, bodyHeadlineChars: 20, bodyHeadlineMaxLines: 3,
+    bodyHeadlineSize: 72, bodyHeadlineLine: 80, bodyHeadlineChars: 17, bodyHeadlineMaxLines: 3,
     sectionLabelSize: 26, bodyTextSize: 32, bodyTextLine: 46, bodyTextChars: 36, bodyTextMaxLines: 3,
     outroHeadlineSize: 84, outroHeadlineLine: 92, outroHeadlineChars: 13, outroMaxLines: 4,
   }
@@ -251,34 +253,51 @@ function renderBodySVG(p, f, slide, category, scrimStrength) {
   const m = f.margin;
   const hasStat = slide.stat != null && String(slide.stat).trim() !== "";
   const statFontSize = hasStat ? fitStatFontSize(slide.stat, f.w - 2*m, f.statSize) : 0;
-  const statBaseline = f.statY;
-  const statLabelY = statBaseline + f.statLabelGap;
 
-  const headlineStartY = hasStat ? statLabelY + 70 : Math.round(f.h * 0.30);
+  // Vertical rhythm, top to bottom: header → section label (small) →
+  // headline (large, dominant) → optional stat → body copy (medium) → footer.
+  // Section label sits ABOVE the headline, matching the small→large→medium→
+  // small hierarchy. The whole block is then vertically CENTERED in the
+  // space between the header and footer — a fixed top anchor was leaving a
+  // huge dead gap above the footer whenever a story was short, which is the
+  // "middle of the canvas completely empty" problem call out directly.
   const { lines: hLines, size: hSize } = fitMultilineText(slide.headline, f.bodyHeadlineSize, f.bodyHeadlineChars, f.bodyHeadlineMaxLines);
   const hLineH = Math.round(f.bodyHeadlineLine * (hSize / f.bodyHeadlineSize));
-  const headlineEndY = headlineStartY + hLines.length * hLineH;
-
-  const dividerY = headlineEndY + 34;
-  const sectionLabelY = dividerY + 46;
-  const bodyStartY = slide.sectionLabel ? sectionLabelY + 44 : dividerY + 50;
   const { lines: bLines, size: bSize } = slide.body ? fitMultilineText(slide.body, f.bodyTextSize, f.bodyTextChars, f.bodyTextMaxLines) : { lines: [], size: f.bodyTextSize };
   const bLineH = Math.round(f.bodyTextLine * (bSize / f.bodyTextSize));
 
+  const sectionBlockH = slide.sectionLabel ? 56 : 0;
+  const headlineBlockH = hLines.length * hLineH;
+  const statBlockH = hasStat ? 64 + statFontSize * 0.78 + f.statLabelGap + 60 : 64;
+  const bodyBlockH = slide.body ? bLines.length * bLineH : 0;
+  const totalContentH = sectionBlockH + headlineBlockH + statBlockH + bodyBlockH;
+
+  const headerBottom = f.headerY + 70; // clear of the category header + progress dashes
   const footerDividerY = f.h - 110;
   const footerY = f.h - 66;
+  const availableH = footerDividerY - 60 - headerBottom;
+  const blockTopY = headerBottom + Math.max(0, (availableH - totalContentH) / 2);
+
+  const sectionLabelY = blockTopY + (slide.sectionLabel ? 20 : -24);
+  const headlineStartY = sectionLabelY + sectionBlockH + hSize * 0.78;
+  const headlineEndY = headlineStartY + (hLines.length - 1) * hLineH;
+
+  const afterHeadlineY = headlineEndY + 64;
+  const statBaseline = hasStat ? afterHeadlineY + statFontSize * 0.78 : afterHeadlineY;
+  const statLabelY = statBaseline + f.statLabelGap;
+  const bodyStartY = hasStat ? statLabelY + 60 : afterHeadlineY;
 
   return `
   <svg width="${f.w}" height="${f.h}" viewBox="0 0 ${f.w} ${f.h}" xmlns="http://www.w3.org/2000/svg">
     ${backgroundLayer(p, f, scrimStrength)}
     ${plainHeader(p, f, category.displayName, category.slug, slide.slideNumber, slide.totalSlides)}
+    ${slide.sectionLabel ? `<rect x="${m}" y="${sectionLabelY-20}" width="4" height="24" fill="${p.accent}"/><text x="${m+18}" y="${sectionLabelY}" font-family="${FONT_SANS}" font-size="${f.sectionLabelSize}" font-weight="700" letter-spacing="1.5" fill="${p.accent}">${escXml((slide.sectionLabel||"").toUpperCase())}</text>` : ""}
+    <text x="${m}" y="${headlineStartY}" font-family="${FONT_SERIF}" font-style="italic" font-size="${hSize}" font-weight="400" fill="${p.primaryText}">${tspans(hLines, m, headlineStartY, hLineH)}</text>
     ${hasStat ? `
     <text x="${m}" y="${statBaseline}" font-family="${FONT_SANS}" font-size="${statFontSize}" font-weight="900" fill="${p.accent}">${escXml(slide.stat)}</text>
     ${slide.statLabel ? `<text x="${m}" y="${statLabelY}" font-family="${FONT_SANS}" font-size="${f.statLabelSize}" font-weight="700" letter-spacing="1.5" fill="${p.secondaryText}">${escXml((slide.statLabel||"").toUpperCase())}</text>` : ""}` : ""}
-    <text x="${m}" y="${headlineStartY}" font-family="${FONT_SANS}" font-size="${hSize}" font-weight="800" fill="${p.primaryText}">${tspans(hLines, m, headlineStartY, hLineH)}</text>
     ${slide.body ? `
-    <rect x="${m}" y="${dividerY}" width="130" height="3" fill="${p.accent}" opacity="0.5"/>
-    ${slide.sectionLabel ? `<rect x="${m}" y="${sectionLabelY-20}" width="4" height="24" fill="${p.accent}"/><text x="${m+18}" y="${sectionLabelY}" font-family="${FONT_SANS}" font-size="${f.sectionLabelSize}" font-weight="700" letter-spacing="1.5" fill="${p.primaryText}">${escXml((slide.sectionLabel||"").toUpperCase())}</text>` : ""}
+    <rect x="${m}" y="${bodyStartY - bSize - 20}" width="130" height="3" fill="${p.accent}" opacity="0.5"/>
     <text x="${m}" y="${bodyStartY}" font-family="${FONT_SANS}" font-size="${bSize}" fill="${p.secondaryText}">${tspans(bLines, m, bodyStartY, bLineH)}</text>
     ` : ""}
     <rect x="${m}" y="${footerDividerY}" width="${f.w-2*m}" height="1" fill="${p.muted}" opacity="0.4"/>
@@ -336,14 +355,49 @@ async function fetchCoverImage(imageUrl, w, h) {
   }
 }
 
+// Local niche background library. Drop image files into
+// assets/backgrounds/<slug>/ (any filename, .jpg/.jpeg/.png/.webp) and this
+// picks one at random for that niche — a permanent fallback so cards don't
+// depend on finding a usable live article photo every time.
+const BACKGROUNDS_DIR = path.join(__dirname, "..", "assets", "backgrounds");
+const IMG_EXT = new Set([".jpg", ".jpeg", ".png", ".webp"]);
+function pickLocalBackground(slug) {
+  try {
+    const dir = path.join(BACKGROUNDS_DIR, slug || "default");
+    const files = fs.readdirSync(dir).filter(f => IMG_EXT.has(path.extname(f).toLowerCase()));
+    if (!files.length) return null;
+    return path.join(dir, files[Math.floor(Math.random() * files.length)]);
+  } catch (e) {
+    return null; // niche has no folder / no images yet — falls through to gradient
+  }
+}
+
+// Cover-crops + measures brightness for a background image already on disk,
+// mirroring fetchCoverImage's output shape so both sources are interchangeable.
+async function coverFromLocalFile(filePath, w, h) {
+  try {
+    const cover = await sharp(filePath).resize(w, h, { fit: "cover", position: "attention" }).jpeg({ quality: 90 }).toBuffer();
+    const stats = await sharp(cover).stats();
+    const avgLum = stats.channels.slice(0, 3).reduce((s, c) => s + c.mean, 0) / 3 / 255;
+    return { buffer: cover, brightness: avgLum };
+  } catch (e) {
+    return null;
+  }
+}
+
 async function renderStatCard(slide, category, paletteKey, format, imageUrl) {
   const p = resolvePalette(paletteKey);
   const f = resolveFormat(format);
   const type = resolveType(slide, (slide.slideNumber || 1) - 1, slide.totalSlides || 1);
   const cat = typeof category === "string" ? { displayName: category, slug: "default" } : (category || { displayName: "", slug: "default" });
 
-  // Mode B: hook photo, adaptive scrim. Mode A otherwise (gradient).
-  const cover = type === "hook" ? await fetchCoverImage(imageUrl, f.w, f.h) : null;
+  // Mode B: hook photo, adaptive scrim. Falls back through: live article
+  // photo → local niche background library → Mode A gradient.
+  let cover = type === "hook" ? await fetchCoverImage(imageUrl, f.w, f.h) : null;
+  if (!cover && type === "hook") {
+    const localPath = pickLocalBackground(cat.slug);
+    if (localPath) cover = await coverFromLocalFile(localPath, f.w, f.h);
+  }
   const scrimStrength = cover ? cover.brightness : null;
 
   const svg = type === "hook" ? renderHookSVG(p, f, slide, cat, scrimStrength)
