@@ -63,7 +63,14 @@ const PALETTE = {
   emerald:       { name: "Emerald",       backgroundStart: "#07100C", backgroundEnd: "#0E2A1E", accent: "#2ECC8F", primaryText: "#F1F7F3", secondaryText: "#AEC2B7", muted: "#6D7E75" },
   violet:        { name: "Violet",        backgroundStart: "#0A0812", backgroundEnd: "#221130", accent: "#A855F7", primaryText: "#F5F2FA", secondaryText: "#BFB3CC", muted: "#79708A" },
   crimson:       { name: "Crimson",       backgroundStart: "#0D0708", backgroundEnd: "#2B0F14", accent: "#E5484D", primaryText: "#F7EFEF", secondaryText: "#CBAFAF", muted: "#8A6E6E" },
-  gold:          { name: "Gold",          backgroundStart: "#0B0A06", backgroundEnd: "#241C0B", accent: "#E8B93D", primaryText: "#F7F4EB", secondaryText: "#C7BEA3", muted: "#84795A" }
+  gold:          { name: "Gold",          backgroundStart: "#0B0A06", backgroundEnd: "#241C0B", accent: "#E8B93D", primaryText: "#F7F4EB", secondaryText: "#C7BEA3", muted: "#84795A" },
+  hot_pink:      { name: "Hot Pink",      backgroundStart: "#0D080B", backgroundEnd: "#2B0F20", accent: "#F7368A", primaryText: "#FAF0F5", secondaryText: "#CCADBE", muted: "#877080" },
+  sky_blue:      { name: "Sky Blue",      backgroundStart: "#070B0D", backgroundEnd: "#0D2530", accent: "#38BDF8", primaryText: "#F1F8FB", secondaryText: "#A9C4CE", muted: "#6C848D" },
+  deep_teal:     { name: "Deep Teal",     backgroundStart: "#06100E", backgroundEnd: "#0B2C28", accent: "#14B8A6", primaryText: "#EFFAF8", secondaryText: "#A6C7C1", muted: "#688683" },
+  royal_indigo:  { name: "Royal Indigo",  backgroundStart: "#08080F", backgroundEnd: "#161235", accent: "#6366F1", primaryText: "#F2F2FA", secondaryText: "#B7B7D6", muted: "#75758F" },
+  sunset_coral:  { name: "Sunset Coral",  backgroundStart: "#0D0907", backgroundEnd: "#2E160B", accent: "#FB7A4C", primaryText: "#FAF3EF", secondaryText: "#D0B4A5", muted: "#8C7166" },
+  white_platinum:{ name: "White Platinum",backgroundStart: "#0A0A0B", backgroundEnd: "#1D1D20", accent: "#E5E5EA", primaryText: "#FAFAFA", secondaryText: "#B8B8C0", muted: "#77777E" }
+
 };
 const DEFAULT_PALETTE = "noir_orange";
 // Old palette names from the previous version, mapped forward so existing
@@ -173,9 +180,32 @@ function scrimDefs(w, h, strength) {
   </linearGradient>`;
 }
 
-function backgroundLayer(p, f, scrimStrength) {
+// Decorative texture for slides using the flat gradient (no photo) — a large
+// soft accent-color glow plus a few thin diagonal lines. This is what was
+// missing on body/outro slides: they had zero visual interest besides flat
+// color, which is why short stories read as "empty" no matter how centered
+// the text was. Seeded by slide type so hook/body/outro don't look identical.
+function decorativeTexture(p, f, seed) {
+  const cx = seed === "outro" ? f.w * 0.82 : f.w * 0.15;
+  const cy = seed === "outro" ? f.h * 0.12 : f.h * 0.88;
+  const lines = Array.from({length: 5}).map((_, i) => {
+    const off = i * 90;
+    return `<line x1="${-200+off}" y1="${f.h}" x2="${200+off}" y2="0" stroke="${p.accent}" stroke-width="2" opacity="0.05"/>`;
+  }).join("");
+  return `
+  <defs>
+    <radialGradient id="glow" cx="${cx}" cy="${cy}" r="${f.w*0.55}" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="${p.accent}" stop-opacity="0.16"/>
+      <stop offset="100%" stop-color="${p.accent}" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="${f.w}" height="${f.h}" fill="url(#glow)"/>
+  ${lines}`;
+}
+
+function backgroundLayer(p, f, scrimStrength, slideType) {
   if (scrimStrength != null) return `<defs>${scrimDefs(f.w, f.h, scrimStrength)}</defs><rect width="${f.w}" height="${f.h}" fill="url(#scrim)"/>`;
-  return `<defs>${gradientDefs(p, f.w, f.h)}</defs><rect width="${f.w}" height="${f.h}" fill="url(#bgGrad)"/>`;
+  return `<defs>${gradientDefs(p, f.w, f.h)}</defs><rect width="${f.w}" height="${f.h}" fill="url(#bgGrad)"/>${decorativeTexture(p, f, slideType)}`;
 }
 
 // ── Header ────────────────────────────────────────────────────────────
@@ -241,7 +271,7 @@ function renderHookSVG(p, f, slide, category, scrimStrength) {
 
   return `
   <svg width="${f.w}" height="${f.h}" viewBox="0 0 ${f.w} ${f.h}" xmlns="http://www.w3.org/2000/svg">
-    ${backgroundLayer(p, f, scrimStrength)}
+    ${backgroundLayer(p, f, scrimStrength, "hook")}
     ${pillHeader(p, f, category.displayName, category.slug, slide.slideNumber, slide.totalSlides)}
     <text x="${m}" y="${startY}" font-family="${FONT_SERIF}" font-style="italic" font-size="${size}" font-weight="700">${tspansEmphasis(lines, m, startY, lineH, emphasisIdx, p.accent, p.primaryText)}</text>
     ${supportLines.length ? `<text x="${m}" y="${supportY}" font-family="${FONT_SANS}" font-size="${f.hookSupportSize}" fill="${p.secondaryText}">${tspans(supportLines, m, supportY, f.hookSupportLine)}</text>` : ""}
@@ -289,7 +319,7 @@ function renderBodySVG(p, f, slide, category, scrimStrength) {
 
   return `
   <svg width="${f.w}" height="${f.h}" viewBox="0 0 ${f.w} ${f.h}" xmlns="http://www.w3.org/2000/svg">
-    ${backgroundLayer(p, f, scrimStrength)}
+    ${backgroundLayer(p, f, scrimStrength, "body")}
     ${plainHeader(p, f, category.displayName, category.slug, slide.slideNumber, slide.totalSlides)}
     ${slide.sectionLabel ? `<rect x="${m}" y="${sectionLabelY-20}" width="4" height="24" fill="${p.accent}"/><text x="${m+18}" y="${sectionLabelY}" font-family="${FONT_SANS}" font-size="${f.sectionLabelSize}" font-weight="700" letter-spacing="1.5" fill="${p.accent}">${escXml((slide.sectionLabel||"").toUpperCase())}</text>` : ""}
     <text x="${m}" y="${headlineStartY}" font-family="${FONT_SERIF}" font-style="italic" font-size="${hSize}" font-weight="400" fill="${p.primaryText}">${tspans(hLines, m, headlineStartY, hLineH)}</text>
@@ -318,7 +348,7 @@ function renderOutroSVG(p, f, slide, category, scrimStrength) {
 
   return `
   <svg width="${f.w}" height="${f.h}" viewBox="0 0 ${f.w} ${f.h}" xmlns="http://www.w3.org/2000/svg">
-    ${backgroundLayer(p, f, scrimStrength)}
+    ${backgroundLayer(p, f, scrimStrength, "outro")}
     ${plainHeader(p, f, category.displayName, category.slug, slide.slideNumber, slide.totalSlides)}
     <text x="${m}" y="${startY}" font-family="${FONT_SERIF}" font-style="italic" font-size="${size}" font-weight="700">${tspansEmphasis(lines, m, startY, lineH, emphasisIdx, p.accent, p.primaryText)}</text>
     ${supportLines.length ? `<text x="${m}" y="${supportY}" font-family="${FONT_SANS}" font-size="${f.hookSupportSize}" fill="${p.secondaryText}">${tspans(supportLines, m, supportY, f.hookSupportLine)}</text>` : ""}
@@ -391,10 +421,13 @@ async function renderStatCard(slide, category, paletteKey, format, imageUrl) {
   const type = resolveType(slide, (slide.slideNumber || 1) - 1, slide.totalSlides || 1);
   const cat = typeof category === "string" ? { displayName: category, slug: "default" } : (category || { displayName: "", slug: "default" });
 
-  // Mode B: hook photo, adaptive scrim. Falls back through: live article
-  // photo → local niche background library → Mode A gradient.
+  // Mode B: photo + adaptive scrim. Falls back through: live article photo
+  // (hook slide only — that photo is tied to the specific news story, so it
+  // doesn't belong on generic body/outro slides) → local niche background
+  // library (any slide type, picked fresh per slide so a carousel doesn't
+  // reuse the same image 6 times) → Mode A gradient + decorative texture.
   let cover = type === "hook" ? await fetchCoverImage(imageUrl, f.w, f.h) : null;
-  if (!cover && type === "hook") {
+  if (!cover) {
     const localPath = pickLocalBackground(cat.slug);
     if (localPath) cover = await coverFromLocalFile(localPath, f.w, f.h);
   }
