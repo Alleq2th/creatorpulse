@@ -279,28 +279,104 @@ function renderHookSVG(p, f, slide, category, scrimStrength) {
   </svg>`;
 }
 
+// ── Body slide composition variants ─────────────────────────────────────
+// Which one a slide uses is decided by which fields the AI actually filled
+// in for that slide's content — never forced, so a plain paragraph story
+// still just gets a paragraph. Precedence when multiple are present:
+// quote > timeline > facts > stat > plain paragraph.
+function detectBodyVariant(slide) {
+  if (slide.quote && String(slide.quote).trim()) return "quote";
+  if (Array.isArray(slide.timeline) && slide.timeline.length) return "timeline";
+  if (Array.isArray(slide.facts) && slide.facts.length) return "facts";
+  if (slide.stat != null && String(slide.stat).trim() !== "") return "stat";
+  return "standard";
+}
+
+function measureFacts(f, facts) {
+  const rows = facts.slice(0, 4).map(fact => wrapWords(String(fact), f.bodyTextChars).slice(0, 2));
+  const rowH = rows.map(lines => 26 + lines.length * f.bodyTextLine * 0.82);
+  return { rows, height: rowH.reduce((a,b) => a+b, 0) + (rows.length - 1) * 14 };
+}
+function renderFacts(m, f, p, rows, startY) {
+  let y = startY;
+  const out = [];
+  rows.forEach((lines, i) => {
+    const bSize = Math.round(f.bodyTextSize * 0.82);
+    const lineH = Math.round(f.bodyTextLine * 0.82);
+    out.push(`<circle cx="${m+10}" cy="${y - bSize*0.35}" r="5" fill="${p.accent}"/>`);
+    out.push(`<text x="${m+34}" y="${y}" font-family="${FONT_SANS}" font-size="${bSize}" fill="${p.secondaryText}">${tspans(lines, m+34, y, lineH)}</text>`);
+    y += lines.length * lineH + 40;
+  });
+  return out.join("");
+}
+
+function measureQuote(f, quote, attribution) {
+  const size = Math.round(f.bodyHeadlineSize * 0.62);
+  const lineH = Math.round(size * 1.28);
+  const lines = wrapWords(String(quote), Math.round(f.bodyHeadlineChars * 1.3)).slice(0, 4);
+  return { lines, size, lineH, height: 50 + lines.length * lineH + (attribution ? 44 : 0) };
+}
+function renderQuote(m, f, p, quote, attribution, startY) {
+  const { lines, size, lineH } = measureQuote(f, quote, attribution);
+  const textY = startY + 56;
+  return `
+    <text x="${m-6}" y="${startY+40}" font-family="${FONT_SERIF}" font-size="90" fill="${p.accent}" opacity="0.35">"</text>
+    <text x="${m}" y="${textY}" font-family="${FONT_SERIF}" font-style="italic" font-size="${size}" fill="${p.primaryText}">${tspans(lines, m, textY, lineH)}</text>
+    ${attribution ? `<text x="${m}" y="${textY + lines.length*lineH + 36}" font-family="${FONT_SANS}" font-size="24" font-weight="700" letter-spacing="1" fill="${p.secondaryText}">${escXml(("— "+attribution).toUpperCase())}</text>` : ""}`;
+}
+
+function measureTimeline(f, items) {
+  const rows = items.slice(0, 4).map(it => wrapWords(String(it.text||""), f.bodyTextChars - 4).slice(0, 2));
+  const rowH = rows.map(lines => 46 + lines.length * f.bodyTextLine * 0.8);
+  return { rows, height: rowH.reduce((a,b)=>a+b,0) + (rows.length-1)*10 };
+}
+function renderTimeline(m, f, p, items, rows, startY) {
+  let y = startY;
+  const railX = m + 4;
+  const out = [];
+  const totalH = rows.reduce((s,lines,i) => s + 46 + lines.length * f.bodyTextLine * 0.8 + (i>0?10:0), 0);
+  out.push(`<line x1="${railX}" y1="${startY - 24}" x2="${railX}" y2="${startY - 24 + totalH}" stroke="${p.muted}" stroke-width="2" opacity="0.4"/>`);
+  items.slice(0, 4).forEach((it, i) => {
+    const lines = rows[i];
+    const bSize = Math.round(f.bodyTextSize * 0.82);
+    const lineH = Math.round(f.bodyTextLine * 0.8);
+    out.push(`<circle cx="${railX}" cy="${y - bSize*0.7}" r="7" fill="${p.accent}"/>`);
+    out.push(`<text x="${m+34}" y="${y - bSize*0.55}" font-family="${FONT_SANS}" font-size="22" font-weight="700" letter-spacing="1" fill="${p.accent}">${escXml((it.label||"").toUpperCase())}</text>`);
+    out.push(`<text x="${m+34}" y="${y + bSize*0.5}" font-family="${FONT_SANS}" font-size="${bSize}" fill="${p.secondaryText}">${tspans(lines, m+34, y+bSize*0.5, lineH)}</text>`);
+    y += 46 + lines.length * lineH;
+  });
+  return out.join("");
+}
+
 function renderBodySVG(p, f, slide, category, scrimStrength) {
   const m = f.margin;
-  const hasStat = slide.stat != null && String(slide.stat).trim() !== "";
+  const variant = detectBodyVariant(slide);
+  const hasStat = variant === "stat";
   const statFontSize = hasStat ? fitStatFontSize(slide.stat, f.w - 2*m, f.statSize) : 0;
 
   // Vertical rhythm, top to bottom: header → section label (small) →
-  // headline (large, dominant) → optional stat → body copy (medium) → footer.
-  // Section label sits ABOVE the headline, matching the small→large→medium→
-  // small hierarchy. The whole block is then vertically CENTERED in the
-  // space between the header and footer — a fixed top anchor was leaving a
-  // huge dead gap above the footer whenever a story was short, which is the
-  // "middle of the canvas completely empty" problem call out directly.
+  // headline (large, dominant) → variant-specific middle content → footer.
+  // The whole block is vertically CENTERED in the space between header and
+  // footer so short content doesn't leave a dead gap above the footer.
   const { lines: hLines, size: hSize } = fitMultilineText(slide.headline, f.bodyHeadlineSize, f.bodyHeadlineChars, f.bodyHeadlineMaxLines);
   const hLineH = Math.round(f.bodyHeadlineLine * (hSize / f.bodyHeadlineSize));
-  const { lines: bLines, size: bSize } = slide.body ? fitMultilineText(slide.body, f.bodyTextSize, f.bodyTextChars, f.bodyTextMaxLines) : { lines: [], size: f.bodyTextSize };
+  const { lines: bLines, size: bSize } = ((variant === "standard" || variant === "stat") && slide.body) ? fitMultilineText(slide.body, f.bodyTextSize, f.bodyTextChars, f.bodyTextMaxLines) : { lines: [], size: f.bodyTextSize };
   const bLineH = Math.round(f.bodyTextLine * (bSize / f.bodyTextSize));
+
+  let factsData = null, timelineData = null;
+  if (variant === "facts") factsData = measureFacts(f, slide.facts);
+  if (variant === "timeline") timelineData = measureTimeline(f, slide.timeline);
+  const quoteData = variant === "quote" ? measureQuote(f, slide.quote, slide.quoteAttribution) : null;
 
   const sectionBlockH = slide.sectionLabel ? 56 : 0;
   const headlineBlockH = hLines.length * hLineH;
-  const statBlockH = hasStat ? 64 + statFontSize * 0.78 + f.statLabelGap + 60 : 64;
-  const bodyBlockH = slide.body ? bLines.length * bLineH : 0;
-  const totalContentH = sectionBlockH + headlineBlockH + statBlockH + bodyBlockH;
+  const middleBlockH =
+    variant === "quote" ? 40 + quoteData.height :
+    variant === "timeline" ? 64 + timelineData.height :
+    variant === "facts" ? 64 + factsData.height :
+    variant === "stat" ? 64 + statFontSize * 0.78 + f.statLabelGap + 60 + (slide.body ? 60 + bLines.length * bLineH : 0) :
+    64 + (slide.body ? bLines.length * bLineH : 0);
+  const totalContentH = sectionBlockH + headlineBlockH + middleBlockH;
 
   const headerBottom = f.headerY + 70; // clear of the category header + progress dashes
   const footerDividerY = f.h - 110;
@@ -311,11 +387,28 @@ function renderBodySVG(p, f, slide, category, scrimStrength) {
   const sectionLabelY = blockTopY + (slide.sectionLabel ? 20 : -24);
   const headlineStartY = sectionLabelY + sectionBlockH + hSize * 0.78;
   const headlineEndY = headlineStartY + (hLines.length - 1) * hLineH;
-
   const afterHeadlineY = headlineEndY + 64;
-  const statBaseline = hasStat ? afterHeadlineY + statFontSize * 0.78 : afterHeadlineY;
-  const statLabelY = statBaseline + f.statLabelGap;
-  const bodyStartY = hasStat ? statLabelY + 60 : afterHeadlineY;
+
+  let middleSVG = "";
+  if (variant === "quote") {
+    middleSVG = renderQuote(m, f, p, slide.quote, slide.quoteAttribution, afterHeadlineY);
+  } else if (variant === "timeline") {
+    middleSVG = renderTimeline(m, f, p, slide.timeline, timelineData.rows, afterHeadlineY + 30);
+  } else if (variant === "facts") {
+    middleSVG = renderFacts(m, f, p, factsData.rows, afterHeadlineY + 20);
+  } else if (variant === "stat") {
+    const statBaseline = afterHeadlineY + statFontSize * 0.78;
+    const statLabelY = statBaseline + f.statLabelGap;
+    const bodyStartY = statLabelY + 60;
+    middleSVG = `
+    <text x="${m}" y="${statBaseline}" font-family="${FONT_SANS}" font-size="${statFontSize}" font-weight="900" fill="${p.accent}">${escXml(slide.stat)}</text>
+    ${slide.statLabel ? `<text x="${m}" y="${statLabelY}" font-family="${FONT_SANS}" font-size="${f.statLabelSize}" font-weight="700" letter-spacing="1.5" fill="${p.secondaryText}">${escXml((slide.statLabel||"").toUpperCase())}</text>` : ""}
+    ${slide.body ? `<text x="${m}" y="${bodyStartY}" font-family="${FONT_SANS}" font-size="${bSize}" fill="${p.secondaryText}">${tspans(bLines, m, bodyStartY, bLineH)}</text>` : ""}`;
+  } else if (slide.body) {
+    middleSVG = `
+    <rect x="${m}" y="${afterHeadlineY - bSize - 20}" width="130" height="3" fill="${p.accent}" opacity="0.5"/>
+    <text x="${m}" y="${afterHeadlineY}" font-family="${FONT_SANS}" font-size="${bSize}" fill="${p.secondaryText}">${tspans(bLines, m, afterHeadlineY, bLineH)}</text>`;
+  }
 
   return `
   <svg width="${f.w}" height="${f.h}" viewBox="0 0 ${f.w} ${f.h}" xmlns="http://www.w3.org/2000/svg">
@@ -323,13 +416,7 @@ function renderBodySVG(p, f, slide, category, scrimStrength) {
     ${plainHeader(p, f, category.displayName, category.slug, slide.slideNumber, slide.totalSlides)}
     ${slide.sectionLabel ? `<rect x="${m}" y="${sectionLabelY-20}" width="4" height="24" fill="${p.accent}"/><text x="${m+18}" y="${sectionLabelY}" font-family="${FONT_SANS}" font-size="${f.sectionLabelSize}" font-weight="700" letter-spacing="1.5" fill="${p.accent}">${escXml((slide.sectionLabel||"").toUpperCase())}</text>` : ""}
     <text x="${m}" y="${headlineStartY}" font-family="${FONT_SERIF}" font-style="italic" font-size="${hSize}" font-weight="400" fill="${p.primaryText}">${tspans(hLines, m, headlineStartY, hLineH)}</text>
-    ${hasStat ? `
-    <text x="${m}" y="${statBaseline}" font-family="${FONT_SANS}" font-size="${statFontSize}" font-weight="900" fill="${p.accent}">${escXml(slide.stat)}</text>
-    ${slide.statLabel ? `<text x="${m}" y="${statLabelY}" font-family="${FONT_SANS}" font-size="${f.statLabelSize}" font-weight="700" letter-spacing="1.5" fill="${p.secondaryText}">${escXml((slide.statLabel||"").toUpperCase())}</text>` : ""}` : ""}
-    ${slide.body ? `
-    <rect x="${m}" y="${bodyStartY - bSize - 20}" width="130" height="3" fill="${p.accent}" opacity="0.5"/>
-    <text x="${m}" y="${bodyStartY}" font-family="${FONT_SANS}" font-size="${bSize}" fill="${p.secondaryText}">${tspans(bLines, m, bodyStartY, bLineH)}</text>
-    ` : ""}
+    ${middleSVG}
     <rect x="${m}" y="${footerDividerY}" width="${f.w-2*m}" height="1" fill="${p.muted}" opacity="0.4"/>
     ${slide.tag ? `<rect x="${m}" y="${footerY-32}" width="${40+slide.tag.length*15}" height="44" rx="22" fill="none" stroke="${p.muted}" stroke-width="1.5"/><text x="${m+20}" y="${footerY-4}" font-family="${FONT_SANS}" font-size="22" font-weight="600" letter-spacing="1" fill="${p.secondaryText}">${escXml((slide.tag||"").toUpperCase())}</text>` : ""}
     ${swipeArrow(p, f, f.w - m, footerY - 4)}
