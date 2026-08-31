@@ -30,23 +30,23 @@ const FORMATS = {
     w: 1080, h: 1350,
     margin: 76,
     headerY: 90, dashY: 122, dashW: owidth => 0, // computed inline
-    hookHeadlineY: 0.37, hookHeadlineSize: 84, hookHeadlineLine: 92, hookHeadlineChars: 13, hookMaxLines: 4,
-    hookSupportGap: 56, hookSupportSize: 32, hookSupportLine: 44, hookSupportChars: 46,
+    hookHeadlineY: 0.37, hookHeadlineSize: 84, hookHeadlineLine: 92, hookHeadlineChars: 16, hookMaxLines: 4,
+    hookSupportGap: 56, hookSupportSize: 32, hookSupportLine: 44, hookSupportChars: 56, hookSupportMaxLines: 3,
     statY: 470, statSize: 210, statLabelGap: 46, statLabelSize: 26,
-    bodyHeadlineSize: 66, bodyHeadlineLine: 74, bodyHeadlineChars: 18, bodyHeadlineMaxLines: 3,
-    sectionLabelSize: 24, bodyTextSize: 30, bodyTextLine: 42, bodyTextChars: 40, bodyTextMaxLines: 3,
-    outroHeadlineSize: 76, outroHeadlineLine: 84, outroHeadlineChars: 14, outroMaxLines: 4,
+    bodyHeadlineSize: 66, bodyHeadlineLine: 74, bodyHeadlineChars: 23, bodyHeadlineMaxLines: 3,
+    sectionLabelSize: 24, bodyTextSize: 30, bodyTextLine: 42, bodyTextChars: 56, bodyTextMaxLines: 4,
+    outroHeadlineSize: 76, outroHeadlineLine: 84, outroHeadlineChars: 17, outroMaxLines: 4,
   },
   tiktok: {
     w: 1080, h: 1920,
     margin: 76,
     headerY: 96, dashY: 130,
-    hookHeadlineY: 0.36, hookHeadlineSize: 92, hookHeadlineLine: 100, hookHeadlineChars: 12, hookMaxLines: 4,
-    hookSupportGap: 60, hookSupportSize: 34, hookSupportLine: 46, hookSupportChars: 42,
+    hookHeadlineY: 0.36, hookHeadlineSize: 92, hookHeadlineLine: 100, hookHeadlineChars: 15, hookMaxLines: 4,
+    hookSupportGap: 60, hookSupportSize: 34, hookSupportLine: 46, hookSupportChars: 52, hookSupportMaxLines: 3,
     statY: 620, statSize: 240, statLabelGap: 50, statLabelSize: 28,
-    bodyHeadlineSize: 72, bodyHeadlineLine: 80, bodyHeadlineChars: 17, bodyHeadlineMaxLines: 3,
-    sectionLabelSize: 26, bodyTextSize: 32, bodyTextLine: 46, bodyTextChars: 36, bodyTextMaxLines: 3,
-    outroHeadlineSize: 84, outroHeadlineLine: 92, outroHeadlineChars: 13, outroMaxLines: 4,
+    bodyHeadlineSize: 72, bodyHeadlineLine: 80, bodyHeadlineChars: 21, bodyHeadlineMaxLines: 3,
+    sectionLabelSize: 26, bodyTextSize: 32, bodyTextLine: 46, bodyTextChars: 50, bodyTextMaxLines: 4,
+    outroHeadlineSize: 84, outroHeadlineLine: 92, outroHeadlineChars: 16, outroMaxLines: 4,
   }
 };
 function resolveFormat(format) {
@@ -140,6 +140,19 @@ function fitMultilineText(text, baseSize, baseChars, maxLines) {
       return { lines: clipped, size };
     }
   }
+}
+
+// Same idea as fitMultilineText but for short single-size supporting text
+// (teases, CTAs) — was previously a naked wrapWords(...).slice(0,2), which
+// silently dropped any words past line 2 with no ellipsis. That produced
+// sentences that just stopped mid-thought with no indication of truncation.
+function fitSupportText(text, chars, maxLines) {
+  const lines = wrapWords(text, chars);
+  if (lines.length <= maxLines) return lines;
+  const clipped = lines.slice(0, maxLines);
+  const last = clipped[maxLines - 1];
+  clipped[maxLines - 1] = last.length > chars - 1 ? last.slice(0, chars - 1).trimEnd() + "…" : last + "…";
+  return clipped;
 }
 
 function tspans(lines, x, startY, lineHeight) {
@@ -267,7 +280,7 @@ function renderHookSVG(p, f, slide, category, scrimStrength) {
   const startY = Math.round(f.h * f.hookHeadlineY);
   const emphasisIdx = slide.emphasisLine != null ? slide.emphasisLine : (lines.length >= 3 ? 1 : -1);
   const supportY = startY + lines.length * lineH + f.hookSupportGap;
-  const supportLines = slide.supportingText ? wrapWords(slide.supportingText, f.hookSupportChars).slice(0, 2) : [];
+  const supportLines = slide.supportingText ? fitSupportText(slide.supportingText, f.hookSupportChars, f.hookSupportMaxLines) : [];
 
   return `
   <svg width="${f.w}" height="${f.h}" viewBox="0 0 ${f.w} ${f.h}" xmlns="http://www.w3.org/2000/svg">
@@ -429,7 +442,7 @@ function renderOutroSVG(p, f, slide, category, scrimStrength) {
   const lineH = Math.round(f.outroHeadlineLine * (size / f.outroHeadlineSize));
   const blockH = lines.length * lineH;
   const startY = Math.round(f.h/2 - blockH/2);
-  const supportLines = slide.supportingText ? wrapWords(slide.supportingText, f.hookSupportChars).slice(0, 2) : [];
+  const supportLines = slide.supportingText ? fitSupportText(slide.supportingText, f.hookSupportChars, f.hookSupportMaxLines) : [];
   const supportY = startY + blockH + 56;
   const emphasisIdx = slide.emphasisLine != null ? slide.emphasisLine : (lines.length >= 2 ? lines.length - 1 : -1);
 
