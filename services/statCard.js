@@ -485,21 +485,38 @@ async function fetchCoverImage(imageUrl, w, h) {
   }
 }
 
-// Local niche background library. Drop image files into
-// assets/backgrounds/<slug>/ (any filename, .jpg/.jpeg/.png/.webp) and this
-// picks one at random for that niche — a permanent fallback so cards don't
-// depend on finding a usable live article photo every time.
+// Local niche background library. Structure per the design spec: each niche
+// gets 5 style folders, not one flat dump —
+//   assets/backgrounds/<slug>/cinematic/  — dark gradient, safest default
+//   assets/backgrounds/<slug>/texture/    — abstract texture/grain
+//   assets/backgrounds/<slug>/glow/       — light/glow/spotlight, for hooks
+//   assets/backgrounds/<slug>/geometric/  — editorial geometric, for body
+//   assets/backgrounds/<slug>/dramatic/   — dark/high-contrast, for CTA/major news
+// Drop any .jpg/.jpeg/.png/.webp file into the relevant folder — filename
+// doesn't matter, one is picked at random. A slide type maps to its ideal
+// style, but if that specific style folder is empty it falls back to
+// cinematic (the one style every niche is expected to eventually have),
+// then to no local image at all (renderer falls through to the gradient +
+// decorative texture, same as today, for niches nobody's uploaded to yet).
 const BACKGROUNDS_DIR = path.join(__dirname, "..", "assets", "backgrounds");
 const IMG_EXT = new Set([".jpg", ".jpeg", ".png", ".webp"]);
-function pickLocalBackground(slug) {
+const STYLE_FOR_SLIDE_TYPE = { hook: "glow", body: "geometric", outro: "dramatic" };
+function listImages(dir) {
   try {
-    const dir = path.join(BACKGROUNDS_DIR, slug || "default");
-    const files = fs.readdirSync(dir).filter(f => IMG_EXT.has(path.extname(f).toLowerCase()));
-    if (!files.length) return null;
-    return path.join(dir, files[Math.floor(Math.random() * files.length)]);
+    return fs.readdirSync(dir).filter(f => IMG_EXT.has(path.extname(f).toLowerCase()));
   } catch (e) {
-    return null; // niche has no folder / no images yet — falls through to gradient
+    return [];
   }
+}
+function pickLocalBackground(slug, slideType) {
+  const niche = slug || "default";
+  const preferredStyle = STYLE_FOR_SLIDE_TYPE[slideType] || "cinematic";
+  for (const style of [preferredStyle, "cinematic"]) {
+    const dir = path.join(BACKGROUNDS_DIR, niche, style);
+    const files = listImages(dir);
+    if (files.length) return path.join(dir, files[Math.floor(Math.random() * files.length)]);
+  }
+  return null; // niche has no images in either folder yet — falls through to gradient
 }
 
 // Cover-crops + measures brightness for a background image already on disk,
@@ -528,7 +545,7 @@ async function renderStatCard(slide, category, paletteKey, format, imageUrl) {
   // reuse the same image 6 times) → Mode A gradient + decorative texture.
   let cover = type === "hook" ? await fetchCoverImage(imageUrl, f.w, f.h) : null;
   if (!cover) {
-    const localPath = pickLocalBackground(cat.slug);
+    const localPath = pickLocalBackground(cat.slug, type);
     if (localPath) cover = await coverFromLocalFile(localPath, f.w, f.h);
   }
   const scrimStrength = cover ? cover.brightness : null;
