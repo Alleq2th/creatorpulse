@@ -21,7 +21,7 @@ const fetch = require("node-fetch");
 const fs = require("fs");
 const path = require("path");
 
-const FONT_SERIF = "'DM Serif Display', Georgia, serif"; // hook + outro headlines (italic)
+const FONT_SERIF = "'Anton', 'Archivo Black', Impact, sans-serif"; // hook/body/outro headlines — bold, upright, blocky (not the previous italic serif)
 const FONT_SANS = "Inter, sans-serif";                    // everything else — weight via font-weight
 
 // ── Formats ────────────────────────────────────────────────────────────
@@ -34,7 +34,7 @@ const FORMATS = {
     hookSupportGap: 56, hookSupportSize: 32, hookSupportLine: 44, hookSupportChars: 56, hookSupportMaxLines: 3,
     statY: 470, statSize: 210, statLabelGap: 46, statLabelSize: 26,
     bodyHeadlineSize: 66, bodyHeadlineLine: 74, bodyHeadlineChars: 23, bodyHeadlineMaxLines: 3,
-    sectionLabelSize: 24, bodyTextSize: 30, bodyTextLine: 42, bodyTextChars: 56, bodyTextMaxLines: 4,
+    sectionLabelSize: 24, bodyTextSize: 28, bodyTextLine: 40, bodyTextChars: 58, bodyTextMaxLines: 6,
     outroHeadlineSize: 76, outroHeadlineLine: 84, outroHeadlineChars: 17, outroMaxLines: 4,
   },
   tiktok: {
@@ -45,7 +45,7 @@ const FORMATS = {
     hookSupportGap: 60, hookSupportSize: 34, hookSupportLine: 46, hookSupportChars: 52, hookSupportMaxLines: 3,
     statY: 620, statSize: 240, statLabelGap: 50, statLabelSize: 28,
     bodyHeadlineSize: 72, bodyHeadlineLine: 80, bodyHeadlineChars: 21, bodyHeadlineMaxLines: 3,
-    sectionLabelSize: 26, bodyTextSize: 32, bodyTextLine: 46, bodyTextChars: 50, bodyTextMaxLines: 4,
+    sectionLabelSize: 26, bodyTextSize: 30, bodyTextLine: 44, bodyTextChars: 52, bodyTextMaxLines: 7,
     outroHeadlineSize: 84, outroHeadlineLine: 92, outroHeadlineChars: 16, outroMaxLines: 4,
   }
 };
@@ -286,7 +286,7 @@ function renderHookSVG(p, f, slide, category, scrimStrength) {
   <svg width="${f.w}" height="${f.h}" viewBox="0 0 ${f.w} ${f.h}" xmlns="http://www.w3.org/2000/svg">
     ${backgroundLayer(p, f, scrimStrength, "hook")}
     ${pillHeader(p, f, category.displayName, category.slug, slide.slideNumber, slide.totalSlides)}
-    <text x="${m}" y="${startY}" font-family="${FONT_SERIF}" font-style="italic" font-size="${size}" font-weight="700">${tspansEmphasis(lines, m, startY, lineH, emphasisIdx, p.accent, p.primaryText)}</text>
+    <text x="${m}" y="${startY}" font-family="${FONT_SERIF}" font-size="${size}" font-weight="700">${tspansEmphasis(lines, m, startY, lineH, emphasisIdx, p.accent, p.primaryText)}</text>
     ${supportLines.length ? `<text x="${m}" y="${supportY}" font-family="${FONT_SANS}" font-size="${f.hookSupportSize}" fill="${p.secondaryText}">${tspans(supportLines, m, supportY, f.hookSupportLine)}</text>` : ""}
     ${swipeFooter(p, f)}
   </svg>`;
@@ -334,7 +334,7 @@ function renderQuote(m, f, p, quote, attribution, startY) {
   const textY = startY + 56;
   return `
     <text x="${m-6}" y="${startY+40}" font-family="${FONT_SERIF}" font-size="90" fill="${p.accent}" opacity="0.35">"</text>
-    <text x="${m}" y="${textY}" font-family="${FONT_SERIF}" font-style="italic" font-size="${size}" fill="${p.primaryText}">${tspans(lines, m, textY, lineH)}</text>
+    <text x="${m}" y="${textY}" font-family="${FONT_SERIF}" font-size="${size}" fill="${p.primaryText}">${tspans(lines, m, textY, lineH)}</text>
     ${attribution ? `<text x="${m}" y="${textY + lines.length*lineH + 36}" font-family="${FONT_SANS}" font-size="24" font-weight="700" letter-spacing="1" fill="${p.secondaryText}">${escXml(("— "+attribution).toUpperCase())}</text>` : ""}`;
 }
 
@@ -428,7 +428,7 @@ function renderBodySVG(p, f, slide, category, scrimStrength) {
     ${backgroundLayer(p, f, scrimStrength, "body")}
     ${plainHeader(p, f, category.displayName, category.slug, slide.slideNumber, slide.totalSlides)}
     ${slide.sectionLabel ? `<rect x="${m}" y="${sectionLabelY-20}" width="4" height="24" fill="${p.accent}"/><text x="${m+18}" y="${sectionLabelY}" font-family="${FONT_SANS}" font-size="${f.sectionLabelSize}" font-weight="700" letter-spacing="1.5" fill="${p.accent}">${escXml((slide.sectionLabel||"").toUpperCase())}</text>` : ""}
-    <text x="${m}" y="${headlineStartY}" font-family="${FONT_SERIF}" font-style="italic" font-size="${hSize}" font-weight="400" fill="${p.primaryText}">${tspans(hLines, m, headlineStartY, hLineH)}</text>
+    <text x="${m}" y="${headlineStartY}" font-family="${FONT_SERIF}" font-size="${hSize}" font-weight="400" fill="${p.primaryText}">${tspans(hLines, m, headlineStartY, hLineH)}</text>
     ${middleSVG}
     <rect x="${m}" y="${footerDividerY}" width="${f.w-2*m}" height="1" fill="${p.muted}" opacity="0.4"/>
     ${slide.tag ? `<rect x="${m}" y="${footerY-32}" width="${40+slide.tag.length*15}" height="44" rx="22" fill="none" stroke="${p.muted}" stroke-width="1.5"/><text x="${m+20}" y="${footerY-4}" font-family="${FONT_SANS}" font-size="22" font-weight="600" letter-spacing="1" fill="${p.secondaryText}">${escXml((slide.tag||"").toUpperCase())}</text>` : ""}
@@ -450,7 +450,7 @@ function renderOutroSVG(p, f, slide, category, scrimStrength) {
   <svg width="${f.w}" height="${f.h}" viewBox="0 0 ${f.w} ${f.h}" xmlns="http://www.w3.org/2000/svg">
     ${backgroundLayer(p, f, scrimStrength, "outro")}
     ${plainHeader(p, f, category.displayName, category.slug, slide.slideNumber, slide.totalSlides)}
-    <text x="${m}" y="${startY}" font-family="${FONT_SERIF}" font-style="italic" font-size="${size}" font-weight="700">${tspansEmphasis(lines, m, startY, lineH, emphasisIdx, p.accent, p.primaryText)}</text>
+    <text x="${m}" y="${startY}" font-family="${FONT_SERIF}" font-size="${size}" font-weight="700">${tspansEmphasis(lines, m, startY, lineH, emphasisIdx, p.accent, p.primaryText)}</text>
     ${supportLines.length ? `<text x="${m}" y="${supportY}" font-family="${FONT_SANS}" font-size="${f.hookSupportSize}" fill="${p.secondaryText}">${tspans(supportLines, m, supportY, f.hookSupportLine)}</text>` : ""}
     <defs><linearGradient id="fadeLine2" x1="${m}" y1="0" x2="${f.w-m}" y2="0" gradientUnits="userSpaceOnUse">
       <stop offset="0%" stop-color="${p.accent}" stop-opacity="1"/><stop offset="100%" stop-color="${p.accent}" stop-opacity="0"/>
