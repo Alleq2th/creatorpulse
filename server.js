@@ -768,7 +768,7 @@ app.get("/api/news", async (req, res) => {
       if (data.articles?.length) {
         const normalized = data.articles.map(a => ({
           title: a.title || "",
-          summary: a.description || (a.content ? a.content.slice(0, 200) : ""),
+          summary: a.description || (a.content ? a.content.slice(0, 1600) : ""),
           _raw: a
         }));
         const kept = filterAndScoreArticles(normalized, niche).slice(0, 20);
@@ -779,7 +779,7 @@ app.get("/api/news", async (req, res) => {
               id: `${niche.replace(/\s/g, "_")}_${i}_${Date.now()}`,
               niche,
               headline: a.title,
-              summary: a.description || (a.content ? a.content.slice(0, 200) : ""),
+              summary: a.description || (a.content ? a.content.slice(0, 1600) : ""),
               image: a.urlToImage || null,
               url: a.url,
               source: a.source?.name || "",
@@ -797,7 +797,7 @@ app.get("/api/news", async (req, res) => {
     const feed = await parser.parseURL(rssUrl);
     const normalized = (feed.items || []).map(item => ({
       title: item.title || "",
-      summary: item.contentSnippet || (item.content ? item.content.slice(0, 200) : ""),
+      summary: item.contentSnippet || (item.content ? item.content.slice(0, 1600) : ""),
       _raw: item
     }));
     const kept = filterAndScoreArticles(normalized, niche).slice(0, 8);
@@ -811,7 +811,7 @@ app.get("/api/news", async (req, res) => {
         id: `${niche.replace(/\s/g, "_")}_rss_${i}_${Date.now()}`,
         niche,
         headline: item.title,
-        summary: item.contentSnippet || (item.content ? item.content.slice(0, 200) : ""),
+        summary: item.contentSnippet || (item.content ? item.content.slice(0, 1600) : ""),
         image: sourceImage,
         url: item.link,
         source: feed.title || "",
@@ -851,7 +851,7 @@ app.get("/api/blog-feed", async (req, res) => {
           id: `blog_${niche}_${feedUrl}_${i}_${Date.now()}`,
           niche,
           headline: item.title,
-          summary: item.contentSnippet || item.content?.slice(0, 200) || "",
+          summary: item.contentSnippet || item.content?.slice(0, 1600) || "",
           image: imageUrl,
           url: item.link,
           source: feed.title || feedUrl,
