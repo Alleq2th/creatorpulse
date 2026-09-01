@@ -227,6 +227,17 @@ window.clearErr = (key) => { delete S.errors[key]; render(); };
 
 function extractJSON(txt){ const m = String(txt).match(/\{[\s\S]*\}|\[[\s\S]*\]/); if(!m) return null; try{ return JSON.parse(m[0]); }catch(e){ return null; } }
 
+function asArray(parsed) {
+  // Defensive against a real failure mode: when we ask an LLM for "an array
+  // of exactly 1 item" it will often just hand back the bare object instead
+  // of wrapping it in [...] — extractJSON then returns a plain object, and
+  // calling .map on it crashes generation entirely. Normalize here once
+  // instead of trusting every call site to guard against it.
+  if (Array.isArray(parsed)) return parsed;
+  if (parsed && typeof parsed === "object") return [parsed];
+  return [];
+}
+
 // ─── API ────────────────────────────────────────────────────────────────────
 async function api(path, opts, _isRetry){
   const ctl = new AbortController();
@@ -625,45 +636,51 @@ window.gen = async (tid, all) => {
         // "follow for more" by itself. Instead the CTA gets folded onto the
         // end of the last content slide (a ctaLine — see statCard.js).
         const useDedicatedOutro = requestedCount >= 6;
-        const fullSummary = t.summary || "";
-        // Take up to 2 sentences for the hook's supporting text now, not
-        // just 1 — the "little headline" under the big one should actually
-        // explain something, not just tease a fragment.
-        const hookSupport = fullSummary ? fullSummary.split(/(?<=[.!?])\s/).slice(0, 2).join(" ") : "";
-        const hookSlide = { type: "hook", headline: t.headline, supportingText: hookSupport, emphasisLine: 1 };
-        const BODY_PROMPT_SCHEMA = `{"headline":"editorial headline, 4-8 words — communicate the actual news, not just a topic label","sectionLabel":"short label like BACKGROUND or WHAT HAPPENED, else null","body":"2-4 FULL sentences with real specific detail — names, numbers, context, what happens next. Don't summarize vaguely, explain it properly like a real news writer would, else null","stat":"a number/figure from the story if one genuinely exists, else null","statLabel":"what the stat measures, else null","facts":["3-4 short standalone facts, ONLY if the story naturally breaks into a list of distinct points — else omit this field entirely"],"quote":"a real quote from someone in the story, ONLY if the source material actually contains one — else omit this field entirely","quoteAttribution":"who said it, only if quote is set","timeline":[{"label":"a date/stage label","text":"what happened at that point"}],"tag":"a short context tag like a team/event name, else null"}`;
-        const BODY_PROMPT_RULES = `IMPORTANT: each slide should use AT MOST ONE of stat/facts/quote/timeline — never combine them, and never fill one in unless the story genuinely supports it. Never invent a stat, quote, or timeline point that isn't actually in the story. Prioritize substance — every slide should teach the reader something concrete, not just gesture at the topic.`;
+        // This is the actual source article text now (server sends up to
+        // 1600 chars, not the old 200) — the raw material the AI rewrites
+        // from, not just a fragment to mechanically slice up.
+        const sourceText = t.summary || "";
+        const HOOK_SCHEMA = `"hookHeadline":"a REWRITTEN, catchier editorial headline that states the real news and makes someone want to keep reading — not a copy of the raw scraped headline, 5-9 words","hookTease":"1-2 sentences that tease why this matters without giving away the full story"`;
+        const BODY_ITEM_SCHEMA = `{"headline":"editorial headline, 4-8 words — communicate the actual news, not just a topic label","sectionLabel":"short label like BACKGROUND or WHAT HAPPENED, else null","body":"2-4 FULL sentences with real specific detail — names, numbers, context, what happens next. Don't summarize vaguely, explain it properly like a real news writer would, else null","stat":"a number/figure from the story if one genuinely exists, else null","statLabel":"what the stat measures, else null","facts":["3-4 short standalone facts, ONLY if the story naturally breaks into a list of distinct points — else omit this field entirely"],"quote":"a real quote from someone in the story, ONLY if the source material actually contains one — else omit this field entirely","quoteAttribution":"who said it, only if quote is set","timeline":[{"label":"a date/stage label","text":"what happened at that point"}],"tag":"a short context tag like a team/event name, else null"}`;
+        const REWRITE_RULES = `You are REWRITING this into a proper editorial carousel, not mechanically splitting the source text across slides — rephrase in clear, engaging, well-written English, and never cut a sentence off mid-thought at a slide boundary. Each slide should use AT MOST ONE of stat/facts/quote/timeline — never combine them, never fill one in unless the story genuinely supports it, never invent a stat/quote/timeline point that isn't actually in the source. Prioritize substance — every slide should teach the reader something concrete.`;
 
         let slideArr;
         if(requestedCount === 1){
           // A single slide is the WHOLE post — no second slide to swipe to,
           // so headline + body + CTA all have to live here together.
           const sr = await generateText(
-            `Return ONLY a valid JSON object for a single all-in-one post (there is no other slide, this must fully tell the story): {"headline":"a full, complete editorial headline stating the actual news, 6-10 words","body":"3-5 full sentences with real specific detail — names, numbers, context, what happens and why it matters. This is the ONLY slide so it must completely explain the story on its own.","tag":"a short context tag, else null"}.`,
-            `${category.name} single post. Story: "${t.headline}". ${fullSummary}`, tone
+            `Return ONLY a valid JSON object for a single all-in-one post (there is no other slide, this must fully tell the story): {"headline":"a full, complete, REWRITTEN editorial headline stating the actual news — catchy, not a copy of the raw source headline, 6-10 words","body":"3-5 full sentences with real specific detail — names, numbers, context, what happens and why it matters. This is the ONLY slide so it must completely explain the story on its own, in clear well-written English.","tag":"a short context tag, else null"}.`,
+            `${category.name} single post. Raw source headline: "${t.headline}". Full source text: ${sourceText}`, tone
           );
           const single = extractJSON(sr) || {};
-          slideArr = [{ type: "body", headline: single.headline || t.headline, body: single.body || fullSummary, tag: single.tag || null, ctaLine: "FOLLOW FOR MORE →" }];
+          slideArr = [{ type: "body", headline: single.headline || t.headline, body: single.body || sourceText, tag: single.tag || null, ctaLine: "FOLLOW FOR MORE →" }];
         } else if(!useDedicatedOutro){
-          // 2-5 slides: hook + body slides, CTA folded onto the last body
-          // slide instead of spending a whole separate slide on it.
+          // 2-5 slides: CTA folded onto the last body slide instead of
+          // spending a whole separate slide on it. Hook + body slides all
+          // come from ONE call now, so the whole thing reads as one
+          // rewritten story instead of a hardcoded headline stitched to
+          // separately-generated body slides.
           const bodyCount = requestedCount - 1;
           const sr = await generateText(
-            `Return ONLY a valid JSON array of exactly ${bodyCount} body-slide objects (the hook is added separately, don't include it): [${BODY_PROMPT_SCHEMA}]. ${BODY_PROMPT_RULES}`,
-            `${category.name} carousel. Story: "${t.headline}". ${fullSummary}`, tone
+            `Return ONLY a valid JSON object: {${HOOK_SCHEMA},"slides":[array of exactly ${bodyCount} objects, each shaped like ${BODY_ITEM_SCHEMA}]}. ${REWRITE_RULES}`,
+            `${category.name} carousel. Raw source headline: "${t.headline}". Full source text: ${sourceText}`, tone
           );
-          const bodySlides = (extractJSON(sr) || []).map(s => ({ ...s, type: "body" }));
+          const parsed = extractJSON(sr) || {};
+          const bodySlides = asArray(parsed.slides).map(s => ({ ...s, type: "body" }));
           if(bodySlides.length) bodySlides[bodySlides.length - 1].ctaLine = "FOLLOW FOR MORE →";
+          const hookSlide = { type: "hook", headline: parsed.hookHeadline || t.headline, supportingText: parsed.hookTease || sourceText.split(/(?<=[.!?])\s/).slice(0,2).join(" "), emphasisLine: 1 };
           slideArr = [hookSlide, ...bodySlides];
         } else {
           // 6+ slides: there's enough real content that a dedicated CTA
           // slide at the end doesn't feel like a waste.
           const bodyCount = requestedCount - 2;
           const sr = await generateText(
-            `Return ONLY a valid JSON array of exactly ${bodyCount} body-slide objects (the hook and outro slides are added separately, don't include them): [${BODY_PROMPT_SCHEMA}]. ${BODY_PROMPT_RULES}`,
-            `${category.name} carousel. Story: "${t.headline}". ${fullSummary}`, tone
+            `Return ONLY a valid JSON object: {${HOOK_SCHEMA},"slides":[array of exactly ${bodyCount} objects, each shaped like ${BODY_ITEM_SCHEMA}]}. The outro slide is added separately, don't include it. ${REWRITE_RULES}`,
+            `${category.name} carousel. Raw source headline: "${t.headline}". Full source text: ${sourceText}`, tone
           );
-          const bodySlides = (extractJSON(sr) || []).map(s => ({ ...s, type: "body" }));
+          const parsed = extractJSON(sr) || {};
+          const bodySlides = asArray(parsed.slides).map(s => ({ ...s, type: "body" }));
+          const hookSlide = { type: "hook", headline: parsed.hookHeadline || t.headline, supportingText: parsed.hookTease || sourceText.split(/(?<=[.!?])\s/).slice(0,2).join(" "), emphasisLine: 1 };
           slideArr = [hookSlide, ...bodySlides, ctaOutroSlide(t.niche)];
         }
         // Real cards (actual text, actual numbers) — not AI-generated art, which
@@ -1027,12 +1044,25 @@ window.getChatGPTPrompt = async (tid) => {
   const t = S.trends.find(x=>x.id===tid); if(!t) return;
   const plat = S.plat[tid] || S.user?.primaryPlatform || "instagram";
   const platLabel = PLATS.find(x=>x.id===plat)?.label || plat;
+  const isYouTube = plat === "youtube";
   S.sheet = { kind:"gptprompt", loading:true, data:null, tid };
   render();
   try {
+    // Two things were breaking this: (1) the composition guidance was
+    // written for TikTok-style vertical scroll-stopping framing regardless
+    // of platform, so a YouTube request still came back looking like a
+    // TikTok prompt; (2) words like "photorealistic", "hyper-realistic",
+    // and "logos" — describing real team branding as if reproducing it
+    // exactly — are exactly what trips ChatGPT's own third-party-likeness
+    // guardrail when you paste the prompt back in. Neither is about our
+    // guardrails; it's the receiving tool's, so the fix is in the wording
+    // we hand back, not in loosening anything on our end.
+    const compositionGuidance = isYouTube
+      ? "This is for a YOUTUBE THUMBNAIL: 16:9 landscape, one clear focal subject with a strong readable expression (shock, excitement, intensity — whatever fits the story), bold contrast so it reads as a tiny preview, and open negative space on one side where bold text will be overlaid separately. Avoid busy backgrounds that would compete with overlay text."
+      : "This is for a vertical mobile scroll-stopping image (9:16): tight, immersive framing, bold central subject, dynamic angle, designed to stop a thumb mid-scroll.";
     const raw = await generateText(
-      "You write ONE extremely detailed image-generation prompt for ChatGPT/DALL-E — the kind of prompt a professional would write, with specific composition, subject description, lighting, mood, and framing. If the story centers on a specific real person or named character, describe them by role/appearance/context (jersey number, team colors, setting) rather than assuming the model knows exactly who they are — that's normal practice for image prompts, not a limitation to apologize for. Return ONLY the prompt text, nothing else — no preamble, no quotes around it.",
-      `Platform: ${platLabel}. Story: "${t.headline}". Niche: ${t.niche}. ${t.summary?('Context: '+t.summary):''}\n\nWrite the image prompt someone would paste into ChatGPT to generate a scroll-stopping ${platLabel} thumbnail/image for this exact story.`
+      `You write ONE detailed image-generation prompt for ChatGPT/DALL-E's own image tool. Describe composition, setting, lighting, mood, and framing concretely. If the story centers on a real named person, describe them generically by role, appearance, and context (approximate build, jersey color, setting, action) rather than asserting an exact likeness — and describe team identity by color scheme and general kit style rather than naming or precisely reproducing a specific logo or crest. This isn't a limitation to apologize for, it's just how to phrase it so the prompt doesn't get flagged as reproducing a real trademark or exact likeness when pasted into an image tool. Avoid words like "photorealistic" or "hyper-realistic" paired with real branded/team imagery — describe the artistic style instead (e.g. "cinematic sports photography style"). Return ONLY the prompt text, nothing else — no preamble, no quotes around it.`,
+      `Platform: ${platLabel}. Story: "${t.headline}". Niche: ${t.niche}. ${t.summary?('Context: '+t.summary):''}\n\n${compositionGuidance}\n\nWrite the image prompt for this exact story.`
     );
     S.sheet.data = raw.trim();
   } catch(e){ S.sheet.error = "Something went wrong — try again."; }
