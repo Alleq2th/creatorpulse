@@ -620,28 +620,50 @@ window.gen = async (tid, all) => {
         const isSingle = c === "TikTok No-Face Graphic";
         const cardFormat = isSingle ? "tiktok" : plat;
         const requestedCount = isSingle ? 1 : (S.slideCount[tid] || 4);
-        const bodyCount = Math.max(0, requestedCount - 2);
+        // Only 6+ slides earns a dedicated CTA slide — below that, there's
+        // too little actual story to justify spending a whole slide on
+        // "follow for more" by itself. Instead the CTA gets folded onto the
+        // end of the last content slide (a ctaLine — see statCard.js).
+        const useDedicatedOutro = requestedCount >= 6;
+        const fullSummary = t.summary || "";
+        // Take up to 2 sentences for the hook's supporting text now, not
+        // just 1 — the "little headline" under the big one should actually
+        // explain something, not just tease a fragment.
+        const hookSupport = fullSummary ? fullSummary.split(/(?<=[.!?])\s/).slice(0, 2).join(" ") : "";
+        const hookSlide = { type: "hook", headline: t.headline, supportingText: hookSupport, emphasisLine: 1 };
+        const BODY_PROMPT_SCHEMA = `{"headline":"editorial headline, 4-8 words — communicate the actual news, not just a topic label","sectionLabel":"short label like BACKGROUND or WHAT HAPPENED, else null","body":"2-4 FULL sentences with real specific detail — names, numbers, context, what happens next. Don't summarize vaguely, explain it properly like a real news writer would, else null","stat":"a number/figure from the story if one genuinely exists, else null","statLabel":"what the stat measures, else null","facts":["3-4 short standalone facts, ONLY if the story naturally breaks into a list of distinct points — else omit this field entirely"],"quote":"a real quote from someone in the story, ONLY if the source material actually contains one — else omit this field entirely","quoteAttribution":"who said it, only if quote is set","timeline":[{"label":"a date/stage label","text":"what happened at that point"}],"tag":"a short context tag like a team/event name, else null"}`;
+        const BODY_PROMPT_RULES = `IMPORTANT: each slide should use AT MOST ONE of stat/facts/quote/timeline — never combine them, and never fill one in unless the story genuinely supports it. Never invent a stat, quote, or timeline point that isn't actually in the story. Prioritize substance — every slide should teach the reader something concrete, not just gesture at the topic.`;
+
         let slideArr;
         if(requestedCount === 1){
-          // 1 slide = essential detail only, no hook/outro structure (per
-          // the story-length rule: never stretch a short story artificially).
-          slideArr = [{ type: "hook", headline: t.headline, supportingText: t.summary ? String(t.summary).split(/(?<=[.!?])\s/)[0] : "", emphasisLine: 1 }];
-        } else if(bodyCount === 0){
-          // 2 slides = hook (why care) + outro (takeaway), no body needed.
-          slideArr = [
-            { type: "hook", headline: t.headline, supportingText: t.summary ? String(t.summary).split(/(?<=[.!?])\s/)[0] : "", emphasisLine: 1 },
-            ctaOutroSlide(t.niche)
-          ];
-        } else {
+          // A single slide is the WHOLE post — no second slide to swipe to,
+          // so headline + body + CTA all have to live here together.
           const sr = await generateText(
-            `Return ONLY a valid JSON array of exactly ${bodyCount} body-slide objects (the hook and outro slides are added separately, don't include them): [{"headline":"short punchy headline (max ~6 words)","sectionLabel":"short label like BACKGROUND or WHAT HAPPENED, else null","body":"1-3 concise sentences, else null","stat":"a number/figure from the story if one genuinely exists, else null","statLabel":"what the stat measures, else null","facts":["2-4 short standalone facts, ONLY if the story naturally breaks into a list of distinct points — else omit this field entirely"],"quote":"a real quote from someone in the story, ONLY if the source material actually contains one — else omit this field entirely","quoteAttribution":"who said it, only if quote is set","timeline":[{"label":"a date/stage label","text":"what happened at that point"}],"tag":"a short context tag like a team/event name, else null"}]. IMPORTANT: each slide should use AT MOST ONE of stat/facts/quote/timeline — never combine them, and never fill one in unless the story genuinely supports it. Most slides should just have headline+body and nothing else. Never invent a stat, quote, or timeline point that isn't actually in the story.`,
-            `${category.name} carousel. Story: "${t.headline}". ${t.summary||""}`, tone
+            `Return ONLY a valid JSON object for a single all-in-one post (there is no other slide, this must fully tell the story): {"headline":"a full, complete editorial headline stating the actual news, 6-10 words","body":"3-5 full sentences with real specific detail — names, numbers, context, what happens and why it matters. This is the ONLY slide so it must completely explain the story on its own.","tag":"a short context tag, else null"}.`,
+            `${category.name} single post. Story: "${t.headline}". ${fullSummary}`, tone
+          );
+          const single = extractJSON(sr) || {};
+          slideArr = [{ type: "body", headline: single.headline || t.headline, body: single.body || fullSummary, tag: single.tag || null, ctaLine: "FOLLOW FOR MORE →" }];
+        } else if(!useDedicatedOutro){
+          // 2-5 slides: hook + body slides, CTA folded onto the last body
+          // slide instead of spending a whole separate slide on it.
+          const bodyCount = requestedCount - 1;
+          const sr = await generateText(
+            `Return ONLY a valid JSON array of exactly ${bodyCount} body-slide objects (the hook is added separately, don't include it): [${BODY_PROMPT_SCHEMA}]. ${BODY_PROMPT_RULES}`,
+            `${category.name} carousel. Story: "${t.headline}". ${fullSummary}`, tone
           );
           const bodySlides = (extractJSON(sr) || []).map(s => ({ ...s, type: "body" }));
-          // Hook and outro are always added by us, not left to the model —
-          // this guarantees every carousel has a proper opening beat and a
-          // proper CTA ending, matching the fixed slide-role system.
-          const hookSlide = { type: "hook", headline: t.headline, supportingText: t.summary ? String(t.summary).split(/(?<=[.!?])\s/)[0] : "", emphasisLine: 1 };
+          if(bodySlides.length) bodySlides[bodySlides.length - 1].ctaLine = "FOLLOW FOR MORE →";
+          slideArr = [hookSlide, ...bodySlides];
+        } else {
+          // 6+ slides: there's enough real content that a dedicated CTA
+          // slide at the end doesn't feel like a waste.
+          const bodyCount = requestedCount - 2;
+          const sr = await generateText(
+            `Return ONLY a valid JSON array of exactly ${bodyCount} body-slide objects (the hook and outro slides are added separately, don't include them): [${BODY_PROMPT_SCHEMA}]. ${BODY_PROMPT_RULES}`,
+            `${category.name} carousel. Story: "${t.headline}". ${fullSummary}`, tone
+          );
+          const bodySlides = (extractJSON(sr) || []).map(s => ({ ...s, type: "body" }));
           slideArr = [hookSlide, ...bodySlides, ctaOutroSlide(t.niche)];
         }
         // Real cards (actual text, actual numbers) — not AI-generated art, which
