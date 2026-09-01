@@ -391,9 +391,15 @@ function renderBodySVG(p, f, slide, category, scrimStrength) {
     64 + (slide.body ? bLines.length * bLineH : 0);
   const totalContentH = sectionBlockH + headlineBlockH + middleBlockH;
 
+  // A ctaLine ("FOLLOW FOR MORE →") means this slide is doing double duty as
+  // both the last piece of story AND the carousel's ending — used for short
+  // carousels (under 6 slides) instead of spending an entire separate slide
+  // on a CTA when there's barely been any story yet. Reserve extra room
+  // above the footer for it, and pull the divider up to match.
+  const hasCtaLine = !!slide.ctaLine;
   const headerBottom = f.headerY + 70; // clear of the category header + progress dashes
-  const footerDividerY = f.h - 110;
-  const footerY = f.h - 66;
+  const footerDividerY = f.h - 110 - (hasCtaLine ? 86 : 0);
+  const footerY = f.h - 66 - (hasCtaLine ? 86 : 0);
   const availableH = footerDividerY - 60 - headerBottom;
   const blockTopY = headerBottom + Math.max(0, (availableH - totalContentH) / 2);
 
@@ -430,9 +436,10 @@ function renderBodySVG(p, f, slide, category, scrimStrength) {
     ${slide.sectionLabel ? `<rect x="${m}" y="${sectionLabelY-20}" width="4" height="24" fill="${p.accent}"/><text x="${m+18}" y="${sectionLabelY}" font-family="${FONT_SANS}" font-size="${f.sectionLabelSize}" font-weight="700" letter-spacing="1.5" fill="${p.accent}">${escXml((slide.sectionLabel||"").toUpperCase())}</text>` : ""}
     <text x="${m}" y="${headlineStartY}" font-family="${FONT_SERIF}" font-size="${hSize}" font-weight="400" fill="${p.primaryText}">${tspans(hLines, m, headlineStartY, hLineH)}</text>
     ${middleSVG}
+    ${hasCtaLine ? `<text x="${m}" y="${footerDividerY - 32}" font-family="${FONT_SERIF}" font-size="34" fill="${p.accent}">${escXml((slide.ctaLine||"").toUpperCase())}</text>` : ""}
     <rect x="${m}" y="${footerDividerY}" width="${f.w-2*m}" height="1" fill="${p.muted}" opacity="0.4"/>
     ${slide.tag ? `<rect x="${m}" y="${footerY-32}" width="${40+slide.tag.length*15}" height="44" rx="22" fill="none" stroke="${p.muted}" stroke-width="1.5"/><text x="${m+20}" y="${footerY-4}" font-family="${FONT_SANS}" font-size="22" font-weight="600" letter-spacing="1" fill="${p.secondaryText}">${escXml((slide.tag||"").toUpperCase())}</text>` : ""}
-    ${swipeArrow(p, f, f.w - m, footerY - 4)}
+    ${hasCtaLine ? "" : swipeArrow(p, f, f.w - m, footerY - 4)}
   </svg>`;
 }
 
