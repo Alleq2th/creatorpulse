@@ -227,15 +227,20 @@ function backgroundLayer(p, f, scrimStrength, slideType) {
 function plainHeader(p, f, categoryName, slug, slideNum, totalSlides) {
   const m = f.margin;
   const icon = categoryIconSVG(slug);
+  const isSinglePost = (totalSlides || 1) <= 1;
+  // A carousel-style "1 / 1" counter and progress-dash row read as broken
+  // chrome on a genuinely single post (that's part of what was making the
+  // TikTok single graphic look "weird" — it visually implied a carousel
+  // that never advances). Skip both when there's nothing to progress through.
   const dashCount = Math.max(totalSlides || 1, 1);
   const dashW = 26, dashGap = 6, dashH = 4;
-  const dashes = Array.from({ length: dashCount }).map((_, i) =>
+  const dashes = isSinglePost ? "" : Array.from({ length: dashCount }).map((_, i) =>
     `<rect x="${m + i * (dashW + dashGap)}" y="${f.dashY}" width="${dashW}" height="${dashH}" rx="2" fill="${i < (slideNum||1) ? p.accent : p.muted}" opacity="${i < (slideNum||1) ? 1 : 0.4}"/>`
   ).join("");
   return `
     <g transform="translate(${m},${f.headerY - 20})" color="${p.accent}">${icon}</g>
     <text x="${m + 50}" y="${f.headerY}" font-family="${FONT_SANS}" font-size="26" font-weight="700" fill="${p.primaryText}" letter-spacing="1.5">${escXml((categoryName||"").toUpperCase())}</text>
-    <text x="${f.w - m}" y="${f.headerY}" font-family="${FONT_SANS}" font-size="26" font-weight="700" fill="${p.secondaryText}" text-anchor="end">${slideNum||1} / ${totalSlides||1}</text>
+    ${isSinglePost ? "" : `<text x="${f.w - m}" y="${f.headerY}" font-family="${FONT_SANS}" font-size="26" font-weight="700" fill="${p.secondaryText}" text-anchor="end">${slideNum||1} / ${totalSlides||1}</text>`}
     ${dashes}`;
 }
 
