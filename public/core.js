@@ -578,10 +578,20 @@ function renderTrend(t){
 function renderOut(o, tid, idx){
   if(!o) return "";
   if(o.type === "image"){
-    const badge = o.isRealPhoto
+    // aspect-ratio CSS constrains the preview box so a 9:16 TikTok card
+    // doesn't render at full natural height inside a feed card sized for
+    // a 4:5 carousel slide or square thumbnail — that mismatch (no
+    // constraint at all, previously) is what made the TikTok single card
+    // look oversized. object-fit:contain (not cover) so we never crop off
+    // any of the actual card — cards are precisely laid out, unlike photos.
+    const aspectRatioCSS = o.aspect === "reel" || o.aspect === "tiktok" ? "9/16" : o.aspect === "youtube" ? "16/9" : o.aspect === "carousel" ? "4/5" : "1/1";
+    const badge = o.isCard
+      ? `<span class="ol">Card</span>`
+      : o.isRealPhoto
       ? `<span class="ol" style="color:#6fa062">Real photo${o.sourceLabel?' · '+esc(o.sourceLabel):''}</span>`
       : `<span class="ol">AI-generated</span>`;
-    return `<div class="oc"><div class="oh">${badge}</div><div style="padding:10px"><img loading="lazy" decoding="async" src="${o.img}" style="width:100%;border-radius:6px"/></div><div class="ofoot"><button class="btn bo bxs tipbtn" data-tip="Download image" title="Download image" aria-label="Download image" onclick="dl('${o.img}','image.jpg')">${I.dl} Download</button><button class="btn bo bxs tipbtn" data-tip="Get a detailed prompt for ChatGPT/DALL-E" title="ChatGPT prompt" aria-label="Get ChatGPT prompt" onclick="getChatGPTPrompt('${tid}')">${I.bolt} ChatGPT Prompt</button><button class="btn bp bxs tipbtn" data-tip="Save to library" title="Save to library" aria-label="Save to library" onclick="saveOut('${tid}',${idx})">${I.save} Save</button></div></div>`;
+    const gptBtn = o.isCard ? "" : `<button class="btn bo bxs tipbtn" data-tip="Get a detailed prompt for ChatGPT/DALL-E" title="ChatGPT prompt" aria-label="Get ChatGPT prompt" onclick="getChatGPTPrompt('${tid}')">${I.bolt} ChatGPT Prompt</button>`;
+    return `<div class="oc"><div class="oh">${badge}</div><div style="padding:10px"><img loading="lazy" decoding="async" src="${o.img}" style="width:100%;max-width:280px;margin:0 auto;display:block;aspect-ratio:${aspectRatioCSS};object-fit:contain;border-radius:6px"/></div><div class="ofoot"><button class="btn bo bxs tipbtn" data-tip="Download image" title="Download image" aria-label="Download image" onclick="dl('${o.img}','image.jpg')">${I.dl} Download</button>${gptBtn}<button class="btn bp bxs tipbtn" data-tip="Save to library" title="Save to library" aria-label="Save to library" onclick="saveOut('${tid}',${idx})">${I.save} Save</button></div></div>`;
   }
   if(o.type === "carousel"){
     const slideText = s => [s.headline, s.stat && s.statLabel ? `${s.stat} — ${s.statLabel}` : s.stat, s.sectionLabel, s.body, s.supportingText].filter(Boolean).join("\n");
@@ -644,6 +654,21 @@ window.gen = async (tid, all) => {
         const BODY_ITEM_SCHEMA = `{"headline":"editorial headline, 4-8 words — communicate the actual news, not just a topic label","sectionLabel":"short label like BACKGROUND or WHAT HAPPENED, else null","body":"2-4 FULL sentences with real specific detail — names, numbers, context, what happens next. Don't summarize vaguely, explain it properly like a real news writer would, else null","stat":"a number/figure from the story if one genuinely exists, else null","statLabel":"what the stat measures, else null","facts":["3-4 short standalone facts, ONLY if the story naturally breaks into a list of distinct points — else omit this field entirely"],"quote":"a real quote from someone in the story, ONLY if the source material actually contains one — else omit this field entirely","quoteAttribution":"who said it, only if quote is set","timeline":[{"label":"a date/stage label","text":"what happened at that point"}],"tag":"a short context tag like a team/event name, else null"}`;
         const REWRITE_RULES = `You are REWRITING this into a proper editorial carousel, not mechanically splitting the source text across slides — rephrase in clear, engaging, well-written English, and never cut a sentence off mid-thought at a slide boundary. Each slide should use AT MOST ONE of stat/facts/quote/timeline — never combine them, never fill one in unless the story genuinely supports it, never invent a stat/quote/timeline point that isn't actually in the source. Prioritize substance — every slide should teach the reader something concrete.`;
 
+        // Generation occasionally returns fewer slide objects than asked —
+        // usually a truncated/malformed response rather than the model
+        // deliberately ignoring the count. One retry with a blunter
+        // instruction recovers most of these instead of silently shipping
+        // a shorter carousel than what was selected.
+        async function generateSlidesWithCount(prompt, ctx, tone, wantCount) {
+          for (let attempt = 0; attempt < 2; attempt++) {
+            const p = attempt === 0 ? prompt : prompt + ` CRITICAL: your last response did not contain exactly ${wantCount} items — count them before responding, the "slides" array MUST have exactly ${wantCount} entries, no more, no fewer.`;
+            const sr = await generateText(p, ctx, tone);
+            const parsed = extractJSON(sr) || {};
+            const slides = asArray(parsed.slides);
+            if (slides.length === wantCount || attempt === 1) return { parsed, slides };
+          }
+        }
+
         let slideArr;
         if(requestedCount === 1){
           // A single slide is the WHOLE post — no second slide to swipe to,
@@ -661,12 +686,10 @@ window.gen = async (tid, all) => {
           // rewritten story instead of a hardcoded headline stitched to
           // separately-generated body slides.
           const bodyCount = requestedCount - 1;
-          const sr = await generateText(
-            `Return ONLY a valid JSON object: {${HOOK_SCHEMA},"slides":[array of exactly ${bodyCount} objects, each shaped like ${BODY_ITEM_SCHEMA}]}. ${REWRITE_RULES}`,
-            `${category.name} carousel. Raw source headline: "${t.headline}". Full source text: ${sourceText}`, tone
-          );
-          const parsed = extractJSON(sr) || {};
-          const bodySlides = asArray(parsed.slides).map(s => ({ ...s, type: "body" }));
+          const promptStr = `Return ONLY a valid JSON object: {${HOOK_SCHEMA},"slides":[array of exactly ${bodyCount} objects, each shaped like ${BODY_ITEM_SCHEMA}]}. ${REWRITE_RULES}`;
+          const ctxStr = `${category.name} carousel. Raw source headline: "${t.headline}". Full source text: ${sourceText}`;
+          const { parsed, slides: rawSlides } = await generateSlidesWithCount(promptStr, ctxStr, tone, bodyCount);
+          const bodySlides = rawSlides.map(s => ({ ...s, type: "body" }));
           if(bodySlides.length) bodySlides[bodySlides.length - 1].ctaLine = "FOLLOW FOR MORE →";
           const hookSlide = { type: "hook", headline: parsed.hookHeadline || t.headline, supportingText: parsed.hookTease || sourceText.split(/(?<=[.!?])\s/).slice(0,2).join(" "), emphasisLine: 1 };
           slideArr = [hookSlide, ...bodySlides];
@@ -674,12 +697,10 @@ window.gen = async (tid, all) => {
           // 6+ slides: there's enough real content that a dedicated CTA
           // slide at the end doesn't feel like a waste.
           const bodyCount = requestedCount - 2;
-          const sr = await generateText(
-            `Return ONLY a valid JSON object: {${HOOK_SCHEMA},"slides":[array of exactly ${bodyCount} objects, each shaped like ${BODY_ITEM_SCHEMA}]}. The outro slide is added separately, don't include it. ${REWRITE_RULES}`,
-            `${category.name} carousel. Raw source headline: "${t.headline}". Full source text: ${sourceText}`, tone
-          );
-          const parsed = extractJSON(sr) || {};
-          const bodySlides = asArray(parsed.slides).map(s => ({ ...s, type: "body" }));
+          const promptStr = `Return ONLY a valid JSON object: {${HOOK_SCHEMA},"slides":[array of exactly ${bodyCount} objects, each shaped like ${BODY_ITEM_SCHEMA}]}. The outro slide is added separately, don't include it. ${REWRITE_RULES}`;
+          const ctxStr = `${category.name} carousel. Raw source headline: "${t.headline}". Full source text: ${sourceText}`;
+          const { parsed, slides: rawSlides } = await generateSlidesWithCount(promptStr, ctxStr, tone, bodyCount);
+          const bodySlides = rawSlides.map(s => ({ ...s, type: "body" }));
           const hookSlide = { type: "hook", headline: parsed.hookHeadline || t.headline, supportingText: parsed.hookTease || sourceText.split(/(?<=[.!?])\s/).slice(0,2).join(" "), emphasisLine: 1 };
           slideArr = [hookSlide, ...bodySlides, ctaOutroSlide(t.niche)];
         }
