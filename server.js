@@ -978,24 +978,47 @@ const TONE_PROMPTS = {
 app.post("/api/generate", heavyLimiter, async (req, res) => {
   const { system, user, tone } = req.body;
   const toneAdd = tone && TONE_PROMPTS[tone] ? `\n\nTONE DIRECTION: ${TONE_PROMPTS[tone]}` : "";
-  try {
-    const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${GROQ_KEY}` },
-      body: JSON.stringify({
-        model: "openai/gpt-oss-120b",
-        messages: [
-          { role: "system", content: (system || "") + toneAdd },
-          { role: "user", content: user }
-        ],
-        max_tokens: 1200,
-        temperature: 0.85
-      })
-    });
-    const d = await r.json();
-    if (d.error) return res.status(500).json({ error: d.error.message || "Groq API error", text: "" });
-    res.json({ text: d.choices?.[0]?.message?.content || "" });
-  } catch (e) { res.status(500).json({ error: e.message, text: "" }); }
+  // One retry on a 429 from Groq itself (their rate limit, not ours — our
+  // own heavyLimiter allows 60/hour, so a 429 this soon is always upstream).
+  // A short backoff clears most transient rate-limit hits from generating
+  // a few carousels back to back.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${GROQ_KEY}` },
+        body: JSON.stringify({
+          model: "openai/gpt-oss-120b",
+          messages: [
+            { role: "system", content: (system || "") + toneAdd },
+            { role: "user", content: user }
+          ],
+          // Raised from 1200 — a rewritten hook plus several detailed body
+          // slides (headline+body+optional facts/quote/timeline each) in one
+          // JSON response was running past the old cap on larger slide
+          // counts, truncating mid-JSON and silently producing fewer slides
+          // than requested.
+          max_tokens: 2600,
+          temperature: 0.85
+        })
+      });
+      if (r.status === 429 && attempt === 0) {
+        await new Promise(res => setTimeout(res, 1500));
+        continue;
+      }
+      const d = await r.json();
+      if (d.error) {
+        const isRateLimit = r.status === 429 || /rate.?limit/i.test(d.error.message || "");
+        return res.status(isRateLimit ? 429 : 500).json({
+          error: isRateLimit ? "Generation service is busy right now — wait a few seconds and try again." : (d.error.message || "Groq API error"),
+          text: ""
+        });
+      }
+      return res.json({ text: d.choices?.[0]?.message?.content || "" });
+    } catch (e) {
+      if (attempt === 1) return res.status(500).json({ error: e.message, text: "" });
+    }
+  }
 });
 
 // ── IMAGE GENERATION ────────────────────────────────────────────────────────
