@@ -34,7 +34,7 @@ const FORMATS = {
     hookSupportGap: 56, hookSupportSize: 32, hookSupportLine: 44, hookSupportChars: 56, hookSupportMaxLines: 3,
     statY: 470, statSize: 210, statLabelGap: 46, statLabelSize: 26,
     bodyHeadlineSize: 66, bodyHeadlineLine: 74, bodyHeadlineChars: 23, bodyHeadlineMaxLines: 3,
-    sectionLabelSize: 24, bodyTextSize: 28, bodyTextLine: 40, bodyTextChars: 58, bodyTextMaxLines: 6,
+    sectionLabelSize: 24, bodyTextSize: 28, bodyTextLine: 40, bodyTextChars: 58, bodyTextMaxLines: 10,
     outroHeadlineSize: 76, outroHeadlineLine: 84, outroHeadlineChars: 17, outroMaxLines: 4,
   },
   tiktok: {
@@ -45,7 +45,7 @@ const FORMATS = {
     hookSupportGap: 60, hookSupportSize: 34, hookSupportLine: 46, hookSupportChars: 52, hookSupportMaxLines: 3,
     statY: 620, statSize: 240, statLabelGap: 50, statLabelSize: 28,
     bodyHeadlineSize: 72, bodyHeadlineLine: 80, bodyHeadlineChars: 21, bodyHeadlineMaxLines: 3,
-    sectionLabelSize: 26, bodyTextSize: 30, bodyTextLine: 44, bodyTextChars: 52, bodyTextMaxLines: 7,
+    sectionLabelSize: 26, bodyTextSize: 30, bodyTextLine: 44, bodyTextChars: 52, bodyTextMaxLines: 14,
     outroHeadlineSize: 84, outroHeadlineLine: 92, outroHeadlineChars: 16, outroMaxLines: 4,
   }
 };
