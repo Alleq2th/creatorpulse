@@ -443,19 +443,45 @@ function trendPostBefore(t){
   return base + hours*3600000;
 }
 function trendBestPlatform(t){
+  // Was a first-match if-chain checking a handful of keywords — most
+  // ordinary headlines (especially sports news) never hit any of those
+  // words, so it silently fell through to "just use your primary platform"
+  // most of the time without you knowing that's what was happening. This
+  // scores every platform against several signal groups and picks whichever
+  // actually has the strongest match — still a heuristic, not a trained
+  // model, but a much more honest attempt than "first regex that hits wins."
   const plats = S.user?.platforms || ['instagram'];
   const hay = ((t.headline||'')+' '+(t.summary||'')).toLowerCase();
-  if(/dance|challenge|viral|tiktok/.test(hay) && plats.includes('tiktok')) return 'tiktok';
-  if(/photo|carousel|aesthetic|fashion/.test(hay) && plats.includes('instagram')) return 'instagram';
-  if(/explain|breakdown|analysis|review/.test(hay) && plats.includes('youtube')) return 'youtube';
-  if(/take|debate|breaking/.test(hay) && plats.includes('twitter')) return 'twitter';
+  const scores = { tiktok:0, instagram:0, youtube:0, twitter:0 };
+  // Reaction/entertainment/shock-driven stories are TikTok's strength
+  if (/viral|dance|challenge|meme|reacts?|shocking|stuns|wild|insane|hilarious|prank/.test(hay)) scores.tiktok += 3;
+  // Stat-heavy / list-like / visual stories fit a carousel well
+  if (/\d+%|\$\d|record|stats?|numbers|ranking|top \d|list of/.test(hay)) scores.instagram += 3;
+  if (/photo|aesthetic|fashion|style|design|behind the scenes/.test(hay)) scores.instagram += 2;
+  // In-depth/explainer content favors YouTube's longer format
+  if (/explain|breakdown|analysis|review|documentary|deep dive|how .* works|why .* happened/.test(hay)) scores.youtube += 3;
+  // Hot takes/opinion/debate/breaking fit a fast, conversational format
+  if (/breaking|takes?|debate|slams|blasts|responds|reacts to|opinion/.test(hay)) scores.twitter += 3;
+  // A story with a genuinely high content score (corroborated by multiple
+  // outlets, uses high-impact language) reads better as a real-time take or
+  // an explainer than a purely visual carousel post
+  if ((t.score||0) >= 85) { scores.twitter += 1; scores.youtube += 1; }
+
+  const ranked = Object.entries(scores).filter(([p]) => plats.includes(p)).sort((a,b)=>b[1]-a[1]);
+  if (ranked.length && ranked[0][1] > 0) return ranked[0][0];
   return S.user?.primaryPlatform || plats[0] || 'instagram';
 }
 function trendOpportunity(t){
+  // Recalibrated for the real content-score range (40-99, typically 55-85)
+  // now coming from the server — the old formula (score + boost - 40) was
+  // tuned for scores that were almost always 80-99 (randomly generated), so
+  // it would read as artificially low against real scores. This isn't a
+  // trained prediction — it's the same honest heuristic combination as
+  // before, just scaled to match what the score actually means now.
   const v = trendVelocity(t);
-  const s = t.score || 90;
+  const s = t.score || 55;
   const boost = v.state==='rising'? 8 : v.state==='peaking'? 0 : -18;
-  return Math.max(20, Math.min(100, s + boost - 40));
+  return Math.max(15, Math.min(97, Math.round(0.6*s + boost*2 + 15)));
 }
 
 
