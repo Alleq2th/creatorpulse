@@ -797,14 +797,44 @@ async function fetchCurrents(query) {
 // niche will often surface the identical wire story. Compare a normalized
 // prefix of the headline rather than an exact match, since sources phrase
 // the same headline slightly differently (punctuation, outlet name suffix).
+// Now also counts how many distinct sources reported it — real
+// corroboration signal, used below instead of a random number.
 function dedupeByHeadline(articles) {
-  const seen = new Set();
-  return articles.filter(a => {
+  const groups = new Map();
+  for (const a of articles) {
     const key = (a.title || "").toLowerCase().replace(/[^a-z0-9 ]/g, "").trim().slice(0, 40);
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+    if (!key) continue;
+    if (!groups.has(key)) groups.set(key, { ...a, sourceCount: 1 });
+    else groups.get(key).sourceCount++;
+  }
+  return [...groups.values()];
+}
+
+// Replaces the old random score generator everywhere a "how big is this
+// story" number is needed. Not a trained model — it's an honest heuristic
+// built from signals we can actually observe: does the text use language
+// that correlates with genuinely newsworthy stories, is it corroborated by
+// more than one outlet, and is it fresh. That's a real (if rough) signal,
+// unlike a random number dressed up as a percentage.
+const IMPACT_KEYWORDS = [
+  "breaking","confirmed","official","record","historic","fired","sacked","quits","resigns",
+  "banned","suspended","dies","retires","walks out","stuns","shock","slams","blasts","erupts",
+  "viral","backlash","controversy","scandal","exclusive","leaked","unprecedented","first time",
+  "makes history","sets record","world record","under fire","steps down","announces"
+];
+function computeContentScore(text, { sourceCount = 1, publishedAt } = {}) {
+  const hay = (text || "").toLowerCase();
+  let hits = 0;
+  for (const w of IMPACT_KEYWORDS) if (hay.includes(w)) hits++;
+  const impactBonus = Math.min(hits * 4, 20);
+  const corroborationBonus = Math.min((sourceCount - 1) * 8, 16);
+  let recencyBonus = 0;
+  if (publishedAt) {
+    const ageHours = (Date.now() - new Date(publishedAt).getTime()) / 3600000;
+    if (ageHours < 3) recencyBonus = 6;
+    else if (ageHours < 12) recencyBonus = 2;
+  }
+  return Math.max(40, Math.min(99, 55 + impactBonus + corroborationBonus + recencyBonus));
 }
 
 // ── NEWS ────────────────────────────────────────────────────────────────────
@@ -852,7 +882,7 @@ app.get("/api/news", async (req, res) => {
             image: a.image || null,
             url: a.url,
             source: a.source || "",
-            score: Math.max(70, 99 - i * 2),
+            score: computeContentScore(`${a.title} ${a.summary}`, { sourceCount: a.sourceCount, publishedAt: a.publishedAt }),
             tags: extractTags(a.title, niche),
             timestamp: new Date(a.publishedAt || Date.now()).getTime()
           };
@@ -883,7 +913,7 @@ app.get("/api/news", async (req, res) => {
         image: sourceImage,
         url: item.link,
         source: feed.title || "",
-        score: Math.floor(Math.random() * 15) + 80,
+        score: computeContentScore(`${item.title} ${item.contentSnippet||""}`, { publishedAt: item.isoDate }),
         tags: extractTags(item.title, niche),
         timestamp: new Date(item.isoDate || Date.now()).getTime()
       };
@@ -923,7 +953,7 @@ app.get("/api/blog-feed", async (req, res) => {
           image: imageUrl,
           url: item.link,
           source: feed.title || feedUrl,
-          score: 88 + Math.floor(Math.random() * 12),
+          score: computeContentScore(`${item.title} ${item.contentSnippet||""}`, { publishedAt: item.isoDate }),
           tags: ["Blog", ...extractTags(item.title, niche)],
           timestamp: new Date(item.isoDate || Date.now()).getTime()
         };
@@ -965,7 +995,7 @@ app.get("/api/twitter-feed", async (req, res) => {
           image: imageUrl,
           url: item.link,
           source: `@${handle}`,
-          score: 92 + Math.floor(Math.random() * 8),
+          score: computeContentScore(`${item.title} ${item.contentSnippet||""}`, { publishedAt: item.isoDate }),
           tags: ["Twitter"],
           niche: niche || "News",
           timestamp: new Date(item.isoDate || Date.now()).getTime()
