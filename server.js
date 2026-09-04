@@ -1,5 +1,6 @@
 // CreatorPulse server — production build
 // Env required on Render: GROQ_API_KEY, HF_API_KEY, NEWS_API_KEY,
+//                         NEWSDATA_API_KEY, CURRENTS_API_KEY,
 //                         SUPABASE_URL, SUPABASE_SERVICE_KEY,
 //                         GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
 //                         GOOGLE_REDIRECT_URI, FRONTEND_URL
@@ -168,6 +169,8 @@ app.get("/api/health", (_req, res) => {
 const GROQ_KEY = process.env.GROQ_API_KEY;
 const HF_KEY = process.env.HF_API_KEY;
 const NEWS_KEY = process.env.NEWS_API_KEY;
+const NEWSDATA_KEY = process.env.NEWSDATA_API_KEY;
+const CURRENTS_KEY = process.env.CURRENTS_API_KEY;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
@@ -752,6 +755,58 @@ function extractTags(title, niche) {
   return [niche.split("/")[0], ...words.slice(0, 2)];
 }
 
+// NewsData.io — 79,000+ sources across 206 countries, free tier gives 200
+// requests/day. Merged alongside NewsAPI (not just a fallback) so total
+// volume per niche actually goes up, not just redundancy if one fails.
+async function fetchNewsData(query) {
+  if (!NEWSDATA_KEY) return [];
+  try {
+    const url = `https://newsdata.io/api/1/latest?apikey=${NEWSDATA_KEY}&q=${encodeURIComponent(query)}&language=en`;
+    const r = await fetch(url);
+    const d = await r.json();
+    return (d.results || []).map(a => ({
+      title: a.title || "",
+      summary: a.description || (a.content ? a.content.slice(0, 1600) : ""),
+      image: a.image_url || null,
+      url: a.link,
+      source: a.source_id || "NewsData",
+      publishedAt: a.pubDate
+    }));
+  } catch (e) { return []; }
+}
+
+// Currents API — 14,000+ sources, free tier gives 600 requests/day.
+async function fetchCurrents(query) {
+  if (!CURRENTS_KEY) return [];
+  try {
+    const url = `https://api.currentsapi.services/v1/search?apiKey=${CURRENTS_KEY}&keywords=${encodeURIComponent(query)}&language=en`;
+    const r = await fetch(url);
+    const d = await r.json();
+    return (d.news || []).map(a => ({
+      title: a.title || "",
+      summary: a.description || "",
+      image: (a.image && a.image !== "None") ? a.image : null,
+      url: a.url,
+      source: a.author || "Currents",
+      publishedAt: a.published
+    }));
+  } catch (e) { return []; }
+}
+
+// Same-story dedup across merged sources — three APIs covering the same
+// niche will often surface the identical wire story. Compare a normalized
+// prefix of the headline rather than an exact match, since sources phrase
+// the same headline slightly differently (punctuation, outlet name suffix).
+function dedupeByHeadline(articles) {
+  const seen = new Set();
+  return articles.filter(a => {
+    const key = (a.title || "").toLowerCase().replace(/[^a-z0-9 ]/g, "").trim().slice(0, 40);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 // ── NEWS ────────────────────────────────────────────────────────────────────
 app.get("/api/news", async (req, res) => {
   const { niche } = req.query;
@@ -761,38 +816,51 @@ app.get("/api/news", async (req, res) => {
   if (_hit) return res.json(_hit);
   const query = NICHE_QUERIES[niche] || niche;
   try {
-    if (NEWS_KEY && NEWS_KEY !== "YOUR_NEWS_KEY_HERE") {
-      const url = `https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&sortBy=publishedAt&pageSize=25&language=en&apiKey=${NEWS_KEY}`;
-      const r = await fetch(url);
-      const data = await r.json();
-      if (data.articles?.length) {
-        const normalized = data.articles.map(a => ({
-          title: a.title || "",
-          summary: a.description || (a.content ? a.content.slice(0, 1600) : ""),
-          _raw: a
-        }));
-        const kept = filterAndScoreArticles(normalized, niche).slice(0, 20);
-        if (kept.length) {
-          const articles = kept.map((k, i) => {
-            const a = k._raw;
-            return {
-              id: `${niche.replace(/\s/g, "_")}_${i}_${Date.now()}`,
-              niche,
-              headline: a.title,
-              summary: a.description || (a.content ? a.content.slice(0, 1600) : ""),
-              image: a.urlToImage || null,
-              url: a.url,
-              source: a.source?.name || "",
-              score: Math.max(70, 99 - i * 2),
-              tags: extractTags(a.title, niche),
-              timestamp: new Date(a.publishedAt || Date.now()).getTime()
-            };
-          });
-          cacheSet(_ck, { articles }, 10*60*1000); return res.json({ articles });
-        }
+    // All three keyed sources fire in parallel and get merged — this is
+    // additive volume, not a fallback chain, so a single niche request can
+    // actually clear ~20+ live results instead of being capped by whatever
+    // one provider alone returns.
+    const newsApiPromise = (NEWS_KEY && NEWS_KEY !== "YOUR_NEWS_KEY_HERE")
+      ? fetch(`https://newsapi.org/v2/everything?q=${encodeURIComponent(query)}&sortBy=publishedAt&pageSize=25&language=en&apiKey=${NEWS_KEY}`)
+          .then(r => r.json())
+          .then(d => (d.articles || []).map(a => ({
+            title: a.title || "", summary: a.description || (a.content ? a.content.slice(0, 1600) : ""),
+            image: a.urlToImage || null, url: a.url, source: a.source?.name || "", publishedAt: a.publishedAt
+          })))
+          .catch(() => [])
+      : Promise.resolve([]);
+
+    const [fromNewsApi, fromNewsData, fromCurrents] = await Promise.all([
+      newsApiPromise, fetchNewsData(query), fetchCurrents(query)
+    ]);
+
+    const merged = dedupeByHeadline([...fromNewsApi, ...fromNewsData, ...fromCurrents]);
+
+    if (merged.length) {
+      const normalized = merged.map(a => ({ title: a.title, summary: a.summary, _raw: a }));
+      // Raised from 20 — with three sources merged there's enough real
+      // volume now to comfortably clear "at least 20 live" after filtering.
+      const kept = filterAndScoreArticles(normalized, niche).slice(0, 30);
+      if (kept.length) {
+        const articles = kept.map((k, i) => {
+          const a = k._raw;
+          return {
+            id: `${niche.replace(/\s/g, "_")}_${i}_${Date.now()}`,
+            niche,
+            headline: a.title,
+            summary: a.summary,
+            image: a.image || null,
+            url: a.url,
+            source: a.source || "",
+            score: Math.max(70, 99 - i * 2),
+            tags: extractTags(a.title, niche),
+            timestamp: new Date(a.publishedAt || Date.now()).getTime()
+          };
+        });
+        cacheSet(_ck, { articles }, 10*60*1000); return res.json({ articles });
       }
     }
-    // RSS fallback (BBC/etc)
+    // RSS fallback (BBC/etc) — only if all three keyed sources came back empty
     const rssUrl = NICHE_RSS[niche] || NICHE_RSS.default;
     const feed = await parser.parseURL(rssUrl);
     const normalized = (feed.items || []).map(item => ({
