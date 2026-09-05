@@ -306,9 +306,10 @@ function detectBodyVariant(slide) {
   if (slide.quote && String(slide.quote).trim()) return "quote";
   if (Array.isArray(slide.timeline) && slide.timeline.length) return "timeline";
   if (Array.isArray(slide.facts) && slide.facts.length) return "facts";
-  // Comparison beats a plain announcement or single stat — "X vs Y" is a
-  // more specific, more informative shape than either when two figures
-  // are genuinely being weighed against each other.
+  // Reaction beats comparison/announcement/stat — a claim-and-response
+  // dynamic is a stronger, more specific signal than any of those when it's
+  // genuinely present in the source.
+  if (slide.claim && String(slide.claim).trim()) return "reaction";
   if (slide.compareA && slide.compareB) return "comparison";
   if (slide.action && String(slide.action).trim()) return "announcement";
   if (slide.stat != null && String(slide.stat).trim() !== "") return "stat";
@@ -396,6 +397,46 @@ function renderComparison(m, f, p, compareA, compareB, note, startY) {
   return out.join("");
 }
 
+// Reaction/controversy — for the "claim → response" story shape: a
+// statement or move (from a person, brand, or org) followed by how people
+// are responding to it. Structurally different from the Quote layout
+// (which renders one real, attributed quotation) — this is about the
+// dynamic between a claim and its reaction, and the claim itself doesn't
+// need to be a verbatim quote.
+function measureReaction(f, claim, reaction, reactionTag) {
+  const claimSize = Math.round(f.bodyTextSize * 1.15);
+  const claimLineH = Math.round(claimSize * 1.32);
+  const claimLines = wrapWords(String(claim||""), Math.round(f.bodyTextChars * 0.85)).slice(0, 3);
+  const reactionLines = reaction ? wrapWords(String(reaction), f.bodyTextChars).slice(0, 3) : [];
+  const tagH = reactionTag ? 60 : 0;
+  const claimH = claimLines.length * claimLineH;
+  const reactionH = reactionLines.length ? 28 + reactionLines.length * f.bodyTextLine : 0;
+  return { claimLines, claimSize, claimLineH, reactionLines, height: tagH + claimH + (reactionLines.length ? reactionH : 0) };
+}
+function renderReaction(m, f, p, claim, reaction, reactionTag, startY) {
+  const { claimLines, claimSize, claimLineH, reactionLines } = measureReaction(f, claim, reaction, reactionTag);
+  let y = startY;
+  const out = [];
+  const railX = m + 4;
+  if (reactionTag) {
+    const label = String(reactionTag).toUpperCase();
+    const pillW = 40 + label.length * 15;
+    out.push(`<rect x="${m}" y="${y-32}" width="${pillW}" height="44" rx="22" fill="none" stroke="${p.accent}" stroke-width="1.5"/>`);
+    out.push(`<text x="${m+20}" y="${y-4}" font-family="${FONT_SANS}" font-size="22" font-weight="600" letter-spacing="1" fill="${p.accent}">${escXml(label)}</text>`);
+    y += 40;
+  }
+  out.push(`<line x1="${railX}" y1="${y}" x2="${railX}" y2="${y + claimLines.length*claimLineH}" stroke="${p.muted}" stroke-width="3" opacity="0.5"/>`);
+  const claimY = y + claimSize * 0.85;
+  out.push(`<text x="${m+24}" y="${claimY}" font-family="${FONT_SANS}" font-size="${claimSize}" font-weight="700" fill="${p.primaryText}">${tspans(claimLines, m+24, claimY, claimLineH)}</text>`);
+  y = claimY + (claimLines.length - 1) * claimLineH + 34;
+  if (reactionLines.length) {
+    const reactionSize = Math.round(f.bodyTextSize * 0.92);
+    const reactionY = y + reactionSize * 0.9;
+    out.push(`<text x="${m}" y="${reactionY}" font-family="${FONT_SANS}" font-size="${reactionSize}" font-style="italic" fill="${p.secondaryText}">${tspans(reactionLines, m, reactionY, f.bodyTextLine)}</text>`);
+  }
+  return out.join("");
+}
+
 function measureFacts(f, facts) {
   const rows = facts.slice(0, 4).map(fact => wrapWords(String(fact), f.bodyTextChars).slice(0, 2));
   const rowH = rows.map(lines => 26 + lines.length * f.bodyTextLine * 0.82);
@@ -473,6 +514,7 @@ function renderBodySVG(p, f, slide, category, scrimStrength) {
   const quoteData = variant === "quote" ? measureQuote(f, slide.quote, slide.quoteAttribution) : null;
   const announcementData = variant === "announcement" ? measureAnnouncement(f, slide.subject, slide.action, slide.outcome) : null;
   const comparisonData = variant === "comparison" ? measureComparison(f, slide.compareA, slide.compareB, slide.comparisonNote) : null;
+  const reactionData = variant === "reaction" ? measureReaction(f, slide.claim, slide.reaction, slide.reactionTag) : null;
 
   const sectionBlockH = slide.sectionLabel ? 56 : 0;
   const headlineBlockH = hLines.length * hLineH;
@@ -482,6 +524,7 @@ function renderBodySVG(p, f, slide, category, scrimStrength) {
     variant === "facts" ? 64 + factsData.height :
     variant === "announcement" ? 40 + announcementData.height :
     variant === "comparison" ? 40 + comparisonData.height :
+    variant === "reaction" ? 40 + reactionData.height :
     variant === "stat" ? 64 + statFontSize * 0.78 + f.statLabelGap + 60 + (slide.body ? 60 + bLines.length * bLineH : 0) :
     64 + (slide.body ? bLines.length * bLineH : 0);
   const totalContentH = sectionBlockH + headlineBlockH + middleBlockH;
@@ -514,6 +557,8 @@ function renderBodySVG(p, f, slide, category, scrimStrength) {
     middleSVG = renderAnnouncement(m, f, p, slide.subject, slide.action, slide.outcome, afterHeadlineY + 10);
   } else if (variant === "comparison") {
     middleSVG = renderComparison(m, f, p, slide.compareA, slide.compareB, slide.comparisonNote, afterHeadlineY + 10);
+  } else if (variant === "reaction") {
+    middleSVG = renderReaction(m, f, p, slide.claim, slide.reaction, slide.reactionTag, afterHeadlineY + 10);
   } else if (variant === "stat") {
     const statBaseline = afterHeadlineY + statFontSize * 0.78;
     const statLabelY = statBaseline + f.statLabelGap;
@@ -638,18 +683,39 @@ async function coverFromLocalFile(filePath, w, h) {
   }
 }
 
+// Cover-crops + measures brightness for a user-uploaded image (sent from
+// the browser as a base64 data URL), mirroring fetchCoverImage's output
+// shape so all three background sources — user upload, live article photo,
+// local niche library — are interchangeable through the same scrim pipeline.
+async function coverFromBase64(dataUrl, w, h) {
+  try {
+    const base64 = String(dataUrl).replace(/^data:image\/\w+;base64,/, "");
+    const buf = Buffer.from(base64, "base64");
+    const cover = await sharp(buf).resize(w, h, { fit: "cover", position: "attention" }).jpeg({ quality: 90 }).toBuffer();
+    const stats = await sharp(cover).stats();
+    const avgLum = stats.channels.slice(0, 3).reduce((s, c) => s + c.mean, 0) / 3 / 255;
+    return { buffer: cover, brightness: avgLum };
+  } catch (e) {
+    return null;
+  }
+}
+
 async function renderStatCard(slide, category, paletteKey, format, imageUrl) {
   const p = resolvePalette(paletteKey);
   const f = resolveFormat(format);
   const type = resolveType(slide, (slide.slideNumber || 1) - 1, slide.totalSlides || 1);
   const cat = typeof category === "string" ? { displayName: category, slug: "default" } : (category || { displayName: "", slug: "default" });
 
-  // Mode B: photo + adaptive scrim. Falls back through: live article photo
-  // (hook slide only — that photo is tied to the specific news story, so it
-  // doesn't belong on generic body/outro slides) → local niche background
-  // library (any slide type, picked fresh per slide so a carousel doesn't
-  // reuse the same image 6 times) → Mode A gradient + decorative texture.
-  let cover = type === "hook" ? await fetchCoverImage(imageUrl, f.w, f.h) : null;
+  // Mode B: photo + adaptive scrim. Priority order: a user's own uploaded
+  // image for THIS specific slide always wins — that's a deliberate choice,
+  // not something the auto-sourcing should override — then falls back
+  // through: live article photo (hook slide only — that photo is tied to
+  // the specific news story, so it doesn't belong on generic body/outro
+  // slides) → local niche background library (any slide type, picked fresh
+  // per slide so a carousel doesn't reuse the same image 6 times) →
+  // Mode A gradient + decorative texture.
+  let cover = slide.customImage ? await coverFromBase64(slide.customImage, f.w, f.h) : null;
+  if (!cover && type === "hook") cover = await fetchCoverImage(imageUrl, f.w, f.h);
   if (!cover) {
     const localPath = pickLocalBackground(cat.slug, type);
     if (localPath) cover = await coverFromLocalFile(localPath, f.w, f.h);
