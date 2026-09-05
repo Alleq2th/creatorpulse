@@ -306,8 +306,54 @@ function detectBodyVariant(slide) {
   if (slide.quote && String(slide.quote).trim()) return "quote";
   if (Array.isArray(slide.timeline) && slide.timeline.length) return "timeline";
   if (Array.isArray(slide.facts) && slide.facts.length) return "facts";
+  // Announcement takes priority over a bare stat — "who did what, and why
+  // it matters" is a stronger, more universal narrative shape than a lone
+  // number, and it applies identically across every niche: a signing, a
+  // product launch, a policy change, a celebrity move, a market decision.
+  if (slide.action && String(slide.action).trim()) return "announcement";
   if (slide.stat != null && String(slide.stat).trim() !== "") return "stat";
   return "standard";
+}
+
+// Three-beat composition: SUBJECT (who/what entity) → ACTION (the event
+// itself, given real visual weight) → OUTCOME (why it matters). Deliberately
+// decomposed into three separate visual beats connected by a thin rail,
+// instead of one continuous paragraph — that decomposition is what makes an
+// announcement scannable in under a second instead of read top to bottom.
+function measureAnnouncement(f, subject, action, outcome) {
+  // Sans-serif, not the Anton headline font — using the same bold display
+  // font at a slightly smaller size still reads as a second competing
+  // headline stacked under the real one. This needs to sit clearly
+  // subordinate to the headline, not rival it.
+  const actionSize = Math.round(f.bodyTextSize * 1.35);
+  const actionLineH = Math.round(actionSize * 1.32);
+  const actionLines = wrapWords(String(action||""), Math.round(f.bodyTextChars * 0.92)).slice(0, 3);
+  const outcomeLines = outcome ? wrapWords(String(outcome), f.bodyTextChars).slice(0, 3) : [];
+  const subjectH = subject ? 46 : 0;
+  const actionH = actionLines.length * actionLineH;
+  const outcomeH = outcomeLines.length ? 30 + outcomeLines.length * f.bodyTextLine : 0;
+  return { actionLines, actionSize, actionLineH, outcomeLines, height: subjectH + 28 + actionH + (outcomeLines.length ? outcomeH : 0) };
+}
+function renderAnnouncement(m, f, p, subject, action, outcome, startY) {
+  const { actionLines, actionSize, actionLineH, outcomeLines } = measureAnnouncement(f, subject, action, outcome);
+  let y = startY;
+  const out = [];
+  const railX = m + 4;
+  if (subject) {
+    out.push(`<text x="${m}" y="${y}" font-family="${FONT_SANS}" font-size="24" font-weight="700" letter-spacing="1.5" fill="${p.accent}">${escXml((subject||"").toUpperCase())}</text>`);
+    out.push(`<line x1="${railX}" y1="${y+14}" x2="${railX}" y2="${y+46}" stroke="${p.accent}" stroke-width="2" opacity="0.5"/>`);
+    y += 46;
+  }
+  const actionY = y + actionSize * 0.85;
+  out.push(`<text x="${m}" y="${actionY}" font-family="${FONT_SANS}" font-size="${actionSize}" font-weight="700" fill="${p.primaryText}">${tspans(actionLines, m, actionY, actionLineH)}</text>`);
+  y = actionY + (actionLines.length - 1) * actionLineH + 26;
+  if (outcomeLines.length) {
+    out.push(`<line x1="${railX}" y1="${y-14}" x2="${railX}" y2="${y+14}" stroke="${p.muted}" stroke-width="2" opacity="0.4"/>`);
+    const outcomeSize = Math.round(f.bodyTextSize * 0.9);
+    const outcomeY = y + outcomeSize * 0.9;
+    out.push(`<text x="${m+24}" y="${outcomeY}" font-family="${FONT_SANS}" font-size="${outcomeSize}" fill="${p.secondaryText}">${tspans(outcomeLines, m+24, outcomeY, f.bodyTextLine)}</text>`);
+  }
+  return out.join("");
 }
 
 function measureFacts(f, facts) {
@@ -385,6 +431,7 @@ function renderBodySVG(p, f, slide, category, scrimStrength) {
   if (variant === "facts") factsData = measureFacts(f, slide.facts);
   if (variant === "timeline") timelineData = measureTimeline(f, slide.timeline);
   const quoteData = variant === "quote" ? measureQuote(f, slide.quote, slide.quoteAttribution) : null;
+  const announcementData = variant === "announcement" ? measureAnnouncement(f, slide.subject, slide.action, slide.outcome) : null;
 
   const sectionBlockH = slide.sectionLabel ? 56 : 0;
   const headlineBlockH = hLines.length * hLineH;
@@ -392,6 +439,7 @@ function renderBodySVG(p, f, slide, category, scrimStrength) {
     variant === "quote" ? 40 + quoteData.height :
     variant === "timeline" ? 64 + timelineData.height :
     variant === "facts" ? 64 + factsData.height :
+    variant === "announcement" ? 40 + announcementData.height :
     variant === "stat" ? 64 + statFontSize * 0.78 + f.statLabelGap + 60 + (slide.body ? 60 + bLines.length * bLineH : 0) :
     64 + (slide.body ? bLines.length * bLineH : 0);
   const totalContentH = sectionBlockH + headlineBlockH + middleBlockH;
@@ -420,6 +468,8 @@ function renderBodySVG(p, f, slide, category, scrimStrength) {
     middleSVG = renderTimeline(m, f, p, slide.timeline, timelineData.rows, afterHeadlineY + 30);
   } else if (variant === "facts") {
     middleSVG = renderFacts(m, f, p, factsData.rows, afterHeadlineY + 20);
+  } else if (variant === "announcement") {
+    middleSVG = renderAnnouncement(m, f, p, slide.subject, slide.action, slide.outcome, afterHeadlineY + 10);
   } else if (variant === "stat") {
     const statBaseline = afterHeadlineY + statFontSize * 0.78;
     const statLabelY = statBaseline + f.statLabelGap;
