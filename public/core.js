@@ -636,16 +636,20 @@ window.setSlideBackgroundImage = async (tid, idx, slideIdx, file) => {
   if (!file) return;
   const o = S.outs[tid]?.[idx];
   if (!o || o.type !== "carousel" || !o._renderCtx) return;
-  // Read the file as a data URL — same shape the backend already expects
-  // for the live-article-photo path, so it goes through the identical
-  // crop + brightness + adaptive scrim pipeline, just sourced from the
-  // user's own upload instead of an auto-fetched photo.
-  const dataUrl = await new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
+  // A phone photo can easily be 10-20MB — base64-encoding it adds another
+  // ~33% on top, which used to blow straight through the server's 2MB
+  // request-body limit and fail with no useful error. There's no reason to
+  // send the original size anyway: the card canvas only needs ~1080px
+  // wide. Downscaling here (max 1600px on the long edge, JPEG ~0.85
+  // quality) shrinks a typical photo to a few hundred KB — faster upload,
+  // and comfortably inside the server limit regardless of the source size.
+  let dataUrl;
+  try {
+    dataUrl = await downscaleImageFile(file, 1600, 0.85);
+  } catch (e) {
+    toast("Couldn't read that image — try a different photo.");
+    return;
+  }
   o.slides[slideIdx].customImage = dataUrl;
   o._imgLoading = slideIdx; render();
   try {
@@ -657,6 +661,30 @@ window.setSlideBackgroundImage = async (tid, idx, slideIdx, file) => {
   } catch(e) { toast("Couldn't apply that image — try again."); }
   o._imgLoading = null; render();
 };
+function downscaleImageFile(file, maxDim, quality) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => {
+      img.onerror = reject;
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          const scale = maxDim / Math.max(width, height);
+          width = Math.round(width * scale);
+          height = Math.round(height * scale);
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width; canvas.height = height;
+        canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
 window.setPlat = (tid,p) => { S.plat[tid]=p; S.ctype[tid]=PTYPES[p]?.[0]||""; render(); };
 window.setCT = (tid,c) => { S.ctype[tid]=c; render(); };
 window.setTone = (tid,t) => { S.tone[tid]=t; render(); };
