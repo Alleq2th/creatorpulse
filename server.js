@@ -92,7 +92,7 @@ app.use(cors({
   credentials: true,
 }));
 
-app.use(express.json({ limit: "2mb" }));
+app.use(express.json({ limit: "12mb" }));
 
 // Feature routes kept in their own files under routes/, so each concern
 // (digest, and future ones like push notifications) can be found and fixed
