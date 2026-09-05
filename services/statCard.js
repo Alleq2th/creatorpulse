@@ -306,10 +306,10 @@ function detectBodyVariant(slide) {
   if (slide.quote && String(slide.quote).trim()) return "quote";
   if (Array.isArray(slide.timeline) && slide.timeline.length) return "timeline";
   if (Array.isArray(slide.facts) && slide.facts.length) return "facts";
-  // Announcement takes priority over a bare stat — "who did what, and why
-  // it matters" is a stronger, more universal narrative shape than a lone
-  // number, and it applies identically across every niche: a signing, a
-  // product launch, a policy change, a celebrity move, a market decision.
+  // Comparison beats a plain announcement or single stat — "X vs Y" is a
+  // more specific, more informative shape than either when two figures
+  // are genuinely being weighed against each other.
+  if (slide.compareA && slide.compareB) return "comparison";
   if (slide.action && String(slide.action).trim()) return "announcement";
   if (slide.stat != null && String(slide.stat).trim() !== "") return "stat";
   return "standard";
@@ -352,6 +352,46 @@ function renderAnnouncement(m, f, p, subject, action, outcome, startY) {
     const outcomeSize = Math.round(f.bodyTextSize * 0.9);
     const outcomeY = y + outcomeSize * 0.9;
     out.push(`<text x="${m+24}" y="${outcomeY}" font-family="${FONT_SANS}" font-size="${outcomeSize}" fill="${p.secondaryText}">${tspans(outcomeLines, m+24, outcomeY, f.bodyTextLine)}</text>`);
+  }
+  return out.join("");
+}
+
+// Comparison — for the "X vs Y" / "before vs after" story shape, distinct
+// from the single-stat layout: two figures given equal visual weight side
+// by side, so the contrast between them is the whole point instead of one
+// number standing alone. Each value fits independently to its own
+// half-width column so a long figure on one side doesn't force both sides
+// to shrink.
+function measureComparison(f, compareA, compareB, note) {
+  const baseValueSize = Math.round(f.statSize * 0.58);
+  const labelSize = 24;
+  const noteLines = note ? wrapWords(String(note), f.bodyTextChars).slice(0, 3) : [];
+  const noteH = noteLines.length ? 30 + noteLines.length * f.bodyTextLine : 0;
+  const rowH = labelSize + 16 + baseValueSize * 0.9;
+  return { baseValueSize, labelSize, noteLines, height: rowH + (noteLines.length ? noteH : 0) };
+}
+function renderComparison(m, f, p, compareA, compareB, note, startY) {
+  const { baseValueSize, labelSize, noteLines } = measureComparison(f, compareA, compareB, note);
+  const colWidth = (f.w - 2*m - 72) / 2;
+  const colAx = m, colBx = m + colWidth + 72;
+  const midX = m + colWidth + 36;
+  const sizeA = fitStatFontSize(compareA.value || "", colWidth, baseValueSize);
+  const sizeB = fitStatFontSize(compareB.value || "", colWidth, baseValueSize);
+  const valueSize = Math.min(sizeA, sizeB); // same size both sides so neither reads as "more important" by accident
+  const labelY = startY;
+  const valueY = labelY + 16 + valueSize * 0.85;
+  const out = [];
+  out.push(`<text x="${colAx}" y="${labelY}" font-family="${FONT_SANS}" font-size="${labelSize}" font-weight="700" letter-spacing="1" fill="${p.secondaryText}">${escXml((compareA.label||"").toUpperCase())}</text>`);
+  out.push(`<text x="${colBx}" y="${labelY}" font-family="${FONT_SANS}" font-size="${labelSize}" font-weight="700" letter-spacing="1" fill="${p.secondaryText}">${escXml((compareB.label||"").toUpperCase())}</text>`);
+  out.push(`<text x="${colAx}" y="${valueY}" font-family="${FONT_SANS}" font-size="${valueSize}" font-weight="900" fill="${p.primaryText}">${escXml(compareA.value||"")}</text>`);
+  out.push(`<text x="${colBx}" y="${valueY}" font-family="${FONT_SANS}" font-size="${valueSize}" font-weight="900" fill="${p.accent}">${escXml(compareB.value||"")}</text>`);
+  out.push(`<text x="${midX}" y="${valueY - valueSize*0.32}" font-family="${FONT_SANS}" font-size="22" font-weight="700" fill="${p.muted}" text-anchor="middle">VS</text>`);
+  let y = valueY + 38;
+  if (noteLines.length) {
+    out.push(`<line x1="${m+4}" y1="${y-8}" x2="${m+4}" y2="${y+20}" stroke="${p.muted}" stroke-width="2" opacity="0.4"/>`);
+    const noteSize = Math.round(f.bodyTextSize * 0.9);
+    const noteY = y + noteSize * 0.9;
+    out.push(`<text x="${m+24}" y="${noteY}" font-family="${FONT_SANS}" font-size="${noteSize}" fill="${p.secondaryText}">${tspans(noteLines, m+24, noteY, f.bodyTextLine)}</text>`);
   }
   return out.join("");
 }
@@ -432,6 +472,7 @@ function renderBodySVG(p, f, slide, category, scrimStrength) {
   if (variant === "timeline") timelineData = measureTimeline(f, slide.timeline);
   const quoteData = variant === "quote" ? measureQuote(f, slide.quote, slide.quoteAttribution) : null;
   const announcementData = variant === "announcement" ? measureAnnouncement(f, slide.subject, slide.action, slide.outcome) : null;
+  const comparisonData = variant === "comparison" ? measureComparison(f, slide.compareA, slide.compareB, slide.comparisonNote) : null;
 
   const sectionBlockH = slide.sectionLabel ? 56 : 0;
   const headlineBlockH = hLines.length * hLineH;
@@ -440,6 +481,7 @@ function renderBodySVG(p, f, slide, category, scrimStrength) {
     variant === "timeline" ? 64 + timelineData.height :
     variant === "facts" ? 64 + factsData.height :
     variant === "announcement" ? 40 + announcementData.height :
+    variant === "comparison" ? 40 + comparisonData.height :
     variant === "stat" ? 64 + statFontSize * 0.78 + f.statLabelGap + 60 + (slide.body ? 60 + bLines.length * bLineH : 0) :
     64 + (slide.body ? bLines.length * bLineH : 0);
   const totalContentH = sectionBlockH + headlineBlockH + middleBlockH;
@@ -470,6 +512,8 @@ function renderBodySVG(p, f, slide, category, scrimStrength) {
     middleSVG = renderFacts(m, f, p, factsData.rows, afterHeadlineY + 20);
   } else if (variant === "announcement") {
     middleSVG = renderAnnouncement(m, f, p, slide.subject, slide.action, slide.outcome, afterHeadlineY + 10);
+  } else if (variant === "comparison") {
+    middleSVG = renderComparison(m, f, p, slide.compareA, slide.compareB, slide.comparisonNote, afterHeadlineY + 10);
   } else if (variant === "stat") {
     const statBaseline = afterHeadlineY + statFontSize * 0.78;
     const statLabelY = statBaseline + f.statLabelGap;
