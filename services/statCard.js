@@ -731,11 +731,25 @@ async function renderStatCard(slide, category, paletteKey, format, imageUrl) {
   return sharp(cover.buffer).composite([{ input: textLayer }]).png().toBuffer();
 }
 
+// Renders slides in small concurrent batches rather than all at once.
+// Each slide with a photo (a user upload, the local niche library, or the
+// live article photo) runs a full decode+resize+composite pipeline through
+// sharp — doing that for up to 10 slides simultaneously is exactly the kind
+// of spike that exceeds a small Render instance's memory limit and triggers
+// a forced restart. Capping how many run at once bounds peak memory
+// regardless of carousel size, at the cost of a slightly longer total
+// render time — a trade worth making over the service restarting.
+const CARD_RENDER_CONCURRENCY = 3;
 async function renderCardSet(slides, category, paletteKey, format, imageUrl) {
   const total = slides.length;
-  const buffers = await Promise.all(
-    slides.map((s, i) => renderStatCard({ ...s, slideNumber: i + 1, totalSlides: total }, category, paletteKey, format, imageUrl))
-  );
+  const buffers = new Array(total);
+  for (let start = 0; start < total; start += CARD_RENDER_CONCURRENCY) {
+    const batch = slides.slice(start, start + CARD_RENDER_CONCURRENCY);
+    const results = await Promise.all(
+      batch.map((s, j) => renderStatCard({ ...s, slideNumber: start + j + 1, totalSlides: total }, category, paletteKey, format, imageUrl))
+    );
+    results.forEach((buf, j) => { buffers[start + j] = buf; });
+  }
   return buffers.map(b => `data:image/png;base64,${b.toString("base64")}`);
 }
 
