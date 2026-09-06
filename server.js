@@ -810,6 +810,35 @@ function dedupeByHeadline(articles) {
   return [...groups.values()];
 }
 
+// Shared image extraction across every RSS source (news fallback, blog
+// feeds, twitter). The old approach only matched double-quoted src="..."
+// on the first <img> tag — that silently misses two very common real-world
+// cases: lazy-loaded images (many WordPress blogs load a blank placeholder
+// into src and put the REAL photo URL in data-src or data-lazy-src, only
+// swapping it in once the page scrolls — which our server-side fetch never
+// triggers), and single-quoted attributes. Checking data-src variants
+// FIRST avoids grabbing the blank placeholder on lazy-loaded feeds.
+function extractFeedImage(item) {
+  if (item['media:thumbnail']?.url) return item['media:thumbnail'].url;
+  if (item['media:thumbnail'] && Array.isArray(item['media:thumbnail'])) return item['media:thumbnail'][0]?.url || null;
+  if (item.enclosure?.url) return item.enclosure.url;
+  if (item['media:content']?.url) return item['media:content'].url;
+  if (item['media:content'] && Array.isArray(item['media:content'])) return item['media:content'][0]?.url || null;
+  const html = item['content:encoded'] || item.content || item.summary || "";
+  if (!html) return null;
+  const patterns = [
+    /<img[^>]+data-lazy-src=["']([^"']+)["']/i,
+    /<img[^>]+data-src=["']([^"']+)["']/i,
+    /<img[^>]+srcset=["']([^"',\s]+)/i,
+    /<img[^>]+src=["']([^"']+)["']/i
+  ];
+  for (const re of patterns) {
+    const m = html.match(re);
+    if (m && m[1] && !/^data:/.test(m[1])) return m[1]; // skip inline base64 placeholders
+  }
+  return null;
+}
+
 // Replaces the old random score generator everywhere a "how big is this
 // story" number is needed. Not a trained model — it's an honest heuristic
 // built from signals we can actually observe: does the text use language
@@ -901,10 +930,7 @@ app.get("/api/news", async (req, res) => {
     const kept = filterAndScoreArticles(normalized, niche).slice(0, 8);
     const filteredItems = kept.map((k, i) => {
       const item = k._raw;
-      let sourceImage = null;
-      if (item.enclosure?.url) sourceImage = item.enclosure.url;
-      else if (item['media:content']?.url) sourceImage = item['media:content'].url;
-      else if (item['media:content'] && Array.isArray(item['media:content'])) sourceImage = item['media:content'][0]?.url || null;
+      const sourceImage = extractFeedImage(item);
       return {
         id: `${niche.replace(/\s/g, "_")}_rss_${i}_${Date.now()}`,
         niche,
@@ -941,10 +967,7 @@ app.get("/api/blog-feed", async (req, res) => {
     try {
       const feed = await parser.parseURL(feedUrl);
       const items = (feed.items || []).slice(0, 6).map((item, i) => {
-        let imageUrl = null;
-        if (item.enclosure?.url) imageUrl = item.enclosure.url;
-        else if (item['media:content']?.url) imageUrl = item['media:content'].url;
-        else if (item.content) { const m = item.content.match(/<img[^>]+src="([^">]+)"/); if (m) imageUrl = m[1]; }
+        const imageUrl = extractFeedImage(item);
         return {
           id: `blog_${niche}_${feedUrl}_${i}_${Date.now()}`,
           niche,
@@ -984,10 +1007,7 @@ app.get("/api/twitter-feed", async (req, res) => {
     try {
       const feed = await parser.parseURL(`${base}/${handle}/rss`);
       const items = (feed.items || []).slice(0, 8).map((item, i) => {
-        let imageUrl = null;
-        if (item.enclosure?.url) imageUrl = item.enclosure.url;
-        else if (item['media:content']?.url) imageUrl = item['media:content'].url;
-        else if (item.content) { const m = item.content.match(/<img[^>]+src="([^">]+)"/); if (m) imageUrl = m[1]; }
+        const imageUrl = extractFeedImage(item);
         return {
           id: `twitter_${handle}_${Date.now()}_${i}`,
           headline: item.title,
