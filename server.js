@@ -36,7 +36,24 @@ try { rateLimit = require("express-rate-limit"); } catch (_) { rateLimit = null;
 try { compression = require("compression"); } catch (_) { compression = null; }
 
 const app = express();
-const parser = new RSSParser({ timeout: 8000, headers: { "User-Agent": "Mozilla/5.0 CreatorPulseBot/1.0" } });
+const parser = new RSSParser({
+  timeout: 8000,
+  headers: { "User-Agent": "Mozilla/5.0 CreatorPulseBot/1.0" },
+  // media:content and media:thumbnail live in the Yahoo Media RSS
+  // namespace, not the core RSS spec — rss-parser will NOT expose them on
+  // parsed items unless explicitly declared here. Without this, every
+  // check for those fields in extractFeedImage() was silently checking a
+  // property that never existed, regardless of how well the extraction
+  // logic itself was written. This is exactly how professional outlets
+  // (Hollywood Reporter, Variety, etc.) typically publish their images —
+  // not as an embedded <img> tag in the content HTML.
+  customFields: {
+    item: [
+      ["media:content", "media:content", { keepArray: true }],
+      ["media:thumbnail", "media:thumbnail", { keepArray: true }]
+    ]
+  }
+});
 
 // Behind Render/Cloudflare — trust the proxy so req.ip + secure work
 app.set("trust proxy", 1);
@@ -818,12 +835,24 @@ function dedupeByHeadline(articles) {
 // swapping it in once the page scrolls — which our server-side fetch never
 // triggers), and single-quoted attributes. Checking data-src variants
 // FIRST avoids grabbing the blank placeholder on lazy-loaded feeds.
+//
+// media:content/media:thumbnail come through as arrays of objects with the
+// real attributes nested under a `$` key (e.g. [{ $: { url: "..." } }]) —
+// that's how the underlying XML parser represents element attributes for
+// any field declared via customFields, not a plain {url: "..."} shape.
+// Checking media fields before falling back to enclosure — outlets that
+// provide both often put their best/highest-res image in media:content.
+function mediaUrl(field) {
+  if (!field) return null;
+  const entry = Array.isArray(field) ? field[0] : field;
+  return entry?.$?.url || entry?.url || null;
+}
 function extractFeedImage(item) {
-  if (item['media:thumbnail']?.url) return item['media:thumbnail'].url;
-  if (item['media:thumbnail'] && Array.isArray(item['media:thumbnail'])) return item['media:thumbnail'][0]?.url || null;
+  const fromMediaContent = mediaUrl(item['media:content']);
+  if (fromMediaContent) return fromMediaContent;
+  const fromMediaThumbnail = mediaUrl(item['media:thumbnail']);
+  if (fromMediaThumbnail) return fromMediaThumbnail;
   if (item.enclosure?.url) return item.enclosure.url;
-  if (item['media:content']?.url) return item['media:content'].url;
-  if (item['media:content'] && Array.isArray(item['media:content'])) return item['media:content'][0]?.url || null;
   const html = item['content:encoded'] || item.content || item.summary || "";
   if (!html) return null;
   const patterns = [
