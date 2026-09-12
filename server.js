@@ -868,6 +868,27 @@ function extractFeedImage(item) {
   return null;
 }
 
+// Last-resort fallback when the RSS feed itself carries no image at all —
+// not every outlet includes one in their feed for every post (short
+// quote-style posts often ship without one even when photo-heavy features
+// do), but almost every real news article has an Open Graph image tag on
+// the actual page, since that's what makes link previews work on social
+// media. Only called when extractFeedImage() already came up empty, so it
+// doesn't add latency to articles that already have an image.
+async function fetchOgImage(articleUrl) {
+  if (!articleUrl) return null;
+  try {
+    const r = await fetch(articleUrl, { headers: { "User-Agent": "Mozilla/5.0" }, timeout: 5000 });
+    const html = await r.text();
+    const m = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
+      || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i)
+      || html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i);
+    return m ? m[1] : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 // Replaces the old random score generator everywhere a "how big is this
 // story" number is needed. Not a trained model — it's an honest heuristic
 // built from signals we can actually observe: does the text use language
@@ -957,9 +978,10 @@ app.get("/api/news", async (req, res) => {
       _raw: item
     }));
     const kept = filterAndScoreArticles(normalized, niche).slice(0, 8);
-    const filteredItems = kept.map((k, i) => {
+    const filteredItems = await Promise.all(kept.map(async (k, i) => {
       const item = k._raw;
-      const sourceImage = extractFeedImage(item);
+      let sourceImage = extractFeedImage(item);
+      if (!sourceImage && item.link) sourceImage = await fetchOgImage(item.link);
       return {
         id: `${niche.replace(/\s/g, "_")}_rss_${i}_${Date.now()}`,
         niche,
@@ -972,7 +994,7 @@ app.get("/api/news", async (req, res) => {
         tags: extractTags(item.title, niche),
         timestamp: new Date(item.isoDate || Date.now()).getTime()
       };
-    });
+    }));
     cacheSet(_ck, { articles: filteredItems }, 90*60*1000); res.json({ articles: filteredItems });
   } catch (e) {
     console.error("News error:", e.message);
@@ -995,8 +1017,9 @@ app.get("/api/blog-feed", async (req, res) => {
   await Promise.allSettled(feeds.map(async feedUrl => {
     try {
       const feed = await parser.parseURL(feedUrl);
-      const items = (feed.items || []).slice(0, 6).map((item, i) => {
-        const imageUrl = extractFeedImage(item);
+      const items = await Promise.all((feed.items || []).slice(0, 6).map(async (item, i) => {
+        let imageUrl = extractFeedImage(item);
+        if (!imageUrl && item.link) imageUrl = await fetchOgImage(item.link);
         return {
           id: `blog_${niche}_${feedUrl}_${i}_${Date.now()}`,
           niche,
@@ -1009,7 +1032,7 @@ app.get("/api/blog-feed", async (req, res) => {
           tags: ["Blog", ...extractTags(item.title, niche)],
           timestamp: new Date(item.isoDate || Date.now()).getTime()
         };
-      });
+      }));
       allArticles.push(...items);
     } catch (e) { /* silent */ }
   }));
