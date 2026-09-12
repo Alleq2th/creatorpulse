@@ -240,6 +240,20 @@ function asArray(parsed) {
 }
 
 // ─── API ────────────────────────────────────────────────────────────────────
+async function generateCardsWithRetry(payload) {
+  // The concurrency limiter returns a 503 ("busy") when 3 generations are
+  // already running server-wide — that's a deliberate, short-lived state,
+  // not a real failure. One retry after a short pause clears most of these
+  // automatically instead of showing the user an error for something that
+  // resolves itself in a couple seconds.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const cd = await api("/api/generate-cards", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+    if (!cd.error) return cd;
+    if (attempt === 0) await new Promise(r => setTimeout(r, 1500));
+    else throw new Error(cd.error);
+  }
+}
+
 async function api(path, opts, _isRetry){
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), 60000); // 60s — covers Render free-tier cold start
@@ -654,7 +668,7 @@ window.setSlideBackgroundImage = async (tid, idx, slideIdx, file) => {
   o._imgLoading = slideIdx; render();
   try {
     const { category, palette, format, imageUrl } = o._renderCtx;
-    const cd = await api("/api/generate-cards", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({slides: o.slides, category, palette, format, imageUrl})});
+    const cd = await generateCardsWithRetry({slides: o.slides, category, palette, format, imageUrl});
     const newImgs = cd.images || [];
     o.slides.forEach((s,i)=>{ if(newImgs[i]) s.img = newImgs[i]; });
     o.images = newImgs;
@@ -788,9 +802,9 @@ window.gen = async (tid, all) => {
         // can't reliably render legible text. See services/statCard.js.
         let cardImgs = [];
         try {
-          const cd = await api("/api/generate-cards", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({slides: slideArr, category, palette: S.palette[tid] || "noir_orange", format: cardFormat, imageUrl: t.image || null})});
+          const cd = await generateCardsWithRetry({slides: slideArr, category, palette: S.palette[tid] || "noir_orange", format: cardFormat, imageUrl: t.image || null});
           cardImgs = cd.images || [];
-        } catch(e){}
+        } catch(e){ toast("Server's busy right now — the text generated fine, but images didn't come through. Try regenerating in a moment."); }
         slideArr.forEach((s,i)=>{ s.slideNumber = i+1; if(cardImgs[i]) s.img = cardImgs[i]; });
         out.push(isSingle ? {type:"image", img: cardImgs[0], aspect: "tiktok", isCard:true} : {type:"carousel", slides: slideArr, images: cardImgs, _renderCtx: { category, palette: S.palette[tid] || "noir_orange", format: cardFormat, imageUrl: t.image || null }});
       } else if(c === "Thumbnail" || /image/i.test(c)){
