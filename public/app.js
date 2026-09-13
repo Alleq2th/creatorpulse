@@ -65,7 +65,11 @@ function pageProfile(){
 
   return `<main class="page active">${topBar("Account")}
     <div class="pf-head">
-      <div class="pf-avatar">${esc(initial)}</div>
+      <label class="pf-avatar-wrap" title="Tap to change photo">
+        ${u.avatarUrl ? `<img src="${u.avatarUrl}" class="pf-avatar-img" alt="${esc(name)}"/>` : `<div class="pf-avatar">${esc(initial)}</div>`}
+        <div class="pf-avatar-edit">${I.image||""}</div>
+        <input type="file" accept="image/*" style="display:none" onchange="uploadAvatar(event)"/>
+      </label>
       <div class="pf-name">${esc(name)}</div>
       <div class="pf-email">${esc(u.email||"")}</div>
       <div class="pf-plat-row">${platPills}</div>
@@ -93,23 +97,22 @@ function pageProfile(){
     </div>
 
     <div class="pf-card">
-      <div class="pf-card-head"><div class="pf-card-title">Connected Accounts</div></div>
-      <div style="font-size:12px;color:var(--mu);margin-bottom:12px;line-height:1.5">Connect your channels so Coach can learn your analytics and personalize what to post next.</div>
-      <div class="pf-grid">
+      <div class="pf-card-head"><div class="pf-card-title">Connected Accounts</div><span class="pf-soon-badge">Coming Soon</span></div>
+      <div style="font-size:12px;color:var(--mu);margin-bottom:12px;line-height:1.5">Direct account connections (so Coach can learn your analytics and personalize what to post next) are on the way — for now, use the manual analytics upload below.</div>
+      <div class="pf-grid" style="opacity:.45;pointer-events:none">
         ${[
           {id:"instagram",label:"Instagram"},
           {id:"tiktok",label:"TikTok"},
           {id:"youtube",label:"YouTube"},
           {id:"twitter",label:"X (Twitter)"}
         ].map(sv => {
-          const connected = (S.connections||{})[sv.id];
-          return `<div class="pf-plat-cell ${connected?'on':''}">
+          return `<div class="pf-plat-cell">
             <span class="em">${PLAT_EMOJI[sv.id]||"◆"}</span>
             <div style="flex:1;min-width:0">
               <div class="lbl">${esc(sv.label)}</div>
-              <div style="font-size:10px;color:${connected?'var(--ac)':'var(--mu)'}">${connected?'Connected':'Not connected'}</div>
+              <div style="font-size:10px;color:var(--mu)">Not connected</div>
             </div>
-            <button class="tiny-copy" onclick="connectAccount('${sv.id}')">${connected?'Manage':'Connect'}</button>
+            <button class="tiny-copy" disabled>Connect</button>
           </div>`;
         }).join("")}
       </div>
@@ -143,6 +146,25 @@ function renderSavedList(){
   if(!items.length) return `<div style="color:var(--mu);font-size:12px;padding:6px 0">No saved posts yet — save from any trend on Home.</div>`;
   return items.map(p=>`<div style="padding:10px 0;border-bottom:1px solid var(--br);display:flex;gap:10px;align-items:flex-start"><div style="flex:1;min-width:0"><div style="font-family:var(--serif);font-size:14px;font-weight:600;line-height:1.35">${esc(p.headline)}</div><div style="font-size:10px;color:var(--mu);margin-top:3px">${esc(p.niche)} · ${esc(p.platform)} · ${esc(p.content_type)}${p.scheduled_date?' · '+esc(p.scheduled_date):''}</div></div><button class="iconbtn tipbtn" data-tip="Delete saved post" title="Delete saved post" aria-label="Delete saved post" onclick="delSaved(${p.id})">${I.trash}</button></div>`).join("");
 }
+window.uploadAvatar = async (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+  // Reusing the same downscale helper built for slide background photos —
+  // a profile photo needs even less resolution than a card background, so
+  // this keeps the upload fast and the request small.
+  let dataUrl;
+  try {
+    dataUrl = await downscaleImageFile(file, 400, 0.85);
+  } catch (e) {
+    toast("Couldn't read that image — try a different photo.");
+    return;
+  }
+  S.user.avatarUrl = dataUrl; render(); // show it immediately, save in the background
+  const d = await api("/api/auth/update-profile", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token: S.token, avatarUrl: dataUrl})});
+  if (d.error) { toast("Couldn't save your new photo — try again."); return; }
+  saveSession();
+  toast("Profile photo updated");
+};
 window.connectAccount = (id) => {
   S.connections = S.connections || {};
   if(S.connections[id]){
