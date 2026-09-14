@@ -1383,10 +1383,23 @@ window.calNav = (dir) => {
   S.cal.m += dir;
   if(S.cal.m < 0){ S.cal.m=11; S.cal.y--; }
   if(S.cal.m > 11){ S.cal.m=0; S.cal.y++; }
+  render(); // show the new month immediately with whatever's already cached —
+            // don't wait on network calls just to reflect the month change
   loadSchedule();
   loadCalendarEvents();
 };
-function loadCalendarEvents(){
-  (S.user?.niches||[]).forEach(async n => { if(!S.eventsCache[n]){ try { cacheSet("eventsCache", n, await fetchEvents(n)); } catch(e){} } render(); });
+async function loadCalendarEvents(){
+  // Was calling render() once per niche unconditionally — with several
+  // niches resolving at different, unpredictable network speeds, a single
+  // month click could fire many overlapping re-renders in quick,
+  // unpredictable succession. One render, after everything has actually
+  // settled, is both correct and far cheaper.
+  const niches = S.user?.niches || [];
+  await Promise.all(niches.map(async n => {
+    if(!S.eventsCache[n]){
+      try { cacheSet("eventsCache", n, await fetchEvents(n)); } catch(e){}
+    }
+  }));
+  render();
 }
 
