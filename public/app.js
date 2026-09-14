@@ -1,3 +1,9 @@
+// One place to change the support contact address — used for the
+// account-deletion request link on Profile. Defaulting to the collabs
+// address since it reads as the more official/business contact point;
+// change this one line if a different address should be used instead.
+const SUPPORT_EMAIL = "sportsguycollabs@gmail.com";
+
 // ─── FLOATING AI COACH ─────────────────────────────────────────────────────
 function renderFloatingCoach(){
   if(S.mode !== "app") return "";
@@ -35,8 +41,11 @@ function pageProfile(){
   const name = u.name || "You";
   const initial = (name.trim()[0] || "?").toUpperCase();
   const activePlats = u.platforms || [];
+  const primaryNiche = (u.niches||[])[0];
 
-  // Event count: unique dates from user niches
+  // Real, tracked outcomes only — not arbitrary database counts. Each of
+  // these corresponds to something the creator actually did or has waiting
+  // for them, not a number that exists just because a table has rows.
   const eventCount = (u.niches||[]).reduce((n, k) => n + ((S.eventsCache[k]||[]).length), 0);
   const liveCount = S.trends.length;
   const savedCount = S.saved.filter(p => p.content_type !== 'Recurring').length;
@@ -63,7 +72,11 @@ function pageProfile(){
     </div>`;
   }).join("");
 
-  return `<main class="page active">${topBar("Account")}
+  const pushOn = !!localStorage.getItem('cp_push_subscribed');
+
+  return `<main class="page active">${topBar("Profile")}
+
+    <!-- CREATOR IDENTITY — the personal, distinctive top of the page -->
     <div class="pf-head">
       <label class="pf-avatar-wrap" title="Tap to change photo">
         ${u.avatarUrl ? `<img src="${u.avatarUrl}" class="pf-avatar-img" alt="${esc(name)}"/>` : `<div class="pf-avatar">${esc(initial)}</div>`}
@@ -72,49 +85,49 @@ function pageProfile(){
       </label>
       <div class="pf-name">${esc(name)}</div>
       <div class="pf-email">${esc(u.email||"")}</div>
-      <div class="pf-plat-row">${platPills}</div>
+      ${primaryNiche ? `<div class="pf-tagline">${esc(primaryNiche)} creator${activePlats.length?` · ${activePlats.length} platform${activePlats.length>1?'s':''}`:''}</div>` : ""}
     </div>
 
+    <!-- CREATOR SETUP — how CreatorPulse is configured, not just a tag dump -->
+    <div class="pf-section-hd">Creator Setup</div>
+    <div class="pf-setup-row">
+      <div class="pf-setup-lbl">Niches</div>
+      <div class="niche-tags">${nicheTags}</div>
+      <button class="pf-edit" onclick="editNiches()">Edit</button>
+    </div>
+    <div class="pf-setup-row">
+      <div class="pf-setup-lbl">Platforms</div>
+      <div class="pf-plat-row" style="margin:0">${platPills}</div>
+    </div>
+    <div class="pf-grid" style="margin-top:10px">${platCells}</div>
+
+    <!-- ACTIVITY — outcomes, quietly grouped, not a floating stat widget -->
+    <div class="pf-section-hd">Activity</div>
     <div class="stat-row">
       <div class="stat"><div class="stat-n">${liveCount}</div><div class="stat-l">Live Stories</div></div>
       <div class="stat"><div class="stat-n">${savedCount}</div><div class="stat-l">Saved Posts</div></div>
       <div class="stat"><div class="stat-n">${eventCount}</div><div class="stat-l">My Events</div></div>
     </div>
-
-    <div class="pf-card">
-      <div class="pf-card-head">
-        <div class="pf-card-title">My Niches</div>
-        <button class="pf-edit" onclick="editNiches()">Edit</button>
-      </div>
-      <div class="niche-tags">${nicheTags}</div>
+    <div class="pf-more-row">
+      <button class="pf-more-link" onclick="setTab('library')">My Library →</button>
+      <button class="pf-more-link" onclick="setTab('discover')">Discover Creators →</button>
     </div>
 
+    <!-- PUBLISHING — reads as roadmap, not a broken/disabled feature -->
+    <div class="pf-section-hd">Publishing</div>
     <div class="pf-card">
-      <div class="pf-card-head">
-        <div class="pf-card-title">My Platforms</div>
-      </div>
-      <div class="pf-grid">${platCells}</div>
-    </div>
-
-    <div class="pf-card">
-      <div class="pf-card-head"><div class="pf-card-title">Connected Accounts</div><span class="pf-soon-badge">Coming Soon</span></div>
-      <div style="font-size:12px;color:var(--mu);margin-bottom:12px;line-height:1.5">Direct account connections (so Coach can learn your analytics and personalize what to post next) are on the way — for now, use the manual analytics upload below.</div>
-      <div class="pf-grid" style="opacity:.45;pointer-events:none">
+      <div style="font-size:12px;color:var(--mu);margin-bottom:12px;line-height:1.5">Connect your social accounts to unlock publishing and performance features.</div>
+      <div class="pf-grid">
         ${[
           {id:"instagram",label:"Instagram"},
           {id:"tiktok",label:"TikTok"},
           {id:"youtube",label:"YouTube"},
           {id:"twitter",label:"X (Twitter)"}
-        ].map(sv => {
-          return `<div class="pf-plat-cell">
+        ].map(sv => `<div class="pf-plat-cell">
             <span class="em">${PLAT_EMOJI[sv.id]||"◆"}</span>
-            <div style="flex:1;min-width:0">
-              <div class="lbl">${esc(sv.label)}</div>
-              <div style="font-size:10px;color:var(--mu)">Not connected</div>
-            </div>
-            <button class="tiny-copy" disabled>Connect</button>
-          </div>`;
-        }).join("")}
+            <div style="flex:1;min-width:0"><div class="lbl">${esc(sv.label)}</div></div>
+            <span class="pf-soon-badge">Coming soon</span>
+          </div>`).join("")}
       </div>
       <div style="margin-top:12px">
         <label class="btn bs" style="width:100%;padding:12px;justify-content:center;cursor:pointer">${I.upload} Upload analytics screenshot
@@ -123,24 +136,59 @@ function pageProfile(){
       </div>
     </div>
 
-    <div class="pf-card">
-      <div class="pf-card-head">
-        <div class="pf-card-title">Saved Library</div>
-        <span class="pf-edit" style="cursor:default">${S.saved.filter(p=>p.content_type!=='Recurring').length}</span>
+    <!-- PREFERENCES — only what's actually real and functional -->
+    <div class="pf-section-hd">Preferences</div>
+    <div class="pf-row" onclick="togglePush()">
+      <div>
+        <div class="pf-row-lbl">Push notifications</div>
+        <div class="pf-row-sub">Get notified about trending stories in your niches</div>
       </div>
-      <div style="font-size:12px;color:var(--mu);margin-bottom:10px;line-height:1.5">Your saved scripts, carousels, images and thumbnails.</div>
-      ${renderSavedList()}
+      <div class="pf-switch ${pushOn?'on':''}"><div class="pf-switch-knob"></div></div>
     </div>
 
-    <div class="pf-card">
-      <div class="pf-card-head"><div class="pf-card-title">Inspiration Feed</div></div>
-      <div style="font-size:12px;color:var(--mu);margin-bottom:10px;line-height:1.5">Top creators in your niche, hand-picked from the source lists we already pull.</div>
-      ${renderInspirationFeed()}
+    <!-- ACCOUNT — visually quietest, destructive actions clearly separated -->
+    <div class="pf-section-hd">Account</div>
+    <div class="pf-row" style="cursor:default">
+      <div>
+        <div class="pf-row-lbl">Email</div>
+        <div class="pf-row-sub">${esc(u.email||"")}</div>
+      </div>
     </div>
-
     <button class="btn-signout" onclick="logOut()">Sign Out</button>
+    <div class="pf-danger-link"><a href="mailto:${SUPPORT_EMAIL}?subject=Delete my CreatorPulse account">Need to delete your account? Contact support</a></div>
   </main>`;
 }
+function pageLibrary(){
+  return `<main class="page active">${topBar("Library","profile")}
+    <div class="pf-section-hd" style="margin-top:0">Saved Library</div>
+    <div style="font-size:12px;color:var(--mu);margin-bottom:14px;line-height:1.5">Your saved scripts, carousels, images and thumbnails.</div>
+    ${renderSavedList()}
+  </main>`;
+}
+function pageDiscover(){
+  return `<main class="page active">${topBar("Discover","profile")}
+    <div class="pf-section-hd" style="margin-top:0">Inspiration Feed</div>
+    <div style="font-size:12px;color:var(--mu);margin-bottom:14px;line-height:1.5">Top creators in your niche, hand-picked from the source lists we already pull.</div>
+    ${renderInspirationFeed()}
+  </main>`;
+}
+window.togglePush = async () => {
+  const nowOn = !!localStorage.getItem('cp_push_subscribed');
+  if (nowOn) {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) await sub.unsubscribe();
+    } catch(e){}
+    localStorage.removeItem('cp_push_subscribed');
+    toast("Push notifications turned off");
+  } else {
+    localStorage.removeItem('cp_push_subscribed'); // clear so initPush doesn't skip re-prompting
+    await initPush();
+    toast(localStorage.getItem('cp_push_subscribed') ? "Push notifications turned on" : "Couldn't enable — check your browser's notification permission");
+  }
+  render();
+};
 function renderSavedList(){
   const items = S.saved.filter(p => p.content_type !== 'Recurring').slice(0, 30);
   if(!items.length) return `<div style="color:var(--mu);font-size:12px;padding:6px 0">No saved posts yet — save from any trend on Home.</div>`;
@@ -219,8 +267,17 @@ function checkAuthRedirect(){
 // left — the way any normal installed app behaves.
 window._backStack = [];
 window.pushBackState = function(onBack){
-  window._backStack.push(onBack);
-  try { history.pushState({ csBack: window._backStack.length }, '', location.href); } catch(e){}
+  // This used to push a new entry EVERY tab switch, forever, with nothing
+  // ever cleaning old ones up except an actual back-gesture firing. Over a
+  // real session of tapping around tabs, the stack grew unbounded — and
+  // Android's system-level edge-back gesture (a different, lower-level
+  // thing than the page's own scroll behavior) can trigger a popstate at
+  // unpredictable moments, popping a stale action from deep in that stack
+  // and silently reverting state to something disconnected from whatever
+  // was just tapped. Capping depth at 1 means "back" still does something
+  // sensible, but there's no unbounded stack left to misfire from.
+  window._backStack = [onBack];
+  try { history.replaceState({ csBack: 1 }, '', location.href); } catch(e){}
 };
 window.addEventListener('popstate', function(){
   const action = window._backStack.pop();

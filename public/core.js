@@ -9,6 +9,7 @@ const I = {
   user: '<svg class="icon" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
   coach: '<svg class="icon" viewBox="0 0 24 24"><path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2M20 14h2M15 13v2M9 13v2"/></svg>',
   chevron: '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>',
+  back: '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg>',
   copy: '<svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
   dl: '<svg class="icon icon-sm" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
   bolt: '<svg class="icon icon-sm" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>',
@@ -1065,7 +1066,7 @@ window.obToggleP = p => { const i = S.onboard.platforms.indexOf(p); if(i<0) S.on
 window.ob = S.onboard;
 
 function renderApp(){
-  const pageFns = { home: pageHome, hooks: pageHooks, calendar: pageCalendar, create: pageCreate, profile: pageProfile };
+  const pageFns = { home: pageHome, hooks: pageHooks, calendar: pageCalendar, create: pageCreate, profile: pageProfile, library: pageLibrary, discover: pageDiscover };
   const pageHtml = (pageFns[S.tab] || pageHome)();
   document.getElementById("root").innerHTML = `<div class="app">${pageHtml}
     <nav class="tabbar">
@@ -1092,8 +1093,8 @@ function loadActiveHooks(){
   if(S.hooksNiche) window.setHooksNiche(S.hooksNiche);
 }
 
-function topBar(kicker){
-  return `<div class="topbar"><div class="brand"><img src="/logo-64.png" class="brand-mark" alt="CreatorPulse"/><div><div class="brand-name">CreatorPulse</div><div class="brand-sub">${esc(kicker)}</div></div></div>
+function topBar(kicker, backTo){
+  return `<div class="topbar">${backTo ? `<button class="iconbtn tipbtn" data-tip="Back" title="Back" aria-label="Back" onclick="setTab('${backTo}')" style="margin-right:8px">${I.back}</button>` : ""}<div class="brand"><img src="/logo-64.png" class="brand-mark" alt="CreatorPulse"/><div><div class="brand-name">CreatorPulse</div><div class="brand-sub">${esc(kicker)}</div></div></div>
     <div class="topbar-right">
       <button class="iconbtn tipbtn" data-tip="Refresh trends" title="Refresh trends" aria-label="Refresh trends" onclick="loadTrends();loadNotifs();toast('Refreshing')">${I.refresh}</button>
       <div class="bell-wrap">
