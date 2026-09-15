@@ -245,6 +245,7 @@ app.post("/api/auth/login", async (req, res) => {
         platforms: meta.platforms || [],
         primaryPlatform: meta.primaryPlatform || "",
         postsPerDay: meta.postsPerDay || 3,
+        avatarUrl: meta.avatarUrl || null,
         email
       }
     });
@@ -266,12 +267,27 @@ app.post("/api/auth/refresh", async (req, res) => {
 
 app.post("/api/auth/update-profile", async (req, res) => {
   if (!supabase) return res.status(503).json({ error: "Auth not configured" });
-  const { token, name, niches, platforms, primaryPlatform, postsPerDay } = req.body;
+  const { token, name, niches, platforms, primaryPlatform, postsPerDay, avatarUrl } = req.body;
   try {
     const { data: userData, error: userError } = await supabase.auth.getUser(token);
     if (userError) return res.status(401).json({ error: "Invalid token" });
+    // Merging with existing metadata rather than replacing it wholesale —
+    // the previous version overwrote the ENTIRE user_metadata object with
+    // only whatever fields this specific call happened to pass. That's a
+    // latent bug: a call that only updates one thing (like a dedicated
+    // avatar upload) would silently wipe out niches/platforms/etc. that
+    // weren't included in that particular request.
+    const existing = userData.user.user_metadata || {};
     const { error } = await supabase.auth.admin.updateUserById(userData.user.id, {
-      user_metadata: { name, niches, platforms, primaryPlatform, postsPerDay }
+      user_metadata: {
+        ...existing,
+        name: name !== undefined ? name : existing.name,
+        niches: niches !== undefined ? niches : existing.niches,
+        platforms: platforms !== undefined ? platforms : existing.platforms,
+        primaryPlatform: primaryPlatform !== undefined ? primaryPlatform : existing.primaryPlatform,
+        postsPerDay: postsPerDay !== undefined ? postsPerDay : existing.postsPerDay,
+        avatarUrl: avatarUrl !== undefined ? avatarUrl : existing.avatarUrl
+      }
     });
     if (error) return res.status(400).json({ error: error.message });
     res.json({ success: true });
@@ -1085,6 +1101,16 @@ app.get("/api/twitter-feed", async (req, res) => {
   res.json({ articles: [] });
 });
 
+// Rough, defensible heuristic rather than hand-tagging 125+ events one by
+// one — an explicit importance on an event object (for future manual
+// curation) always wins; this only fills in when one isn't set.
+function classifyEventImportance(title) {
+  const t = (title||"").toLowerCase();
+  if (/\bfinals?\b|championship|super bowl|world cup|christmas day|all-star|grand final|world series|world championship/.test(t)) return "major";
+  if (/\bbegins?\b|starts?|opener|tip-off|kicks off|draft\b|opening (weekend|night|day)/.test(t)) return "relevant";
+  return "seasonal";
+}
+
 // ── EVENTS (12+ months rolling) ─────────────────────────────────────────────
 app.get("/api/events", async (req, res) => {
   const { niche } = req.query;
@@ -1093,7 +1119,8 @@ app.get("/api/events", async (req, res) => {
   const now = new Date();
   const cutoff = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000);
   const future = events.filter(e => { const d = new Date(e.date); return d >= now && d <= cutoff; });
-  res.json({ events: future.slice(0, 20) });
+  const withImportance = future.slice(0, 20).map(e => ({ ...e, importance: e.importance || classifyEventImportance(e.title) }));
+  res.json({ events: withImportance });
 });
 
 // ── IMAGE HELPERS ───────────────────────────────────────────────────────────
