@@ -117,13 +117,13 @@ function pageProfile(){
     <div class="pf-section-hd">Publishing</div>
     <div class="pf-card">
       <div style="font-size:12px;color:var(--mu);margin-bottom:12px;line-height:1.5">Connect your social accounts to unlock publishing and performance features.</div>
-      <div class="pf-grid">
+      <div class="pf-publish-list">
         ${[
           {id:"instagram",label:"Instagram"},
           {id:"tiktok",label:"TikTok"},
           {id:"youtube",label:"YouTube"},
           {id:"twitter",label:"X (Twitter)"}
-        ].map(sv => `<div class="pf-plat-cell">
+        ].map(sv => `<div class="pf-plat-cell" style="width:100%">
             <span class="em">${PLAT_EMOJI[sv.id]||"◆"}</span>
             <div style="flex:1;min-width:0"><div class="lbl">${esc(sv.label)}</div></div>
             <span class="pf-soon-badge">Coming soon</span>
@@ -277,7 +277,14 @@ window.pushBackState = function(onBack){
   // was just tapped. Capping depth at 1 means "back" still does something
   // sensible, but there's no unbounded stack left to misfire from.
   window._backStack = [onBack];
-  try { history.replaceState({ csBack: 1 }, '', location.href); } catch(e){}
+  // pushState (not replaceState) is the actual fix here — replaceState
+  // never creates a real step in the browser's own history, so a phone's
+  // back-swipe had nothing to land on *within* the app and immediately
+  // escaped past it entirely (closing/backgrounding the whole thing). The
+  // app-level action stack above is still capped at depth 1 deliberately —
+  // that's a separate, safe decision from whether the browser itself has
+  // somewhere for a single back-press to land.
+  try { history.pushState({ csBack: 1 }, '', location.href); } catch(e){}
 };
 window.addEventListener('popstate', function(){
   const action = window._backStack.pop();
