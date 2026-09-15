@@ -77,6 +77,9 @@ const S = {
   trends: [], notifs: [], schedule: [], saved: [], eventsCache: {},
   loading: {}, expanded: {}, plat: {}, ctype: {}, tone: {}, palette: {}, slideCount: {}, outs: {}, recs: {},
   cal: { y: new Date().getFullYear(), m: new Date().getMonth() },
+  calView: "agenda", // agenda | week | month — agenda is the default per rebuild
+  agendaSchedule: [], // rolling multi-month schedule fetch, separate from the month-scoped one Month view uses
+  scheduleSheetOpen: false,
   coachHandle: "", coachPlatform: "instagram", coachMetrics: "", coachAnswer: "", coachLoading: false,
   addSched: { title:"", weekday:"friday", time:"20:00", notes:"" },
   quickAdd: null, // { date: "YYYY-MM-DD", title: "" } — set when a specific calendar day is tapped
@@ -365,7 +368,22 @@ async function saveOnboarding(){
 }
 
 // ─── APP ────────────────────────────────────────────────────────────────────
-async function bootApp(){ render(); loadTrends(); loadNotifs(); loadSchedule(); loadSaved(); loadDigest(); startGlobalTimer(); initPush(); }
+async function loadAgendaSchedule(){
+  // Agenda is meant to be the primary view, so it can't awkwardly cut off
+  // at whatever month the Month-view grid currently happens to be on.
+  // Fetches the current month plus the next two, independently of S.cal,
+  // and keeps the result separate from S.schedule so Month view's existing
+  // behavior is untouched.
+  if(!S.token) return;
+  const now = new Date();
+  const months = [0,1,2].map(offset => { const d = new Date(now.getFullYear(), now.getMonth()+offset, 1); return {y:d.getFullYear(), m:d.getMonth()+1}; });
+  try {
+    const results = await Promise.all(months.map(({y,m}) => api(`/api/schedule?token=${S.token}&year=${y}&month=${m}`)));
+    S.agendaSchedule = results.flatMap(r => r.posts || []);
+    render();
+  } catch(e){}
+}
+async function bootApp(){ render(); loadTrends(); loadNotifs(); loadSchedule(); loadSaved(); loadDigest(); loadAgendaSchedule(); startGlobalTimer(); initPush(); }
 
 // ─── PUSH NOTIFICATIONS ─────────────────────────────────────────────────────
 // Public key only — safe to embed client-side. Must match VAPID_PUBLIC_KEY on the server.
@@ -913,7 +931,7 @@ window.addRecurring = async () => {
   const p = S.addSched;
   if(!p.title){ toast("Add a title"); return; }
   const r = await api("/api/user-schedule", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:S.token,...p})});
-  if(r.success){ toast(`Scheduled ${r.added} weeks`); S.addSched={title:"",weekday:"friday",time:"20:00",notes:""}; loadSchedule(); loadSaved(); }
+  if(r.success){ toast(`Scheduled ${r.added} weeks`); S.addSched={title:"",weekday:"friday",time:"20:00",notes:""}; S.scheduleSheetOpen=false; loadSchedule(); loadAgendaSchedule(); loadSaved(); }
   else toast(r.error||"Error");
 };
 window.openQuickAdd = (dateIso, existing) => { S.quickAdd = { date: dateIso, title: "", existing: existing||[] }; render(); };
@@ -927,7 +945,7 @@ window.saveQuickAdd = async () => {
       token: S.token, headline: q.title, niche, platform, contentType: "Reminder",
       content: { note: q.title }, scheduledDate: q.date
     })});
-    if(r.success){ toast("Added to " + q.date); S.quickAdd = null; loadSchedule(); loadSaved(); }
+    if(r.success){ toast("Added to " + q.date); S.quickAdd = null; loadSchedule(); loadAgendaSchedule(); loadSaved(); }
     else toast(r.error || "Couldn't add");
   } catch(e){ toast("Couldn't add"); }
 };
@@ -937,7 +955,7 @@ window.deleteScheduleItem = async (postId) => {
     if(r.success){
       toast("Removed");
       if(S.quickAdd) S.quickAdd.existing = (S.quickAdd.existing||[]).filter(x=>x.id!==postId);
-      loadSchedule(); loadSaved(); render();
+      loadSchedule(); loadAgendaSchedule(); loadSaved(); render();
     } else toast(r.error || "Couldn't remove");
   } catch(e){ toast("Couldn't remove"); }
 };
@@ -1083,9 +1101,9 @@ function renderApp(){
 window.setTab = t => {
   const prev = S.tab;
   if(t !== prev && window.pushBackState){
-    window.pushBackState(() => { S.tab = prev; render(); if(prev==='calendar'){ loadSchedule(); loadCalendarEvents(); } if(prev==='profile'){ loadSaved(); } if(prev==='hooks'){ loadActiveHooks(); } });
+    window.pushBackState(() => { S.tab = prev; render(); if(prev==='calendar'){ loadSchedule(); loadCalendarEvents(); loadAgendaSchedule(); } if(prev==='profile'){ loadSaved(); } if(prev==='hooks'){ loadActiveHooks(); } });
   }
-  S.tab=t; render(); if(t==='calendar'){ loadSchedule(); loadCalendarEvents(); } if(t==='profile'){ loadSaved(); } if(t==='hooks'){ loadActiveHooks(); }
+  S.tab=t; render(); if(t==='calendar'){ loadSchedule(); loadCalendarEvents(); loadAgendaSchedule(); } if(t==='profile'){ loadSaved(); } if(t==='hooks'){ loadActiveHooks(); }
 };
 function loadActiveHooks(){
   const userNiches = S.user?.niches || [];
@@ -1314,12 +1332,123 @@ function renderSheet(){
   </div>`;
 }
 
-function pageCalendar(){
+// Combines niche events (full year, all of them) with the user's own
+// scheduled posts (rolling multi-month fetch) into one sorted, future-only
+// list — the shared data source for both Agenda and Week views.
+function getUnifiedAgendaItems(){
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const items = [];
+  (S.user?.niches||[]).forEach(n => (S.eventsCache[n]||[]).forEach(e => {
+    items.push({ date: e.date, title: e.title, desc: e.description, type: "event", niche: n, importance: e.importance || "seasonal" });
+  }));
+  S.agendaSchedule.forEach(p => {
+    items.push({ date: p.scheduled_date, title: p.headline, desc: p.niche, type: "post", id: p.id, niche: p.niche });
+  });
+  return items
+    .filter(it => it.date && new Date(it.date) >= todayStart)
+    .sort((a,b) => new Date(a.date) - new Date(b.date));
+}
+// Shared between Agenda and Week views so an event/post looks identical
+// wherever it appears. User posts get the app's own purple/gradient
+// language; major niche events get a stronger accent; ordinary events stay
+// neutral — the spec's "this is MY content vs. something happening in my
+// niche" distinction.
+function renderAgendaItem(it){
+  const isPost = it.type === "post";
+  const isMajor = it.importance === "major";
+  const badge = isPost ? "" : isMajor ? "🔥 " : it.importance === "relevant" ? "📌 " : "🗓 ";
+  const cls = isPost ? "agenda-item-post" : isMajor ? "agenda-item-major" : "agenda-item-event";
+  const dt = new Date(it.date);
+  const payload = JSON.stringify({title:it.title, desc:it.desc, niche:it.niche, date:it.date}).replace(/'/g,"&#39;");
+  return `<div class="agenda-item ${cls}">
+    <div class="agenda-item-date"><div class="m">${M_SHORT[dt.getMonth()]}</div><div class="d">${dt.getDate()}</div></div>
+    <div class="agenda-item-body">
+      <div class="agenda-item-title">${badge}${esc(it.title)}</div>
+      ${it.niche?`<div class="agenda-item-niche">${esc(it.niche)}${isPost?' · Scheduled':''}</div>`:''}
+      ${it.desc && !isPost ?`<div class="agenda-item-desc">${esc(it.desc)}</div>`:''}
+    </div>
+    ${isPost
+      ? `<button class="iconbtn tipbtn" data-tip="Remove" title="Remove" aria-label="Remove ${esc(it.title)}" onclick="deleteScheduleItem('${it.id}')">${I.trash}</button>`
+      : `<button class="tiny-copy" onclick='createFromEvent(${payload})'>Create</button>`
+    }
+  </div>`;
+}
+function renderAgendaView(){
+  const items = getUnifiedAgendaItems();
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const tomorrowStart = new Date(todayStart); tomorrowStart.setDate(tomorrowStart.getDate()+1);
+  const dayAfter = new Date(tomorrowStart); dayAfter.setDate(dayAfter.getDate()+1);
+
+  const todayItems = items.filter(it => { const d=new Date(it.date); return d>=todayStart && d<tomorrowStart; });
+  const tomorrowItems = items.filter(it => { const d=new Date(it.date); return d>=tomorrowStart && d<dayAfter; });
+  const laterItems = items.filter(it => new Date(it.date) >= dayAfter).slice(0, 20);
+
+  const group = (label, arr) => arr.length ? `<div class="agenda-group">
+    <div class="agenda-group-hd">${label}<span class="agenda-group-sub">${arr.length} ${arr.length===1?'thing':'things'}</span></div>
+    ${arr.map(renderAgendaItem).join("")}
+  </div>` : "";
+
+  if(!todayItems.length && !tomorrowItems.length && !laterItems.length){
+    return `<div class="cal-empty">
+      <div class="cal-empty-icon">🗓</div>
+      <div class="cal-empty-title">Nothing scheduled yet</div>
+      <div class="cal-empty-sub">Your niche events and any posts you schedule will show up here.</div>
+      <button class="btn bp" style="margin-top:14px" onclick="openScheduleSheet()">${I.plus} Schedule a post</button>
+    </div>`;
+  }
+  return `${group("Today", todayItems)}${group("Tomorrow", tomorrowItems)}${group("Upcoming", laterItems)}`;
+}
+function renderWeekView(){
+  const items = getUnifiedAgendaItems();
+  const now = new Date();
+  const weekStart = S.calWeekStart ? new Date(S.calWeekStart) : (() => { const d=new Date(now); d.setDate(d.getDate()-d.getDay()); d.setHours(0,0,0,0); return d; })();
+  const days = Array.from({length:7}).map((_,i) => { const d=new Date(weekStart); d.setDate(d.getDate()+i); return d; });
+  const selected = S.calWeekSelected ? new Date(S.calWeekSelected+'T00:00:00') : now;
+
+  const strip = days.map(d => {
+    const iso = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const dayItems = items.filter(it => it.date.slice(0,10) === iso);
+    const isToday = d.toDateString() === now.toDateString();
+    const isSel = d.toDateString() === selected.toDateString();
+    return `<button class="week-day ${isSel?'sel':''} ${isToday?'today':''}" onclick="selectWeekDay('${iso}')">
+      <div class="week-day-lbl">${DAYS[d.getDay()]}</div>
+      <div class="week-day-num">${d.getDate()}</div>
+      ${dayItems.length ? `<div class="week-day-dot ${dayItems.some(x=>x.importance==='major')?'major':''}"></div>` : ''}
+    </button>`;
+  }).join("");
+
+  const selIso = `${selected.getFullYear()}-${String(selected.getMonth()+1).padStart(2,'0')}-${String(selected.getDate()).padStart(2,'0')}`;
+  const selItems = items.filter(it => it.date.slice(0,10) === selIso);
+
+  return `
+    <div class="week-strip">
+      <button class="iconbtn tipbtn" data-tip="Previous week" title="Previous week" aria-label="Previous week" onclick="weekNav(-1)">‹</button>
+      <div class="week-days">${strip}</div>
+      <button class="iconbtn tipbtn" data-tip="Next week" title="Next week" aria-label="Next week" onclick="weekNav(1)">›</button>
+    </div>
+    <div class="agenda-group">
+      <div class="agenda-group-hd">${selected.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}</div>
+      ${selItems.length ? selItems.map(renderAgendaItem).join("") : `<div class="cal-empty-inline">Nothing on this day yet.</div>`}
+    </div>
+  `;
+}
+window.weekNav = (dir) => {
+  const now = new Date();
+  const cur = S.calWeekStart ? new Date(S.calWeekStart) : (() => { const d=new Date(now); d.setDate(d.getDate()-d.getDay()); d.setHours(0,0,0,0); return d; })();
+  cur.setDate(cur.getDate() + dir*7);
+  S.calWeekStart = cur.toISOString().slice(0,10);
+  S.calWeekSelected = null;
+  render();
+};
+window.selectWeekDay = (iso) => { S.calWeekSelected = iso; render(); };
+function renderMonthView(){
   const y = S.cal.y, m = S.cal.m;
   const first = new Date(y,m,1).getDay(), days = new Date(y,m+1,0).getDate();
   const today = new Date();
   const isCur = today.getFullYear()===y && today.getMonth()===m;
-  const itemsByDate = {}; // d -> [{label, kind, id?}] kind: "post" (user-added, deletable) or "event" (niche event, fixed)
+  const itemsByDate = {};
   S.schedule.forEach(p=>{ if(p.scheduled_date){ const dt = new Date(p.scheduled_date); if(dt.getFullYear()===y && dt.getMonth()===m){ const d = dt.getDate(); (itemsByDate[d]=itemsByDate[d]||[]).push({label:p.headline, kind:'post', id:p.id}); } } });
   (S.user?.niches||[]).forEach(n => (S.eventsCache[n]||[]).forEach(e => {
     const ed = new Date(e.date);
@@ -1335,18 +1464,7 @@ function pageCalendar(){
     const tag = first_ ? `<div class="cal-tag cal-tag-${first_.kind}">${esc(first_.label.length>16?first_.label.slice(0,15)+'…':first_.label)}</div>` : '';
     grid += `<div class="cal-cell ${items.length?'has':''} ${tod?'today':''}" onclick='openQuickAdd("${iso}", ${JSON.stringify(items.filter(x=>x.kind==='post')).replace(/'/g,"&#39;")})'><span class="cal-daynum">${d}</span>${tag}</div>`;
   }
-  // Upcoming: pull events from cache for user niches + saved schedule
-  const combined = [];
-  (S.user?.niches||[]).forEach(n => (S.eventsCache[n]||[]).forEach(e => combined.push({date:e.date, title:e.title, desc:e.description, kind:"Event", niche:n})));
-  S.schedule.forEach(p => combined.push({date:p.scheduled_date, title:p.headline, desc:p.niche, kind:p.content_type||"Post", id:p.id}));
-  combined.sort((a,b)=> new Date(a.date) - new Date(b.date));
-  const now = new Date(); const upcoming = combined.filter(x=> new Date(x.date) >= new Date(now.getFullYear(),now.getMonth(),now.getDate())).slice(0, 12);
-  const events = upcoming.map(e=>{ const dt = new Date(e.date); return `<div class="event-item"><div class="event-date-badge"><div class="m">${M_SHORT[dt.getMonth()]}</div><div class="d">${dt.getDate()}</div></div><div class="event-body"><div class="event-title">${esc(e.title)}</div>${e.desc?`<div class="event-desc">${esc(e.desc)}</div>`:""}<div class="event-tag">${esc(e.kind)}${e.niche?' · '+esc(e.niche):''}</div></div>${e.id?`<button class="iconbtn tipbtn" data-tip="Remove" title="Remove" aria-label="Remove ${esc(e.title)}" onclick="deleteScheduleItem('${e.id}')">${I.trash}</button>`:''}</div>`; }).join("");
-
-  const asch = S.addSched;
-  return `<main class="page active">${topBar("Schedule")}
-    <div class="sec-h"><h2>Calendar</h2></div>
-    <div class="card">
+  return `<div class="card">
       <div class="cal-hd">
         <h3>${MONTHS[m]} ${y}</h3>
         <div style="display:flex;gap:4px">
@@ -1364,20 +1482,52 @@ function pageCalendar(){
         <button class="btn bp" style="flex:1;padding:12px;justify-content:center" onclick="saveQuickAdd()">${I.plus} Yes, add it</button>
         <button class="btn" style="padding:12px 16px" onclick="S.quickAdd=null; render();">Cancel</button>
       </div>
-    </div>` : ''}
-    <div class="card">
-      <div class="card-h">Add to your schedule</div>
-      <div class="field"><label>What are you doing</label><input class="input" placeholder="Go live · Post reel · Record podcast" value="${esc(asch.title)}" oninput="S.addSched.title=this.value"/></div>
+    </div>` : ''}`;
+}
+function renderScheduleSheet(){
+  if(!S.scheduleSheetOpen) return "";
+  const asch = S.addSched;
+  return `<div class="sheet-overlay open" onclick="if(event.target===this)closeScheduleSheet()">
+    <div class="sheet"><div class="sheet-grip"></div>
+      <div class="sheet-h"><h3>Schedule a post</h3><button class="sheet-close" onclick="closeScheduleSheet()">×</button></div>
+      <div class="field"><label>What are you doing</label><input class="input" placeholder="Go live · Post reel · Record podcast" value="${esc(asch.title)}" oninput="S.addSched.title=this.value" autofocus/></div>
       <div style="display:flex;gap:8px">
         <div class="field" style="flex:1"><label>Every</label><select class="input" onchange="S.addSched.weekday=this.value">${["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"].map(d=>`<option value="${d.toLowerCase()}" ${asch.weekday===d.toLowerCase()?'selected':''}>${d}</option>`).join("")}</select></div>
         <div class="field" style="flex:1"><label>Time</label><input class="input" type="time" value="${esc(asch.time)}" oninput="S.addSched.time=this.value"/></div>
       </div>
       <button class="btn bp" style="width:100%;padding:12px;justify-content:center" onclick="addRecurring()">${I.plus} Add for next 12 months</button>
     </div>
-    <div class="card">
-      <div class="card-h">Upcoming</div>
-      ${events || `<div style="color:var(--mu);font-size:12px">Your niche events and scheduled posts will show here.</div>`}
+  </div>`;
+}
+window.openScheduleSheet = () => { S.scheduleSheetOpen = true; render(); };
+window.closeScheduleSheet = () => { S.scheduleSheetOpen = false; render(); };
+window.setCalView = (v) => { S.calView = v; render(); };
+// Hands off to the EXISTING generation pipeline rather than building a
+// second one — synthesizes a trend-shaped object from the event, drops it
+// into S.trends, and reuses the same toggle()/expand flow a live news
+// story already goes through.
+window.createFromEvent = (ev) => {
+  const id = `evt_${Date.now()}`;
+  S.trends = [{ id, headline: ev.title, summary: ev.desc || ev.title, niche: ev.niche || (S.user?.niches||[])[0] || "", image: null, score: 80, timestamp: new Date(ev.date).getTime() }, ...S.trends];
+  S.tab = "home"; window.toggle(id); render();
+  setTimeout(() => { document.getElementById(`trend-${id}`)?.scrollIntoView({behavior:'smooth', block:'start'}); }, 50);
+};
+
+function pageCalendar(){
+  const view = S.calView || "agenda";
+  return `<main class="page active">${topBar("Calendar")}
+    <div class="cal-header">
+      <div class="cal-title">Content Calendar</div>
+      <div class="cal-sub">Plan around what's happening in your world.</div>
     </div>
+    <div class="cal-view-switch">
+      <button class="cal-view-btn ${view==='agenda'?'active':''}" onclick="setCalView('agenda')">Agenda</button>
+      <button class="cal-view-btn ${view==='week'?'active':''}" onclick="setCalView('week')">Week</button>
+      <button class="cal-view-btn ${view==='month'?'active':''}" onclick="setCalView('month')">Month</button>
+    </div>
+    ${view==='agenda' ? renderAgendaView() : view==='week' ? renderWeekView() : renderMonthView()}
+    <button class="btn bo" style="width:100%;padding:13px;justify-content:center;margin-top:16px" onclick="openScheduleSheet()">${I.plus} Schedule Post</button>
+    ${renderScheduleSheet()}
   </main>`;
 }
 window.calNav = (dir) => {
