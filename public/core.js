@@ -1467,8 +1467,12 @@ function renderMonthView(){
     const first_ = items[0];
     const tod = isCur && d===today.getDate();
     const iso = `${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    // Separate from "today" — this is whichever date the user actually
+    // tapped, kept in sync with the quick-add form below so the highlight
+    // and the form's date can never show two different days at once.
+    const sel = S.quickAdd && S.quickAdd.date === iso;
     const tag = first_ ? `<div class="cal-tag cal-tag-${first_.kind}">${esc(first_.label.length>16?first_.label.slice(0,15)+'…':first_.label)}</div>` : '';
-    grid += `<div class="cal-cell ${items.length?'has':''} ${tod?'today':''}" onclick='openQuickAdd("${iso}", ${JSON.stringify(items.filter(x=>x.kind==='post')).replace(/'/g,"&#39;")})'><span class="cal-daynum">${d}</span>${tag}</div>`;
+    grid += `<div class="cal-cell ${items.length?'has':''} ${tod?'today':''} ${sel?'selected':''}" onclick='openQuickAdd("${iso}", ${JSON.stringify(items.filter(x=>x.kind==='post')).replace(/'/g,"&#39;")})'><span class="cal-daynum">${d}</span>${tag}</div>`;
   }
   return `<div class="card">
       <div class="cal-hd">
