@@ -934,16 +934,21 @@ window.addRecurring = async () => {
   if(r.success){ toast(`Scheduled ${r.added} weeks`); S.addSched={title:"",weekday:"friday",time:"20:00",notes:""}; S.scheduleSheetOpen=false; loadSchedule(); loadAgendaSchedule(); loadSaved(); }
   else toast(r.error||"Error");
 };
-window.openQuickAdd = (dateIso, existing) => { S.quickAdd = { date: dateIso, title: "", existing: existing||[] }; render(); };
+window.openQuickAdd = (dateIso, existing) => { S.quickAdd = { date: dateIso, title: "", time: "12:00", existing: existing||[] }; render(); };
 window.saveQuickAdd = async () => {
   const q = S.quickAdd;
   if(!q?.title){ toast("Add a title"); return; }
   const niche = (S.user?.niches||[])[0] || "";
   const platform = S.user?.primaryPlatform || (S.user?.platforms||[])[0] || "instagram";
+  // Combine date + time into one ISO value. If the scheduled_date column is
+  // date-only, Postgres just drops the time part silently — safe either
+  // way — but if it's a timestamp, the time actually gets stored correctly
+  // instead of a picker that visibly does nothing.
+  const scheduledDate = q.time ? `${q.date}T${q.time}:00` : q.date;
   try {
     const r = await api("/api/save-post", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
       token: S.token, headline: q.title, niche, platform, contentType: "Reminder",
-      content: { note: q.title }, scheduledDate: q.date
+      content: { note: q.title }, scheduledDate
     })});
     if(r.success){ toast("Added to " + q.date); S.quickAdd = null; loadSchedule(); loadAgendaSchedule(); loadSaved(); }
     else toast(r.error || "Couldn't add");
@@ -1360,12 +1365,13 @@ function renderAgendaItem(it){
   const badge = isPost ? "" : isMajor ? "🔥 " : it.importance === "relevant" ? "📌 " : "🗓 ";
   const cls = isPost ? "agenda-item-post" : isMajor ? "agenda-item-major" : "agenda-item-event";
   const dt = new Date(it.date);
+  const timeStr = isPost && it.date.includes("T") ? dt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) : null;
   const payload = JSON.stringify({title:it.title, desc:it.desc, niche:it.niche, date:it.date}).replace(/'/g,"&#39;");
   return `<div class="agenda-item ${cls}">
     <div class="agenda-item-date"><div class="m">${M_SHORT[dt.getMonth()]}</div><div class="d">${dt.getDate()}</div></div>
     <div class="agenda-item-body">
       <div class="agenda-item-title">${badge}${esc(it.title)}</div>
-      ${it.niche?`<div class="agenda-item-niche">${esc(it.niche)}${isPost?' · Scheduled':''}</div>`:''}
+      ${it.niche?`<div class="agenda-item-niche">${esc(it.niche)}${isPost?' · Scheduled'+(timeStr?' · '+timeStr:''):''}</div>`:''}
       ${it.desc && !isPost ?`<div class="agenda-item-desc">${esc(it.desc)}</div>`:''}
     </div>
     ${isPost
@@ -1478,6 +1484,7 @@ function renderMonthView(){
       <div class="card-h">Add something for ${esc(new Date(S.quickAdd.date+'T00:00:00').toLocaleDateString('en-US',{month:'long',day:'numeric'}))}?</div>
       ${(S.quickAdd.existing||[]).length ? `<div style="margin-bottom:12px">${S.quickAdd.existing.map(x=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--br,#2c2c2c)"><span style="font-size:13px">${esc(x.label)}</span><button class="iconbtn tipbtn" data-tip="Remove" title="Remove" aria-label="Remove ${esc(x.label)}" onclick="deleteScheduleItem('${x.id}')">${I.trash||'✕'}</button></div>`).join("")}</div>` : ''}
       <div class="field"><label>What are you doing</label><input class="input" placeholder="Go live · Post reel · Record podcast" value="${esc(S.quickAdd.title)}" oninput="S.quickAdd.title=this.value" autofocus/></div>
+      <div class="field"><label>Time</label><input class="input" type="time" value="${esc(S.quickAdd.time||'12:00')}" oninput="S.quickAdd.time=this.value"/></div>
       <div style="display:flex;gap:8px">
         <button class="btn bp" style="flex:1;padding:12px;justify-content:center" onclick="saveQuickAdd()">${I.plus} Yes, add it</button>
         <button class="btn" style="padding:12px 16px" onclick="S.quickAdd=null; render();">Cancel</button>
