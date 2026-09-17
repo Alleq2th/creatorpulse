@@ -931,7 +931,13 @@ window.addRecurring = async () => {
   const p = S.addSched;
   if(!p.title){ toast("Add a title"); return; }
   const r = await api("/api/user-schedule", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:S.token,...p})});
-  if(r.success){ toast(`Scheduled ${r.added} weeks`); S.addSched={title:"",weekday:"friday",time:"20:00",notes:""}; S.scheduleSheetOpen=false; loadSchedule(); loadAgendaSchedule(); loadSaved(); }
+  if(r.success){
+    toast(`Scheduled ${r.added} weeks`);
+    S.addSched={title:"",weekday:"friday",time:"20:00",notes:""};
+    S.scheduleSheetOpen=false;
+    render(); // show the sheet closing immediately, don't wait on the refresh below
+    loadSchedule(); loadAgendaSchedule(); loadSaved();
+  }
   else toast(r.error||"Error");
 };
 window.openQuickAdd = (dateIso, existing) => { S.quickAdd = { date: dateIso, title: "", time: "12:00", existing: existing||[] }; render(); };
@@ -940,17 +946,29 @@ window.saveQuickAdd = async () => {
   if(!q?.title){ toast("Add a title"); return; }
   const niche = (S.user?.niches||[])[0] || "";
   const platform = S.user?.primaryPlatform || (S.user?.platforms||[])[0] || "instagram";
-  // Combine date + time into one ISO value. If the scheduled_date column is
-  // date-only, Postgres just drops the time part silently — safe either
-  // way — but if it's a timestamp, the time actually gets stored correctly
-  // instead of a picker that visibly does nothing.
   const scheduledDate = q.time ? `${q.date}T${q.time}:00` : q.date;
   try {
     const r = await api("/api/save-post", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
       token: S.token, headline: q.title, niche, platform, contentType: "Reminder",
       content: { note: q.title }, scheduledDate
     })});
-    if(r.success){ toast("Added to " + q.date); S.quickAdd = null; loadSchedule(); loadAgendaSchedule(); loadSaved(); }
+    if(r.success){
+      toast("Added to " + q.date);
+      // Show it immediately rather than waiting on the very next network
+      // call to succeed — on a slow/cold-starting free-tier server, the
+      // save itself can go through while the immediate follow-up refresh
+      // times out, which was exactly why newly-added items sometimes
+      // never appeared even though they'd actually been saved. The
+      // background refresh below still runs to reconcile with the real
+      // server data whenever it responds; this just stops the display
+      // from depending on that second round-trip succeeding right away.
+      const optimisticItem = { id: `temp_${Date.now()}`, headline: q.title, niche, scheduled_date: scheduledDate, content_type: "Reminder" };
+      S.schedule = [...S.schedule, optimisticItem];
+      S.agendaSchedule = [...S.agendaSchedule, optimisticItem];
+      S.quickAdd = null;
+      render();
+      loadSchedule(); loadAgendaSchedule(); loadSaved();
+    }
     else toast(r.error || "Couldn't add");
   } catch(e){ toast("Couldn't add"); }
 };
