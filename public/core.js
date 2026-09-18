@@ -379,8 +379,13 @@ async function loadAgendaSchedule(){
   const months = [0,1,2].map(offset => { const d = new Date(now.getFullYear(), now.getMonth()+offset, 1); return {y:d.getFullYear(), m:d.getMonth()+1}; });
   try {
     const results = await Promise.all(months.map(({y,m}) => api(`/api/schedule?token=${S.token}&year=${y}&month=${m}`)));
-    S.agendaSchedule = results.flatMap(r => r.posts || []);
-    render();
+    // Same principle as loadSchedule — only trust results that genuinely
+    // came back successfully. A failed month contributes nothing rather
+    // than silently overwriting real (or optimistic) data with an empty
+    // result, and if every month happens to fail, the existing state is
+    // left completely untouched instead of being wiped to nothing.
+    const successful = results.filter(r => Array.isArray(r.posts));
+    if(successful.length){ S.agendaSchedule = successful.flatMap(r => r.posts); render(); }
   } catch(e){}
 }
 async function bootApp(){ render(); loadTrends(); loadNotifs(); loadSchedule(); loadSaved(); loadDigest(); loadAgendaSchedule(); startGlobalTimer(); initPush(); }
@@ -557,7 +562,19 @@ async function loadTrends(){
   if(S.tab === "home") render();
 }
 async function loadNotifs(){ if(!S.user) return; S.notifs = await fetchNotifs(S.user.niches).catch(()=>[]); render(); }
-async function loadSchedule(){ if(!S.token) return; try{ const d = await api(`/api/schedule?token=${S.token}&year=${S.cal.y}&month=${S.cal.m+1}`); S.schedule = d.posts||[]; render(); }catch(e){} }
+async function loadSchedule(){
+  if(!S.token) return;
+  try{
+    const d = await api(`/api/schedule?token=${S.token}&year=${S.cal.y}&month=${S.cal.m+1}`);
+    // Only replace what's on screen if this actually succeeded. On failure
+    // api() returns an error-shaped object with no .posts array at all —
+    // falling back to [] here was silently wiping out whatever was already
+    // showing (including an item just optimistically added seconds
+    // earlier) the moment this background check failed, even though
+    // nothing was actually wrong with that data.
+    if(Array.isArray(d.posts)){ S.schedule = d.posts; render(); }
+  }catch(e){}
+}
 async function loadSaved(){ if(!S.token) return; try{ const d = await api(`/api/saved-posts?token=${S.token}`); S.saved = d.posts||[]; render(); }catch(e){} }
 
 // ─── TRENDING RENDER ────────────────────────────────────────────────────────
