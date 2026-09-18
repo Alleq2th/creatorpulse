@@ -366,21 +366,36 @@ window.addEventListener("pagehide", () => { if(window.saveCaches) window.saveCac
   window.fetch = async (input, init) => {
     const url = typeof input === "string" ? input : input.url;
     const isApi = /\/api\//.test(url);
+    // Was retrying with only a 600ms gap — essentially no gap at all
+    // against a free-tier server that can take 50+ seconds to wake from
+    // idle. Retrying that fast just hits the same still-sleeping server
+    // again. Three attempts with real, escalating waits (3s, then 8s)
+    // actually gives a cold start a genuine chance to finish between
+    // tries, instead of just failing twice almost simultaneously.
+    const MAX_ATTEMPTS = isApi ? 3 : 1;
+    const RETRY_DELAYS = [3000, 8000];
     let attempt = 0, lastRes, lastErr;
-    while (attempt < (isApi ? 2 : 1)) {
+    while (attempt < MAX_ATTEMPTS) {
       try {
         const r = await _fetch(input, init);
         if (isApi && r.status >= 500) {
           lastRes = r;
           attempt++;
-          if (attempt < 2) { await new Promise(res => setTimeout(res, 600)); continue; }
+          if (attempt < MAX_ATTEMPTS) {
+            if (attempt === 1) { try { window.toast && window.toast("Server's waking up — hang tight…", 2500); } catch(_){} }
+            await new Promise(res => setTimeout(res, RETRY_DELAYS[attempt-1] || 8000));
+            continue;
+          }
           break;
         }
         return r;
       } catch (e) {
         lastErr = e;
         attempt++;
-        if (attempt < 2) await new Promise(res => setTimeout(res, 600));
+        if (attempt < MAX_ATTEMPTS) {
+          if (attempt === 1) { try { window.toast && window.toast("Server's waking up — hang tight…", 2500); } catch(_){} }
+          await new Promise(res => setTimeout(res, RETRY_DELAYS[attempt-1] || 8000));
+        }
       }
     }
     if (isApi) {
