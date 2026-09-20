@@ -80,6 +80,13 @@ const S = {
   calView: "agenda", // agenda | week | month — agenda is the default per rebuild
   agendaSchedule: [], // rolling multi-month schedule fetch, separate from the month-scoped one Month view uses
   scheduleSheetOpen: false,
+  // Optimistically-added items not yet confirmed by a real server fetch.
+  // Kept separate from S.schedule/S.agendaSchedule entirely, and merged in
+  // at render time for every view — this is what makes a newly-scheduled
+  // item survive a failed or slow background refresh in Month, Week, AND
+  // Agenda at once, instead of needing the same fix three separate times
+  // in three separate places.
+  pendingSchedule: [],
   coachHandle: "", coachPlatform: "instagram", coachMetrics: "", coachAnswer: "", coachLoading: false,
   addSched: { title:"", weekday:"friday", time:"20:00", notes:"" },
   quickAdd: null, // { date: "YYYY-MM-DD", title: "" } — set when a specific calendar day is tapped
@@ -562,6 +569,27 @@ async function loadTrends(){
   if(S.tab === "home") render();
 }
 async function loadNotifs(){ if(!S.user) return; S.notifs = await fetchNotifs(S.user.niches).catch(()=>[]); render(); }
+// A pending item is "confirmed" once a real fetch returns something with
+// the same headline on the same date — matched loosely on just the date
+// portion since exact timestamp formatting can differ slightly between
+// what was sent and what Postgres hands back.
+// Was removing a pending item from the one shared list the moment ANY
+// cache confirmed it — but Month and Agenda/Week refresh independently and
+// don't always succeed together. If Month's refresh confirmed an item
+// first and removed it from the shared pending list, while Agenda's own
+// refresh for that same period failed moments later, the item fell into
+// the gap between the two: gone from pending, never made it into Agenda's
+// own cache either. Checking against each view's OWN data at render time
+// instead — rather than deleting from one shared list based on a
+// different cache's success — means there's no gap for an item to fall
+// into, and no dependency on which refresh happens to finish first.
+function mergeWithPending(realItems, pendingItems){
+  if(!pendingItems.length) return realItems;
+  const stillPending = pendingItems.filter(pending =>
+    !realItems.some(real => real.headline === pending.headline && (real.scheduled_date||"").slice(0,10) === (pending.scheduled_date||"").slice(0,10))
+  );
+  return [...realItems, ...stillPending];
+}
 async function loadSchedule(){
   if(!S.token) return;
   try{
@@ -971,17 +999,11 @@ window.saveQuickAdd = async () => {
     })});
     if(r.success){
       toast("Added to " + q.date);
-      // Show it immediately rather than waiting on the very next network
-      // call to succeed — on a slow/cold-starting free-tier server, the
-      // save itself can go through while the immediate follow-up refresh
-      // times out, which was exactly why newly-added items sometimes
-      // never appeared even though they'd actually been saved. The
-      // background refresh below still runs to reconcile with the real
-      // server data whenever it responds; this just stops the display
-      // from depending on that second round-trip succeeding right away.
-      const optimisticItem = { id: `temp_${Date.now()}`, headline: q.title, niche, scheduled_date: scheduledDate, content_type: "Reminder" };
-      S.schedule = [...S.schedule, optimisticItem];
-      S.agendaSchedule = [...S.agendaSchedule, optimisticItem];
+      // One shared pending list, not two separate splices — this is what
+      // lets Month, Week, and Agenda all see the new item immediately and
+      // ALL survive a failed background refresh, instead of each view
+      // needing its own fix.
+      S.pendingSchedule = [...S.pendingSchedule, { id: `temp_${Date.now()}`, headline: q.title, niche, scheduled_date: scheduledDate, content_type: "Reminder" }];
       S.quickAdd = null;
       render();
       loadSchedule(); loadAgendaSchedule(); loadSaved();
@@ -1382,7 +1404,7 @@ function getUnifiedAgendaItems(){
   (S.user?.niches||[]).forEach(n => (S.eventsCache[n]||[]).forEach(e => {
     items.push({ date: e.date, title: e.title, desc: e.description, type: "event", niche: n, importance: e.importance || "seasonal" });
   }));
-  S.agendaSchedule.forEach(p => {
+  mergeWithPending(S.agendaSchedule, S.pendingSchedule).forEach(p => {
     items.push({ date: p.scheduled_date, title: p.headline, desc: p.niche, type: "post", id: p.id, niche: p.niche });
   });
   return items
@@ -1490,7 +1512,7 @@ function renderMonthView(){
   const today = new Date();
   const isCur = today.getFullYear()===y && today.getMonth()===m;
   const itemsByDate = {};
-  S.schedule.forEach(p=>{ if(p.scheduled_date){ const dt = new Date(p.scheduled_date); if(dt.getFullYear()===y && dt.getMonth()===m){ const d = dt.getDate(); (itemsByDate[d]=itemsByDate[d]||[]).push({label:p.headline, kind:'post', id:p.id}); } } });
+  mergeWithPending(S.schedule, S.pendingSchedule).forEach(p=>{ if(p.scheduled_date){ const dt = new Date(p.scheduled_date); if(dt.getFullYear()===y && dt.getMonth()===m){ const d = dt.getDate(); (itemsByDate[d]=itemsByDate[d]||[]).push({label:p.headline, kind:'post', id:p.id}); } } });
   (S.user?.niches||[]).forEach(n => (S.eventsCache[n]||[]).forEach(e => {
     const ed = new Date(e.date);
     if(ed.getFullYear()===y && ed.getMonth()===m) (itemsByDate[ed.getDate()]=itemsByDate[ed.getDate()]||[]).push({label:e.title, kind:'event'});
