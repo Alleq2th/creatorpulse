@@ -143,6 +143,17 @@ window.cacheSet = cacheSet;
 // Hydrate immediately at load — before any fetch runs.
 restoreCaches();
 
+// pendingSchedule was purely in-memory — closing the app before the
+// background sync had confirmed a newly-added item into the real,
+// persistent schedule data meant that item's only copy simply vanished on
+// reload, even though the actual save to the server may well have
+// succeeded. This makes the pending copy itself survive an app close,
+// same as everything else that's meant to persist.
+const PENDING_KEY = "cp_pending_schedule";
+function savePendingSchedule(){ try { localStorage.setItem(PENDING_KEY, JSON.stringify(S.pendingSchedule||[])); } catch(e){} }
+function restorePendingSchedule(){ try { const j = localStorage.getItem(PENDING_KEY); if(j) S.pendingSchedule = JSON.parse(j) || []; } catch(e){} }
+restorePendingSchedule();
+
 function toast(msg){ const t=document.createElement("div"); t.className="toast"; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),2400); }
 function esc(s){ return String(s||"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 window.imgFail = function(el){ try { const ph = document.createElement('div'); ph.className = 'timg-ph'; ph.innerHTML = I.news; if(el && el.parentNode) el.parentNode.replaceChild(ph, el); else if(el) el.remove(); } catch(e){ if(el) el.remove(); } };
@@ -392,7 +403,7 @@ async function loadAgendaSchedule(){
     // result, and if every month happens to fail, the existing state is
     // left completely untouched instead of being wiped to nothing.
     const successful = results.filter(r => Array.isArray(r.posts));
-    if(successful.length){ S.agendaSchedule = successful.flatMap(r => r.posts); render(); }
+    if(successful.length){ S.agendaSchedule = successful.flatMap(r => r.posts); cleanupPendingSchedule(); render(); }
   } catch(e){}
 }
 async function bootApp(){ render(); loadTrends(); loadNotifs(); loadSchedule(); loadSaved(); loadDigest(); loadAgendaSchedule(); startGlobalTimer(); initPush(); }
@@ -583,6 +594,23 @@ async function loadNotifs(){ if(!S.user) return; S.notifs = await fetchNotifs(S.
 // instead — rather than deleting from one shared list based on a
 // different cache's success — means there's no gap for an item to fall
 // into, and no dependency on which refresh happens to finish first.
+// Housekeeping only — NOT relied on for correctness (render-time deduping
+// in mergeWithPending already handles that regardless of this ever
+// running). This just keeps the persisted pending list from growing
+// forever: once an item is confirmed in BOTH real caches — the safe
+// condition, unlike the old one-cache-triggers-removal bug — it's dropped
+// and the trimmed list is re-saved.
+function cleanupPendingSchedule(){
+  if(!S.pendingSchedule.length) return;
+  const confirmedInBoth = S.pendingSchedule.filter(pending =>
+    S.schedule.some(r => r.headline === pending.headline && (r.scheduled_date||"").slice(0,10) === (pending.scheduled_date||"").slice(0,10)) &&
+    S.agendaSchedule.some(r => r.headline === pending.headline && (r.scheduled_date||"").slice(0,10) === (pending.scheduled_date||"").slice(0,10))
+  );
+  if(confirmedInBoth.length){
+    S.pendingSchedule = S.pendingSchedule.filter(p => !confirmedInBoth.includes(p));
+    savePendingSchedule();
+  }
+}
 function mergeWithPending(realItems, pendingItems){
   if(!pendingItems.length) return realItems;
   const stillPending = pendingItems.filter(pending =>
@@ -600,7 +628,7 @@ async function loadSchedule(){
     // showing (including an item just optimistically added seconds
     // earlier) the moment this background check failed, even though
     // nothing was actually wrong with that data.
-    if(Array.isArray(d.posts)){ S.schedule = d.posts; render(); }
+    if(Array.isArray(d.posts)){ S.schedule = d.posts; cleanupPendingSchedule(); render(); }
   }catch(e){}
 }
 async function loadSaved(){ if(!S.token) return; try{ const d = await api(`/api/saved-posts?token=${S.token}`); S.saved = d.posts||[]; render(); }catch(e){} }
@@ -1004,6 +1032,7 @@ window.saveQuickAdd = async () => {
       // ALL survive a failed background refresh, instead of each view
       // needing its own fix.
       S.pendingSchedule = [...S.pendingSchedule, { id: `temp_${Date.now()}`, headline: q.title, niche, scheduled_date: scheduledDate, content_type: "Reminder" }];
+      savePendingSchedule(); // persist immediately — don't let an app close before the background sync finishes lose this
       S.quickAdd = null;
       render();
       loadSchedule(); loadAgendaSchedule(); loadSaved();

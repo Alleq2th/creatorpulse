@@ -207,10 +207,18 @@ window.uploadAvatar = async (event) => {
     toast("Couldn't read that image — try a different photo.");
     return;
   }
-  S.user.avatarUrl = dataUrl; render(); // show it immediately, save in the background
-  const d = await api("/api/auth/update-profile", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token: S.token, avatarUrl: dataUrl})});
-  if (d.error) { toast("Couldn't save your new photo — try again."); return; }
+  S.user.avatarUrl = dataUrl; render();
+  // Save to local storage IMMEDIATELY, not after the server call succeeds.
+  // The photo appeared on screen right away either way — but if
+  // saveSession() only ran after a slow network request, closing the app
+  // in that gap meant nothing was actually written to local storage yet,
+  // so reopening silently restored the old, pre-photo session even though
+  // the screen had already shown success. Saving locally first means the
+  // photo survives an immediate app close regardless of how long the
+  // server call takes.
   saveSession();
+  const d = await api("/api/auth/update-profile", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token: S.token, avatarUrl: dataUrl})});
+  if (d.error) { toast("Saved on this device, but couldn't sync to your account yet — try again when you have a better connection."); return; }
   toast("Profile photo updated");
 };
 window.connectAccount = (id) => {
