@@ -1324,6 +1324,21 @@ app.post("/api/save-post", async (req, res) => {
   try {
     const { data: userData, error: userError } = await supabase.auth.getUser(token);
     if (userError) return res.status(401).json({ error: "Invalid token" });
+    // Makes retrying this exact save safe. A client that never received a
+    // response (network hiccup, timeout) can't tell the difference between
+    // "the save actually failed" and "it succeeded but the response got
+    // lost" — so a real retry-until-success system needs to be able to
+    // resend the same save without risking a duplicate row. This checks
+    // for an existing row with the same user + headline + date first,
+    // using existing fields rather than requiring a new column. The small
+    // tradeoff: intentionally scheduling the exact same title on the exact
+    // same date twice would also be caught by this — a reasonable edge
+    // case to accept for the reliability this buys.
+    if (scheduledDate) {
+      const { data: existing } = await supabase.from("saved_posts").select("id")
+        .eq("user_id", userData.user.id).eq("headline", headline).eq("scheduled_date", scheduledDate).limit(1);
+      if (existing && existing.length) return res.json({ success: true, message: "Already saved", duplicate: true });
+    }
     const { error } = await supabase.from("saved_posts").insert({
       user_id: userData.user.id, headline, niche, platform,
       content_type: contentType, content, scheduled_date: scheduledDate || null
