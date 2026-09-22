@@ -154,6 +154,41 @@ function savePendingSchedule(){ try { localStorage.setItem(PENDING_KEY, JSON.str
 function restorePendingSchedule(){ try { const j = localStorage.getItem(PENDING_KEY); if(j) S.pendingSchedule = JSON.parse(j) || []; } catch(e){} }
 restorePendingSchedule();
 
+// A real "this never happens again" fix needs more than surviving a quick
+// app close — it needs the actual save to keep trying until it genuinely
+// succeeds, even if that takes multiple attempts across multiple app
+// sessions. This is a small persisted outbox: any save that fails outright
+// (not just slow) gets queued here instead of just showing an error and
+// being abandoned. It's retried periodically while the app is open, and
+// flushed again at boot — so a save that failed today because the server
+// was down for a minute will simply succeed on its own once things
+// recover, with no action needed from the user. Safe to retry repeatedly
+// because the server-side endpoint now recognizes and ignores duplicates
+// of the exact same save.
+const OUTBOX_KEY = "cp_save_outbox";
+function saveOutboxState(){ try { localStorage.setItem(OUTBOX_KEY, JSON.stringify(S.outbox||[])); } catch(e){} }
+function restoreOutboxState(){ try { const j = localStorage.getItem(OUTBOX_KEY); if(j) S.outbox = JSON.parse(j) || []; } catch(e){} }
+restoreOutboxState();
+async function flushOutbox(){
+  if(!S.token || !S.outbox || !S.outbox.length) return;
+  const remaining = [];
+  for(const item of S.outbox){
+    try {
+      const r = await api(item.endpoint, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(item.payload)});
+      if(!r.success){ item.attempts = (item.attempts||0) + 1; remaining.push(item); }
+      // success — simply don't re-queue it, this one's genuinely done
+    } catch(e){
+      item.attempts = (item.attempts||0) + 1;
+      remaining.push(item);
+    }
+  }
+  const anyResolved = remaining.length < S.outbox.length;
+  S.outbox = remaining;
+  saveOutboxState();
+  if(anyResolved){ loadSchedule(); loadAgendaSchedule(); render(); }
+}
+setInterval(flushOutbox, 30000);
+
 function toast(msg){ const t=document.createElement("div"); t.className="toast"; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),2400); }
 function esc(s){ return String(s||"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 window.imgFail = function(el){ try { const ph = document.createElement('div'); ph.className = 'timg-ph'; ph.innerHTML = I.news; if(el && el.parentNode) el.parentNode.replaceChild(ph, el); else if(el) el.remove(); } catch(e){ if(el) el.remove(); } };
@@ -406,7 +441,7 @@ async function loadAgendaSchedule(){
     if(successful.length){ S.agendaSchedule = successful.flatMap(r => r.posts); cleanupPendingSchedule(); render(); }
   } catch(e){}
 }
-async function bootApp(){ render(); loadTrends(); loadNotifs(); loadSchedule(); loadSaved(); loadDigest(); loadAgendaSchedule(); startGlobalTimer(); initPush(); }
+async function bootApp(){ render(); loadTrends(); loadNotifs(); loadSchedule(); loadSaved(); loadDigest(); loadAgendaSchedule(); flushOutbox(); startGlobalTimer(); initPush(); }
 
 // ─── PUSH NOTIFICATIONS ─────────────────────────────────────────────────────
 // Public key only — safe to embed client-side. Must match VAPID_PUBLIC_KEY on the server.
@@ -1020,25 +1055,33 @@ window.saveQuickAdd = async () => {
   const niche = (S.user?.niches||[])[0] || "";
   const platform = S.user?.primaryPlatform || (S.user?.platforms||[])[0] || "instagram";
   const scheduledDate = q.time ? `${q.date}T${q.time}:00` : q.date;
+  const payload = { token: S.token, headline: q.title, niche, platform, contentType: "Reminder", content: { note: q.title }, scheduledDate };
+
+  // Show it and persist the pending copy FIRST, before even attempting the
+  // network call — not after success. This way the item is safely on
+  // screen and survives an app close no matter what happens next.
+  S.pendingSchedule = [...S.pendingSchedule, { id: `temp_${Date.now()}`, headline: q.title, niche, scheduled_date: scheduledDate, content_type: "Reminder" }];
+  savePendingSchedule();
+  S.quickAdd = null;
+  render();
+
   try {
-    const r = await api("/api/save-post", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
-      token: S.token, headline: q.title, niche, platform, contentType: "Reminder",
-      content: { note: q.title }, scheduledDate
-    })});
+    const r = await api("/api/save-post", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
     if(r.success){
       toast("Added to " + q.date);
-      // One shared pending list, not two separate splices — this is what
-      // lets Month, Week, and Agenda all see the new item immediately and
-      // ALL survive a failed background refresh, instead of each view
-      // needing its own fix.
-      S.pendingSchedule = [...S.pendingSchedule, { id: `temp_${Date.now()}`, headline: q.title, niche, scheduled_date: scheduledDate, content_type: "Reminder" }];
-      savePendingSchedule(); // persist immediately — don't let an app close before the background sync finishes lose this
-      S.quickAdd = null;
-      render();
       loadSchedule(); loadAgendaSchedule(); loadSaved();
+    } else {
+      // A real failure (not just slow) — queue it so it keeps retrying on
+      // its own instead of being silently abandoned. The pending item
+      // already on screen stays exactly where it is; the user doesn't
+      // need to do anything or even know this happened.
+      S.outbox = [...(S.outbox||[]), { endpoint: "/api/save-post", payload, attempts: 1 }];
+      saveOutboxState();
     }
-    else toast(r.error || "Couldn't add");
-  } catch(e){ toast("Couldn't add"); }
+  } catch(e){
+    S.outbox = [...(S.outbox||[]), { endpoint: "/api/save-post", payload, attempts: 1 }];
+    saveOutboxState();
+  }
 };
 window.deleteScheduleItem = async (postId) => {
   try {
