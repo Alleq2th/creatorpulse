@@ -68,4 +68,7 @@ router.post("/check-uniqueness", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Exported alongside the router so the pure maths can be unit-tested.
 module.exports = router;
+module.exports.shingles = shingles;
+module.exports.jaccard = jaccard;

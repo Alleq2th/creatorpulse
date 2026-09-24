@@ -8,7 +8,11 @@ const { parser, NICHE_BLOG_RSS } = require("../config/feeds");
 
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY;
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
-const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:sportsguycollabs@gmail.com";
+// The subject must be a mailto: or https: URL. It is contact metadata carried
+// in the VAPID token, not an identity - a personal address should never be
+// hardcoded here. VAPID_SUBJECT is set in render.yaml; this fallback only
+// exists so a local run without it still boots.
+const VAPID_SUBJECT = process.env.VAPID_SUBJECT || "mailto:noreply@creatorpulse.app";
 
 const pushConfigured = !!(VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY);
 if (pushConfigured) {
@@ -74,7 +78,11 @@ router.post("/send-digest-push", async (req, res) => {
           const rssUrl = feeds[Math.floor(Math.random() * feeds.length)];
           const feed = await parser.parseURL(rssUrl);
           if (feed.items?.[0]) { headline = feed.items[0].title; break; }
-        } catch (e) {}
+        } catch (e) {
+          // Was an empty catch - a dead feed silently fell through to the
+          // generic headline with no trace of why.
+          console.warn(`[push] feed failed for niche "${n}":`, e.message);
+        }
       }
 
       const payload = JSON.stringify({ title: "CreatorPulse Digest", body: headline, url: "/" });

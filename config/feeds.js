@@ -1,7 +1,23 @@
 // Shared feed/niche configuration — used by digest, trends, and notifications routes.
 // Extracted from server.js so it has one home instead of being duplicated.
 const RSSParser = require("rss-parser");
-const parser = new RSSParser({ timeout: 8000, headers: { "User-Agent": "Mozilla/5.0 CreatorPulseBot/1.0" } });
+// Single source of truth for the RSS parser. media:content and media:thumbnail
+// live in the Yahoo Media RSS namespace, not the core RSS spec - rss-parser
+// will NOT expose them on parsed items unless explicitly declared here.
+// These fields previously existed only on a SECOND parser defined inside
+// server.js, so everything that imported this module (digest, push) got a
+// parser without them while server.js's own feed code got them. One parser
+// now, with the fields, used everywhere.
+const parser = new RSSParser({
+  timeout: 8000,
+  headers: { "User-Agent": "Mozilla/5.0 CreatorPulseBot/1.0" },
+  customFields: {
+    item: [
+      ["media:content", "media:content", { keepArray: true }],
+      ["media:thumbnail", "media:thumbnail", { keepArray: true }]
+    ]
+  }
+});
 
 const NICHE_QUERIES = {
   "Football/Soccer": "football soccer premier league champions league transfer",
