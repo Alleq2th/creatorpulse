@@ -24,7 +24,6 @@ const fetch = require("node-fetch");
 // the Render environment ever runs start without running postinstall first
 // (e.g. a cached build). See scripts/setupFonts.js for why this is needed.
 try { require("./scripts/setupFonts").installFonts(); } catch (e) { console.log("[fonts] boot install skipped:", e.message); }
-const RSSParser = require("rss-parser");
 const { createClient } = require("@supabase/supabase-js");
 const { google } = require("googleapis");
 const multer = require("multer");
@@ -36,24 +35,11 @@ try { rateLimit = require("express-rate-limit"); } catch (_) { rateLimit = null;
 try { compression = require("compression"); } catch (_) { compression = null; }
 
 const app = express();
-const parser = new RSSParser({
-  timeout: 8000,
-  headers: { "User-Agent": "Mozilla/5.0 CreatorPulseBot/1.0" },
-  // media:content and media:thumbnail live in the Yahoo Media RSS
-  // namespace, not the core RSS spec — rss-parser will NOT expose them on
-  // parsed items unless explicitly declared here. Without this, every
-  // check for those fields in extractFeedImage() was silently checking a
-  // property that never existed, regardless of how well the extraction
-  // logic itself was written. This is exactly how professional outlets
-  // (Hollywood Reporter, Variety, etc.) typically publish their images —
-  // not as an embedded <img> tag in the content HTML.
-  customFields: {
-    item: [
-      ["media:content", "media:content", { keepArray: true }],
-      ["media:thumbnail", "media:thumbnail", { keepArray: true }]
-    ]
-  }
-});
+// RSS parsing goes through the single shared parser in config/feeds.js. That is
+// the one definition, with media:content/media:thumbnail declared on it, so
+// server.js, routes/digest.js and routes/push.js all parse feeds identically
+// instead of one of them silently missing the media fields.
+const { parser, NICHE_QUERIES, NICHE_RSS, NICHE_BLOG_RSS, NICHE_EVENTS, NICHE_KEYWORDS, GLOBAL_BANNED, HOOKS_BY_NICHE, HOOK_TEMPLATES } = require("./config/feeds");
 
 // Behind Render/Cloudflare — trust the proxy so req.ip + secure work
 app.set("trust proxy", 1);
@@ -66,30 +52,13 @@ app.use((req, res, next) => {
   next();
 });
 
-// Security headers (Helmet) with a CSP tuned for the inline SPA + external image CDNs
-if (helmet) {
-  app.use(helmet({
-    contentSecurityPolicy: {
-      useDefaults: true,
-      directives: {
-        "default-src": ["'self'"],
-        "script-src": ["'self'", "'unsafe-inline'", "https://apis.google.com"],
-        "script-src-attr": ["'unsafe-inline'"],
-        "style-src": ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-        "font-src": ["'self'", "https://fonts.gstatic.com", "data:"],
-        "img-src": ["'self'", "data:", "blob:", "https:"],
-        "media-src": ["'self'", "blob:", "data:", "https:"],
-        "connect-src": ["'self'", "https:"],
-        "frame-ancestors": ["'none'"],
-      },
-    },
-    crossOriginEmbedderPolicy: false,
-    crossOriginResourcePolicy: { policy: "cross-origin" },
-  }));
-}
-
-// Gzip/brotli responses
-if (compression) app.use(compression());
+// Security headers (Helmet + CSP) and gzip/brotli are provided by
+// middleware/auth.js. That file already existed but was never imported -
+// server.js kept its own copy instead, so the two were free to (and did)
+// drift apart. Importing it here makes one definition the single source of
+// truth for security headers. It must run before the route mounts below.
+const { setupSecurity } = require("./middleware/auth");
+setupSecurity(app, { compression });
 
 // CORS — allowlist FRONTEND_URL + localhost dev origins
 const CORS_ALLOWLIST = [
@@ -123,15 +92,11 @@ app.use("/api", require("./routes/image"));
 app.use("/api", require("./routes/cards"));
 app.use("/api", require("./routes/stockphoto"));
 
-app.use((req, res, next) => {
-  res.setHeader("X-Content-Type-Options", "nosniff");
-  res.setHeader("X-Frame-Options", "DENY");
-  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
-  res.setHeader("Permissions-Policy", "camera=(self), microphone=(self)");
-  next();
-});
+// Hardening headers (X-Content-Type-Options, X-Frame-Options, Referrer-Policy,
+// Permissions-Policy) were duplicated here as well - they now come solely from
+// middleware/auth.js via setupSecurity() above.
 
-// ── Rate limiting ────────────────────────────────────────────────────────────
+// ── Rate limiting ──────────────────────────────────────────────────────────────
 const noopLimiter = (_req, _res, next) => next();
 const mkLimiter = (opts) => rateLimit ? rateLimit({ standardHeaders: true, legacyHeaders: false, ...opts }) : noopLimiter;
 
@@ -144,20 +109,7 @@ app.use(globalLimiter);
 app.use("/api/auth", authLimiter);
 
 // ── Simple in-memory TTL cache for external feeds ────────────────────────────
-const _cache = new Map();
-function cacheGet(key) {
-  const hit = _cache.get(key);
-  if (!hit) return null;
-  if (Date.now() > hit.exp) { _cache.delete(key); return null; }
-  return hit.val;
-}
-function cacheSet(key, val, ttlMs) {
-  _cache.set(key, { val, exp: Date.now() + ttlMs });
-  if (_cache.size > 500) { // simple LRU-ish trim
-    const first = _cache.keys().next().value;
-    _cache.delete(first);
-  }
-}
+const { cacheGet, cacheSet } = require("./lib/cache");
 
 // Timed fetch — every external call has a hard cap
 async function tfetch(url, opts = {}, ms = 10000) {
@@ -173,6 +125,9 @@ app.use(express.static(PUBLIC_DIR, { maxAge: "5m", etag: true, index: false }));
 app.get("/", (_req, res) => res.sendFile(path.join(PUBLIC_DIR, "index.html"), { headers: { "Cache-Control": "no-cache" } }));
 
 // Health check for Render / UptimeRobot
+// `integrations` reports ONLY whether each provider is configured (booleans),
+// never the values. Without this a deploy could answer 200 "healthy" while
+// silently 503-ing every feature that needs a missing key.
 app.get("/api/health", (_req, res) => {
   const mem = process.memoryUsage();
   res.json({
@@ -180,6 +135,20 @@ app.get("/api/health", (_req, res) => {
     uptime: Math.round(process.uptime()),
     memoryMB: Math.round(mem.heapUsed / 1024 / 1024),
     node: process.version,
+    integrations: {
+      supabase: !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY),
+      groq: !!process.env.GROQ_API_KEY,
+      huggingface: !!process.env.HF_API_KEY,
+      newsapi: !!process.env.NEWS_API_KEY,
+      newsdata: !!process.env.NEWSDATA_API_KEY,
+      currents: !!process.env.CURRENTS_API_KEY,
+      googleOauth: !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.GOOGLE_REDIRECT_URI),
+      webPush: !!(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY),
+      pollinations: !!process.env.POLLINATIONS_KEY,
+      unsplash: !!process.env.UNSPLASH_ACCESS_KEY,
+      pexels: !!process.env.PEXELS_API_KEY,
+      adminKey: !!process.env.ADMIN_KEY,
+    },
   });
 });
 
@@ -202,7 +171,7 @@ const oauth2Client = GOOGLE_CLIENT_ID
 // Supabase client — shared module, also used by routes/push.js
 const { supabase } = require("./config/supabase");
 
-// ── AUTH ────────────────────────────────────────────────────────────────────
+// ── AUTH ──────────────────────────────────────────────────────────────────────
 app.post("/api/auth/signup", async (req, res) => {
   if (!supabase) return res.status(503).json({ error: "Auth not configured" });
   const { email, password, name, niches, platforms, primaryPlatform, postsPerDay } = req.body;
@@ -294,7 +263,63 @@ app.post("/api/auth/update-profile", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── NICHE MAPS ──────────────────────────────────────────────────────────────
+// Password recovery — step 1 of 2. Sends the Supabase reset email pointing back
+// into the SPA. The redirect is env-configurable (PASSWORD_RESET_REDIRECT),
+// falling back to FRONTEND_URL and then to localhost for dev.
+// The response is deliberately identical whether or not the address exists, so
+// this endpoint cannot be used to enumerate registered accounts.
+app.post("/api/auth/forgot-password", async (req, res) => {
+  if (!supabase) return res.status(503).json({ error: "Auth not configured" });
+  try {
+    const { email } = req.body || {};
+    if (!email) return res.status(400).json({ error: "Email is required" });
+    const base = process.env.PASSWORD_RESET_REDIRECT || FRONTEND_URL || "http://localhost:3000";
+    const redirectTo = base.replace(/\/+$/, "") + "/?type=recovery";
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
+    if (error) console.error("[auth] resetPasswordForEmail failed:", error.message);
+    res.json({ success: true, message: "If that email has an account, a reset link is on its way." });
+  } catch (e) {
+    console.error("[auth] forgot-password error:", e.message);
+    res.status(500).json({ error: "Could not send reset email" });
+  }
+});
+
+// Password recovery — step 2 of 2. The SPA posts the tokens it read out of the
+// recovery link's URL hash; we exchange them for a session and set the new
+// password. The tokens came from a mail-only link, so holding them IS the
+// proof of ownership — no other auth is required, and none is available (the
+// user cannot log in, that being the whole point).
+app.post("/api/auth/reset-password", async (req, res) => {
+  try {
+    const { access_token, refresh_token, password } = req.body || {};
+    if (!access_token || !refresh_token) {
+      return res.status(400).json({ error: "Reset link is invalid or has expired. Request a new one." });
+    }
+    if (!password || String(password).length < 6) {
+      return res.status(400).json({ error: "Password must be at least 6 characters." });
+    }
+    const url = process.env.SUPABASE_URL;
+    // The anon key, not the service key: setSession() is a user-session
+    // operation and must not run under service-role privileges.
+    const anonKey = process.env.SUPABASE_ANON_KEY;
+    if (!url || !anonKey) return res.status(503).json({ error: "Auth not configured" });
+
+    const client = createClient(url, anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
+    const { error: sessErr } = await client.auth.setSession({ access_token, refresh_token });
+    if (sessErr) {
+      console.error("[auth] setSession failed:", sessErr.message);
+      return res.status(400).json({ error: "Reset link is invalid or has expired. Request a new one." });
+    }
+    const { error: updErr } = await client.auth.updateUser({ password: String(password) });
+    if (updErr) return res.status(400).json({ error: updErr.message });
+    res.json({ success: true, message: "Password updated. You can sign in now." });
+  } catch (e) {
+    console.error("[auth] reset-password error:", e.message);
+    res.status(500).json({ error: "Could not update password" });
+  }
+});
+
+// ── NICHE MAPS ────────────────────────────────────────────────────────────────
 const NICHE_QUERIES = {
   "Football/Soccer": "football soccer premier league champions league transfer",
   "Basketball": "NBA basketball Lakers Warriors",
@@ -932,7 +957,7 @@ function computeContentScore(text, { sourceCount = 1, publishedAt } = {}) {
   return Math.max(40, Math.min(99, 55 + impactBonus + corroborationBonus + recencyBonus));
 }
 
-// ── NEWS ────────────────────────────────────────────────────────────────────
+// ── NEWS ──────────────────────────────────────────────────────────────────────
 app.get("/api/news", async (req, res) => {
   const { niche } = req.query;
   if (!niche) return res.status(400).json({ error: "niche required" });
@@ -1018,7 +1043,7 @@ app.get("/api/news", async (req, res) => {
   }
 });
 
-// ── BLOGS ───────────────────────────────────────────────────────────────────
+// ── BLOGS ─────────────────────────────────────────────────────────────────────
 app.get("/api/blog-feed", async (req, res) => {
   const { niche } = req.query;
   if (!niche) return res.status(400).json({ error: "niche required" });
@@ -1066,7 +1091,7 @@ app.get("/api/blog-feed", async (req, res) => {
   const _payload = { articles: filteredBlogs.slice(0, 25) }; cacheSet(_ck, _payload, 90*60*1000); res.json(_payload);
 });
 
-// ── TWITTER (Nitter) ────────────────────────────────────────────────────────
+// ── TWITTER (Nitter) ──────────────────────────────────────────────────────────
 const NITTER_MIRRORS = ["https://nitter.net","https://nitter.privacydev.net","https://nitter.poast.org"];
 app.get("/api/twitter-feed", async (req, res) => {
   const { handle, niche } = req.query;
@@ -1111,7 +1136,7 @@ function classifyEventImportance(title) {
   return "seasonal";
 }
 
-// ── EVENTS (12+ months rolling) ─────────────────────────────────────────────
+// ── EVENTS (12+ months rolling) ──────────────────────────────────────────────
 app.get("/api/events", async (req, res) => {
   const { niche } = req.query;
   if (!niche) return res.status(400).json({ error: "niche required" });
@@ -1123,7 +1148,7 @@ app.get("/api/events", async (req, res) => {
   res.json({ events: withImportance });
 });
 
-// ── IMAGE HELPERS ───────────────────────────────────────────────────────────
+// ── IMAGE HELPERS ────────────────────────────────────────────────────────────
 app.get("/api/image-proxy", async (req, res) => {
   const { url } = req.query;
   if (!url) return res.status(400).send("url required");
@@ -1163,7 +1188,7 @@ app.get("/api/wiki-image", async (req, res) => {
   } catch (e) { res.json({ image: null }); }
 });
 
-// ── TEXT GENERATION (with tone) ─────────────────────────────────────────────
+// ── TEXT GENERATION (with tone) ──────────────────────────────────────────────
 const TONE_PROMPTS = {
   normal: "Write in a natural, neutral, professional voice — clear and confident, no hype.",
   funny: "Write with sharp banter and dry humour. Land at least one clever joke. Never cringe, never cheesy. Punchy timing.",
@@ -1221,81 +1246,10 @@ app.post("/api/generate", heavyLimiter, async (req, res) => {
 // ── IMAGE GENERATION ────────────────────────────────────────────────────────
 // Moved to services/imageGen.js (provider logic) + routes/image.js (endpoint),
 // mounted near the top of the file with the other route imports.
-if (false) {
-function dimsForFormat(format) {
-  const f = String(format || "square").toLowerCase();
-  if (f.includes("thumbnail") || f.includes("youtube") || f.includes("16:9")) return { w: 1280, h: 720 };
-  if (f.includes("reel") || f.includes("tiktok") || f.includes("story") || f.includes("9:16") || f.includes("portrait")) return { w: 720, h: 1280 };
-  if (f.includes("carousel") || f.includes("4:5")) return { w: 1080, h: 1350 };
-  return { w: 1024, h: 1024 };
-}
-
-async function pollinationsImage(prompt, w, h) {
-  const seed = Math.floor(Math.random() * 1e9);
-  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${w}&height=${h}&nologo=true&enhance=true&seed=${seed}&model=flux`;
-  const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), 25000);
-  try {
-    const r = await fetch(url, { headers: { "User-Agent": "CreatorPulse/1.0" }, signal: ctl.signal });
-    if (!r.ok) throw new Error("pollinations " + r.status);
-    const buf = await r.buffer();
-    if (buf.length < 2000) throw new Error("empty image");
-    return `data:image/jpeg;base64,${buf.toString("base64")}`;
-  } finally { clearTimeout(timer); }
-}
-
-async function hfImage(prompt) {
-  if (!HF_KEY) throw new Error("no hf key");
-  const models = ["black-forest-labs/FLUX.1-schnell", "stabilityai/stable-diffusion-xl-base-1.0"];
-  for (const model of models) {
-    const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), 25000);
-    try {
-      const r = await fetch(`https://api-inference.huggingface.co/models/${model}`, {
-        method: "POST",
-        headers: { "Authorization": `Bearer ${HF_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ inputs: prompt, parameters: { negative_prompt: "blurry, watermark, text, logo, deformed", num_inference_steps: 25 } }),
-        signal: ctl.signal
-      });
-      if (!r.ok) continue;
-      const b64 = (await r.buffer()).toString("base64");
-      return `data:image/jpeg;base64,${b64}`;
-    } catch (e) { /* try next */ }
-    finally { clearTimeout(timer); }
-  }
-  throw new Error("hf unavailable");
-}
-
-async function generateOneImage(prompt, format) {
-  const { w, h } = dimsForFormat(format);
-  const styled = `${prompt}. Editorial photography, sharp focus, cinematic lighting, magazine-quality composition, no text, no watermark, no logo`;
-  try { return await pollinationsImage(styled, w, h); }
-  catch (e1) {
-    try { return await hfImage(styled); }
-    catch (e2) { throw new Error("All image providers unavailable: " + e1.message); }
-  }
-}
-
-app.post("/api/generate-image", heavyLimiter, async (req, res) => {
-  const { prompt, format, count } = req.body;
-  const n = Math.max(1, Math.min(5, parseInt(count) || 1));
-  try {
-    if (n === 1) {
-      const image = await generateOneImage(prompt, format);
-      return res.json({ image, format: format || "square" });
-    }
-    // parallel for carousel/multi
-    const results = await Promise.allSettled(
-      Array.from({ length: n }, (_, i) => generateOneImage(`${prompt} — slide ${i + 1} of ${n}`, format))
-    );
-    const images = results.filter(r => r.status === "fulfilled").map(r => r.value);
-    if (!images.length) return res.status(500).json({ error: "All image models unavailable" });
-    return res.json({ images, image: images[0], format: format || "square" });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-}
+// A dead `if (false) { ... }` copy of that logic used to sit below this comment.
+// It still contained the deprecated image.pollinations.ai URL AND a shadowed
+// /api/generate-image route, so anyone grepping for "pollinations" found the
+// retired endpoint first. Deleted — there is now exactly one implementation.
 
 // ── NOTIFICATIONS ───────────────────────────────────────────────────────────
 app.get("/api/notifications", async (req, res) => {
@@ -1312,7 +1266,11 @@ app.get("/api/notifications", async (req, res) => {
       }
       const feed = await parser.parseURL(NICHE_RSS[niche] || NICHE_RSS.default);
       if (feed.items?.[0]) notifications.push({ niche, headline: feed.items[0].title, time: "Just now" });
-    } catch (e) {}
+    } catch (e) {
+      // Was an empty catch - a dead feed produced a silently missing
+      // notification with nothing in the logs to explain it.
+      console.error(`[notifications] feed failed for niche "${niche}":`, e.message);
+    }
   }
   res.json({ notifications });
 });
@@ -1429,9 +1387,7 @@ app.post("/api/user-schedule", async (req, res) => {
 app.post("/api/coach", async (req, res) => {
   const { handle, platform, niche, recentMetrics, question } = req.body;
   const system = `You are CreatorPulse Coach — a straight-talking creator strategist. Give specific, tactical, kind but blunt feedback. No filler, no motivational fluff. Use short paragraphs and clear numbered actions.`;
-  const user = `Platform: ${platform || "unspecified"}. Handle: ${handle || "n/a"}. Niche: ${niche || "n/a"}.
-Recent metrics (creator-provided): ${recentMetrics || "not shared"}.
-Coaching question: ${question || "Give me a weekly report — 3 things working, 3 to fix, 3 experiments to try."}`;
+  const user = `Platform: ${platform || "unspecified"}. Handle: ${handle || "n/a"}. Niche: ${niche || "n/a"}.\nRecent metrics (creator-provided): ${recentMetrics || "not shared"}.\nCoaching question: ${question || "Give me a weekly report — 3 things working, 3 to fix, 3 experiments to try."}`;
   try {
     const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
@@ -2112,7 +2068,7 @@ app.get("/api/hooks", (req, res) => {
   res.json(_payload);
 });
 
-// ── v1.7 PRE-BETA: feedback, analytics, kill-switches ───────────────────────
+// ── v1.7 PRE-BETA: feedback, analytics, kill-switches ──────────────────────
 const _feedback = [];
 const _events = [];
 const _flags = {
@@ -2139,7 +2095,10 @@ app.post("/api/feedback", async (req, res) => {
   _feedback.push(entry);
   if (_feedback.length > 500) _feedback.shift();
   if (supabase) {
-    try { await supabase.from("feedback").insert(entry); } catch (e) {}
+    try { await supabase.from("feedback").insert(entry); } catch (e) {
+      // Was an empty catch - a failed feedback insert vanished without a trace.
+      console.error("[feedback] Supabase insert failed:", e.message);
+    }
   }
   console.log("[feedback]", entry.userId, entry.screen, entry.message.slice(0, 120));
   res.json({ ok: true, id: entry.id });
@@ -2271,7 +2230,7 @@ app.post("/api/account/reset", async (req, res) => {
 });
 
 
-// ── CONTACT FORM ─────────────────────────────────────────────────────────────
+// ── CONTACT FORM ────────────────────────────────────────────────────────────
 function _isEmail(x) {
   return typeof x === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x) && x.length <= 255;
 }
@@ -2300,7 +2259,7 @@ app.post("/api/contact", contactLimiter, async (req, res) => {
   }
 });
 
-// ── STUDIO: AUTO-CAPTIONS (Groq Whisper) ─────────────────────────────────────
+// ── STUDIO: AUTO-CAPTIONS (Groq Whisper) ────────────────────────────────────
 // Accepts a raw audio body (wav/webm/mp4/mp3/ogg) up to 25MB, forwards to
 // Groq Whisper large-v3 with word/segment timestamps, returns [{start,end,text}].
 // Rate limited via heavyLimiter (30/hour). Requires GROQ_API_KEY.
@@ -2402,5 +2361,3 @@ app.listen(PORT, () => console.log(`CreatorPulse running on port ${PORT}`));
 //   to the Pro plan (7-day PITR). Free tier includes daily backups.
 // - This deployment uses Bearer-token auth (no cookies), so CSRF tokens are
 //   not required. Do NOT switch to cookie-based auth without adding CSRF.
-
-
