@@ -39,7 +39,7 @@ const app = express();
 // the one definition, with media:content/media:thumbnail declared on it, so
 // server.js, routes/digest.js and routes/push.js all parse feeds identically
 // instead of one of them silently missing the media fields.
-const { parser, NICHE_QUERIES, NICHE_RSS, NICHE_BLOG_RSS, NICHE_EVENTS, NICHE_KEYWORDS, GLOBAL_BANNED, HOOKS_BY_NICHE, HOOK_TEMPLATES } = require("./config/feeds");
+const { parser } = require("./config/feeds");
 
 // Behind Render/Cloudflare — trust the proxy so req.ip + secure work
 app.set("trust proxy", 1);
@@ -96,7 +96,7 @@ app.use("/api", require("./routes/stockphoto"));
 // Permissions-Policy) were duplicated here as well - they now come solely from
 // middleware/auth.js via setupSecurity() above.
 
-// ── Rate limiting ──────────────────────────────────────────────────────────────
+// ── Rate limiting ────────────────────────────────────────────────────────────
 const noopLimiter = (_req, _res, next) => next();
 const mkLimiter = (opts) => rateLimit ? rateLimit({ standardHeaders: true, legacyHeaders: false, ...opts }) : noopLimiter;
 
@@ -171,7 +171,7 @@ const oauth2Client = GOOGLE_CLIENT_ID
 // Supabase client — shared module, also used by routes/push.js
 const { supabase } = require("./config/supabase");
 
-// ── AUTH ──────────────────────────────────────────────────────────────────────
+// ── AUTH ────────────────────────────────────────────────────────────────────
 app.post("/api/auth/signup", async (req, res) => {
   if (!supabase) return res.status(503).json({ error: "Auth not configured" });
   const { email, password, name, niches, platforms, primaryPlatform, postsPerDay } = req.body;
@@ -319,7 +319,7 @@ app.post("/api/auth/reset-password", async (req, res) => {
   }
 });
 
-// ── NICHE MAPS ────────────────────────────────────────────────────────────────
+// ── NICHE MAPS ──────────────────────────────────────────────────────────────
 const NICHE_QUERIES = {
   "Football/Soccer": "football soccer premier league champions league transfer",
   "Basketball": "NBA basketball Lakers Warriors",
@@ -957,7 +957,7 @@ function computeContentScore(text, { sourceCount = 1, publishedAt } = {}) {
   return Math.max(40, Math.min(99, 55 + impactBonus + corroborationBonus + recencyBonus));
 }
 
-// ── NEWS ──────────────────────────────────────────────────────────────────────
+// ── NEWS ────────────────────────────────────────────────────────────────────
 app.get("/api/news", async (req, res) => {
   const { niche } = req.query;
   if (!niche) return res.status(400).json({ error: "niche required" });
@@ -1043,7 +1043,7 @@ app.get("/api/news", async (req, res) => {
   }
 });
 
-// ── BLOGS ─────────────────────────────────────────────────────────────────────
+// ── BLOGS ───────────────────────────────────────────────────────────────────
 app.get("/api/blog-feed", async (req, res) => {
   const { niche } = req.query;
   if (!niche) return res.status(400).json({ error: "niche required" });
@@ -1091,7 +1091,7 @@ app.get("/api/blog-feed", async (req, res) => {
   const _payload = { articles: filteredBlogs.slice(0, 25) }; cacheSet(_ck, _payload, 90*60*1000); res.json(_payload);
 });
 
-// ── TWITTER (Nitter) ──────────────────────────────────────────────────────────
+// ── TWITTER (Nitter) ────────────────────────────────────────────────────────
 const NITTER_MIRRORS = ["https://nitter.net","https://nitter.privacydev.net","https://nitter.poast.org"];
 app.get("/api/twitter-feed", async (req, res) => {
   const { handle, niche } = req.query;
@@ -1136,7 +1136,7 @@ function classifyEventImportance(title) {
   return "seasonal";
 }
 
-// ── EVENTS (12+ months rolling) ──────────────────────────────────────────────
+// ── EVENTS (12+ months rolling) ─────────────────────────────────────────────
 app.get("/api/events", async (req, res) => {
   const { niche } = req.query;
   if (!niche) return res.status(400).json({ error: "niche required" });
@@ -1148,7 +1148,7 @@ app.get("/api/events", async (req, res) => {
   res.json({ events: withImportance });
 });
 
-// ── IMAGE HELPERS ────────────────────────────────────────────────────────────
+// ── IMAGE HELPERS ───────────────────────────────────────────────────────────
 app.get("/api/image-proxy", async (req, res) => {
   const { url } = req.query;
   if (!url) return res.status(400).send("url required");
@@ -1188,7 +1188,7 @@ app.get("/api/wiki-image", async (req, res) => {
   } catch (e) { res.json({ image: null }); }
 });
 
-// ── TEXT GENERATION (with tone) ──────────────────────────────────────────────
+// ── TEXT GENERATION (with tone) ─────────────────────────────────────────────
 const TONE_PROMPTS = {
   normal: "Write in a natural, neutral, professional voice — clear and confident, no hype.",
   funny: "Write with sharp banter and dry humour. Land at least one clever joke. Never cringe, never cheesy. Punchy timing.",
@@ -1387,7 +1387,9 @@ app.post("/api/user-schedule", async (req, res) => {
 app.post("/api/coach", async (req, res) => {
   const { handle, platform, niche, recentMetrics, question } = req.body;
   const system = `You are CreatorPulse Coach — a straight-talking creator strategist. Give specific, tactical, kind but blunt feedback. No filler, no motivational fluff. Use short paragraphs and clear numbered actions.`;
-  const user = `Platform: ${platform || "unspecified"}. Handle: ${handle || "n/a"}. Niche: ${niche || "n/a"}.\nRecent metrics (creator-provided): ${recentMetrics || "not shared"}.\nCoaching question: ${question || "Give me a weekly report — 3 things working, 3 to fix, 3 experiments to try."}`;
+  const user = `Platform: ${platform || "unspecified"}. Handle: ${handle || "n/a"}. Niche: ${niche || "n/a"}.
+Recent metrics (creator-provided): ${recentMetrics || "not shared"}.
+Coaching question: ${question || "Give me a weekly report — 3 things working, 3 to fix, 3 experiments to try."}`;
   try {
     const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
@@ -2068,7 +2070,7 @@ app.get("/api/hooks", (req, res) => {
   res.json(_payload);
 });
 
-// ── v1.7 PRE-BETA: feedback, analytics, kill-switches ──────────────────────
+// ── v1.7 PRE-BETA: feedback, analytics, kill-switches ───────────────────────
 const _feedback = [];
 const _events = [];
 const _flags = {
@@ -2230,7 +2232,7 @@ app.post("/api/account/reset", async (req, res) => {
 });
 
 
-// ── CONTACT FORM ────────────────────────────────────────────────────────────
+// ── CONTACT FORM ─────────────────────────────────────────────────────────────
 function _isEmail(x) {
   return typeof x === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(x) && x.length <= 255;
 }
@@ -2259,7 +2261,7 @@ app.post("/api/contact", contactLimiter, async (req, res) => {
   }
 });
 
-// ── STUDIO: AUTO-CAPTIONS (Groq Whisper) ────────────────────────────────────
+// ── STUDIO: AUTO-CAPTIONS (Groq Whisper) ─────────────────────────────────────
 // Accepts a raw audio body (wav/webm/mp4/mp3/ogg) up to 25MB, forwards to
 // Groq Whisper large-v3 with word/segment timestamps, returns [{start,end,text}].
 // Rate limited via heavyLimiter (30/hour). Requires GROQ_API_KEY.
