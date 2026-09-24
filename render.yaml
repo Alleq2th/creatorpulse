@@ -5,9 +5,71 @@ services:
     buildCommand: npm install
     startCommand: npm start
     envVars:
+      # -- Server ------------------------------------------------------------
+      # PORT is injected by Render; do not set it here.
+      - key: NODE_ENV
+        value: production
+
+      # -- Supabase (database + auth) ---------------------------------------
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      # Public anon key - used only to exchange a password-recovery token for a
+      # session in /api/auth/reset-password. Not a secret, but kept out of git.
+      - key: SUPABASE_ANON_KEY
+        sync: false
+
+      # -- AI providers -----------------------------------------------------
       - key: GROQ_API_KEY
         sync: false
       - key: HF_API_KEY
         sync: false
+
+      # -- News providers ---------------------------------------------------
       - key: NEWS_API_KEY
+        sync: false
+      - key: NEWSDATA_API_KEY
+        sync: false
+      - key: CURRENTS_API_KEY
+        sync: false
+
+      # -- Image providers --------------------------------------------------
+      # POLLINATIONS_KEY is optional: without it image generation still works
+      # but is rate-limited to roughly one request every 15 seconds.
+      - key: POLLINATIONS_KEY
+        sync: false
+      - key: UNSPLASH_ACCESS_KEY
+        sync: false
+      - key: PEXELS_API_KEY
+        sync: false
+
+      # -- Google OAuth (Calendar) ------------------------------------------
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false
+
+      # -- Web push (VAPID) -------------------------------------------------
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      # Contact metadata carried in the VAPID token. Must be a mailto: or
+      # https: URL. Not a secret, so it can live here as a literal.
+      - key: VAPID_SUBJECT
+        value: mailto:noreply@creatorpulse.app
+
+      # -- Frontend / links -------------------------------------------------
+      - key: FRONTEND_URL
+        sync: false
+      # Where the password-reset email sends the user back to. Falls back to
+      # FRONTEND_URL when unset.
+      - key: PASSWORD_RESET_REDIRECT
+        sync: false
+
+      # -- Admin ------------------------------------------------------------
+      - key: ADMIN_KEY
         sync: false
