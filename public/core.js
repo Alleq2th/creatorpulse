@@ -69,9 +69,14 @@ const SYS = "You are CreatorPulse AI, a scriptwriter for social media creators. 
 // ─── STATE ──────────────────────────────────────────────────────────────────
 const S = {
   mode: "boot", // boot | auth | onboard | app
-  authTab: "login", // login | signup
+  authTab: "login", // login | signup | forgot
   authForm: { email:"", password:"", name:"" },
   authErr: "", authMsg: "", authLoading: false, token: null, refreshToken: null, user: null,
+  // Password recovery. Filled in from the Supabase recovery link that lands on
+  // the app as #access_token=…&refresh_token=…&type=recovery. Held in state
+  // rather than read from the URL at submit time, because the hash is scrubbed
+  // from the address bar as soon as it has been parsed.
+  recovery: { active:false, accessToken:"", refreshToken:"", error:"", done:false, loading:false, form:{ password:"", confirm:"" } },
   onboard: { step:0, name:"", niches:[], platforms:[], primary:"", ppd:3 },
   tab: "home",
   trends: [], notifs: [], schedule: [], saved: [], eventsCache: {},
@@ -1104,6 +1109,10 @@ function render(){
     if(ev){ window.__csKeep.edTime = ev.currentTime || window.__csKeep.edTime; window.__csKeep.edCid = ev.dataset.cid || window.__csKeep.edCid; }
   } catch(_){}
   if(S.mode === "boot"){ root.innerHTML = `<div class="auth-wrap"><div class="boot-brand"><img src="/logo-64.png" class="brand-mark boot-pulse" alt="CreatorPulse"/><div class="brand-name" style="margin-top:14px">CreatorPulse</div></div><div class="boot-spinner-wrap"><span class="sp boot-sp"></span></div><div class="boot-status">Setting things up…</div></div>`; return; }
+  // A recovery link owns the screen until the password is changed, whatever the
+  // mode — a signed-in user who clicks the link must still land on it.
+  if(S.recovery.active) { renderRecovery(); return csAfterRender(); }
+  if(S.mode === "auth" && S.authTab === "forgot") { renderForgot(); return csAfterRender(); }
   if(S.mode === "auth") { renderAuth(); return csAfterRender(); }
   if(S.mode === "onboard") { renderOnboard(); return csAfterRender(); }
   renderApp();
@@ -1175,6 +1184,143 @@ function csAfterRender(){
   } catch(err){ console.warn('csAfterRender', err); }
 }
 
+// ─── AUTH REDIRECT PARSING ──────────────────────────────────────────────────
+// Pure URL → outcome mapping for the links Supabase emails out: password
+// recovery, signup confirmation, and hard errors. Deliberately DOM-free so it
+// can be unit-tested directly (test/authRedirect.test.js) — it is the only
+// thing standing between a reset email and the "set a new password" screen,
+// and its failure mode is a dead link with no explanation.
+//
+// Returns { kind, access_token, refresh_token, error } where kind is one of
+// "recovery" | "signup" | "email_change" | "error" | "none".
+function parseAuthRedirect(hash, search){
+  const hashParams = new URLSearchParams(String(hash || "").replace(/^#/, ""));
+  const searchParams = new URLSearchParams(String(search || "").replace(/^\?/, ""));
+  const type = hashParams.get("type") || searchParams.get("type");
+  const rawErr = hashParams.get("error_description") || searchParams.get("error_description");
+  const error = rawErr ? decodeURIComponent(rawErr.replace(/\+/g, " ")) : "";
+  const access_token = hashParams.get("access_token") || searchParams.get("access_token") || "";
+  const refresh_token = hashParams.get("refresh_token") || searchParams.get("refresh_token") || "";
+
+  if(type === "recovery"){
+    // Supabase sends error_description when the link is expired/already used;
+    // otherwise the session must be present. A recovery link carrying neither
+    // is a dead end, so say so rather than rendering an unusable form.
+    return {
+      kind: "recovery", access_token, refresh_token,
+      error: error || ((!access_token || !refresh_token) ? "This reset link is invalid or has already been used." : ""),
+    };
+  }
+  if(error) return { kind: "error", access_token, refresh_token, error };
+  if(type === "signup" || type === "email_change") return { kind: type, access_token, refresh_token, error: "" };
+  return { kind: "none", access_token, refresh_token, error: "" };
+}
+
+// ─── PASSWORD RECOVERY ──────────────────────────────────────────────────────
+// Backend contract, from server.js:
+//   POST /api/auth/forgot-password  { email }
+//        → always { success, message } so the endpoint can't be used to probe
+//          which addresses have accounts
+//   POST /api/auth/reset-password   { access_token, refresh_token, password }
+//        → { success, message } or 4xx { error }
+// Supabase hands the recovery session back in the URL hash
+// (#access_token=…&refresh_token=…&type=recovery); checkAuthRedirect() in
+// app.js captures it into S.recovery before scrubbing the hash.
+
+async function doForgotPassword(){
+  const email = (S.authForm.email || "").trim();
+  S.authErr = ""; S.authMsg = "";
+  if(!email){ S.authErr = "Enter your email address first."; render(); return; }
+  S.authLoading = true; render();
+  try {
+    const d = await api("/api/auth/forgot-password", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email })
+    });
+    if(d.error) S.authErr = d.error;
+    else S.authMsg = d.message || "If that email has an account, a reset link is on its way. Check your inbox and your spam folder.";
+  } catch(e){ S.authErr = e.message; }
+  S.authLoading = false; render();
+}
+
+async function doResetPassword(){
+  const r = S.recovery;
+  const pw = (r.form.password || "");
+  const confirm = (r.form.confirm || "");
+  r.error = "";
+  if(pw.length < 6){ r.error = "Password must be at least 6 characters."; render(); return; }
+  if(pw !== confirm){ r.error = "Those passwords don't match."; render(); return; }
+  r.loading = true; render();
+  try {
+    const d = await api("/api/auth/reset-password", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ access_token: r.accessToken, refresh_token: r.refreshToken, password: pw })
+    });
+    // Covers both "invalid/expired link" and a rejected password from Supabase.
+    if(d.error) r.error = d.error;
+    else { r.done = true; r.accessToken = ""; r.refreshToken = ""; r.form = { password:"", confirm:"" }; }
+  } catch(e){ r.error = e.message; }
+  r.loading = false; render();
+}
+
+window.openForgot = () => { S.mode = "auth"; S.authTab = "forgot"; S.authErr = ""; S.authMsg = ""; render(); };
+window.backToLogin = () => {
+  S.recovery = { active:false, accessToken:"", refreshToken:"", error:"", done:false, loading:false, form:{ password:"", confirm:"" } };
+  S.mode = "auth"; S.authTab = "login"; S.authErr = ""; S.authMsg = "";
+  try { window.history.replaceState({}, document.title, window.location.pathname); } catch(e){}
+  render();
+};
+
+function authShell(body){
+  return `<div class="auth-wrap"><div class="auth-inner">
+    <div class="auth-brand"><img src="/logo-64.png" class="brand-mark" alt="CreatorPulse"/><div class="brand-name">CreatorPulse</div></div>
+    ${body}
+  </div></div>`;
+}
+
+function renderForgot(){
+  document.getElementById("root").innerHTML = authShell(`
+    <div class="auth-title">Reset your password.</div>
+    <div class="auth-sub">Enter your email and we'll send you a link to set a new one.</div>
+    ${S.authErr?`<div class="auth-err">${esc(S.authErr)}</div>`:""}
+    ${S.authMsg?`<div class="auth-msg">${esc(S.authMsg)}</div>`:""}
+    <div class="field"><label>Email</label><input class="input" type="email" value="${esc(S.authForm.email)}" oninput="S.authForm.email=this.value" placeholder="you@domain.com" autocomplete="email"/></div>
+    <button class="btn bp auth-cta" style="width:100%;padding:13px;margin-top:6px;justify-content:center" ${S.authLoading?"disabled":""} onclick="doForgotPassword()">${S.authLoading?'<span class="sp"></span>':"Send reset link"}</button>
+    <div class="auth-switch"><a onclick="backToLogin()">Back to sign in</a></div>`);
+}
+
+function renderRecovery(){
+  const r = S.recovery;
+  if(r.done){
+    document.getElementById("root").innerHTML = authShell(`
+      <div class="auth-title">Password updated.</div>
+      <div class="auth-msg">All set — your new password is active.</div>
+      <div class="auth-sub">Sign in with your new password to pick up where you left off.</div>
+      <button class="btn bp auth-cta" style="width:100%;padding:13px;justify-content:center" onclick="backToLogin()">Go to sign in</button>`);
+    return;
+  }
+  // No tokens means the link arrived without a usable recovery session —
+  // expired, already used, or stripped somewhere along the way. Dead end by
+  // design: the only useful action left is to request a fresh link.
+  if(!r.accessToken || !r.refreshToken){
+    document.getElementById("root").innerHTML = authShell(`
+      <div class="auth-title">Link expired.</div>
+      <div class="auth-sub">This reset link is no longer valid. They can only be used once, and they expire.</div>
+      ${r.error?`<div class="auth-err">${esc(r.error)}</div>`:""}
+      <button class="btn bp auth-cta" style="width:100%;padding:13px;margin-top:6px;justify-content:center" onclick="openForgot()">Request a new link</button>
+      <div class="auth-switch"><a onclick="backToLogin()">Back to sign in</a></div>`);
+    return;
+  }
+  document.getElementById("root").innerHTML = authShell(`
+    <div class="auth-title">Set a new password.</div>
+    <div class="auth-sub">Choose something you'll remember — at least 6 characters.</div>
+    ${r.error?`<div class="auth-err">${esc(r.error)}</div>`:""}
+    <div class="field"><label>New password</label><input class="input" type="password" value="${esc(r.form.password)}" oninput="S.recovery.form.password=this.value" placeholder="••••••••" autocomplete="new-password"/></div>
+    <div class="field"><label>Confirm new password</label><input class="input" type="password" value="${esc(r.form.confirm)}" oninput="S.recovery.form.confirm=this.value" placeholder="••••••••" autocomplete="new-password"/></div>
+    <button class="btn bp auth-cta" style="width:100%;padding:13px;margin-top:6px;justify-content:center" ${r.loading?"disabled":""} onclick="doResetPassword()">${r.loading?'<span class="sp"></span>':"Update password"}</button>
+    <div class="auth-switch"><a onclick="backToLogin()">Back to sign in</a></div>`);
+}
+
 function renderAuth(){
   const isLogin = S.authTab === "login";
   document.getElementById("root").innerHTML = `<div class="auth-wrap"><div class="auth-inner">
@@ -1187,7 +1333,7 @@ function renderAuth(){
     <div class="field"><label>Email</label><input class="input" type="email" value="${esc(S.authForm.email)}" oninput="S.authForm.email=this.value" placeholder="you@domain.com"/></div>
     <div class="field"><label>Password</label><input class="input" type="password" value="${esc(S.authForm.password)}" oninput="S.authForm.password=this.value" placeholder="••••••••"/></div>
     <button class="btn bp auth-cta" style="width:100%;padding:13px;margin-top:6px;justify-content:center" ${S.authLoading?"disabled":""} onclick="${isLogin?'doLogin()':'doSignup()'}">${S.authLoading?'<span class="sp"></span>':(isLogin?"Sign in":"Create account")}</button>
-    <div class="auth-switch">${isLogin?"New here?":"Already have an account?"} <a onclick="S.authTab='${isLogin?'signup':'login'}'; S.authErr=''; S.authMsg=''; render()">${isLogin?"Create one":"Sign in"}</a></div>
+    <div class="auth-switch">${isLogin?"New here?":"Already have an account?"} <a onclick="S.authTab='${isLogin?'signup':'login'}'; S.authErr=''; S.authMsg=''; render()">${isLogin?"Create one":"Sign in"}</a>${isLogin?'<div style="margin-top:10px"><a onclick="openForgot()">Forgot password?</a></div>':""}</div>
   </div></div>`;
 }
 

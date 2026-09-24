@@ -241,23 +241,41 @@ function renderInspirationFeed(){
 window.editNiches = () => { S.mode = "onboard"; S.onboard = { step:0, name:S.user?.name||"", niches:[...(S.user?.niches||[])], platforms:[...(S.user?.platforms||[])], primary:S.user?.primaryPlatform||"", ppd:S.user?.postsPerDay||3 }; window.ob = S.onboard; render(); };
 window.logOut = () => { if(confirm("Sign out?")){ clearSession(); S.mode="auth"; S.authTab="login"; S.authForm={email:"",password:"",name:""}; render(); } };
 
-// ─── AUTH REDIRECT DETECTION (email confirmation / errors from Supabase) ────
+// ─── AUTH REDIRECT DETECTION (email confirmation / recovery / errors) ───────
+// The URL→outcome mapping itself lives in parseAuthRedirect() (core.js) so it
+// can be unit-tested; this function only applies that outcome to app state.
 function checkAuthRedirect(){
   try {
-    const hash = window.location.hash ? window.location.hash.substring(1) : "";
-    const hashParams = new URLSearchParams(hash);
-    const searchParams = new URLSearchParams(window.location.search);
-    const type = hashParams.get("type") || searchParams.get("type");
-    const errorDesc = hashParams.get("error_description") || searchParams.get("error_description");
+    const r = parseAuthRedirect(window.location.hash, window.location.search);
 
-    if(errorDesc){
-      S.authErr = decodeURIComponent(errorDesc.replace(/\+/g," "));
+    // Password-recovery link. Supabase returns a real session in the hash
+    // (#access_token=…&refresh_token=…&type=recovery) once the email link is
+    // followed. Parsed here and stashed in state because the hash is scrubbed
+    // below and would otherwise be gone by the time the user submits the new
+    // password. There is no dedicated route — "/" serves index.html and the
+    // SPA takes over — so the recovery screen is driven by state.
+    if(r.kind === "recovery"){
+      S.recovery.active = true;
+      S.recovery.done = false;
+      S.recovery.accessToken = r.access_token;
+      S.recovery.refreshToken = r.refresh_token;
+      // Empty tokens (or an error Supabase attached to the link) render as the
+      // "link expired" state rather than an unusable form.
+      S.recovery.error = r.error;
+      // The token travels in the URL we were opened with — `?type=recovery` is
+      // what the server appends to PASSWORD_RESET_REDIRECT when building the
+      // email. Strip the query AND hash so it never lingers in history.
+      window.history.replaceState({}, document.title, window.location.pathname);
+      return true;
+    }
+    if(r.kind === "error"){
+      S.authErr = r.error;
       S.authTab = "login";
       window.history.replaceState({}, document.title, window.location.pathname);
       return true;
     }
-    if(type === "signup" || type === "email_change"){
-      S.authMsg = type === "signup" ? "Email confirmed! You can sign in now." : "Email address confirmed.";
+    if(r.kind === "signup" || r.kind === "email_change"){
+      S.authMsg = r.kind === "signup" ? "Email confirmed! You can sign in now." : "Email address confirmed.";
       S.authTab = "login";
       window.history.replaceState({}, document.title, window.location.pathname);
       return true;
