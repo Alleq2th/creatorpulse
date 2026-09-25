@@ -148,6 +148,12 @@ app.get("/api/health", (_req, res) => {
       unsplash: !!process.env.UNSPLASH_ACCESS_KEY,
       pexels: !!process.env.PEXELS_API_KEY,
       adminKey: !!process.env.ADMIN_KEY,
+      // Public anon key. Without it /api/auth/reset-password answers 503, so
+      // the password-reset flow silently cannot complete -- worth surfacing.
+      supabaseAnon: !!process.env.SUPABASE_ANON_KEY,
+      // Whether a reset email has anywhere to send the user back to. The
+      // server falls back to FRONTEND_URL, so either one being set counts.
+      passwordReset: !!(process.env.PASSWORD_RESET_REDIRECT || process.env.FRONTEND_URL),
     },
   });
 });
