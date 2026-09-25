@@ -1184,37 +1184,6 @@ function csAfterRender(){
   } catch(err){ console.warn('csAfterRender', err); }
 }
 
-// ─── AUTH REDIRECT PARSING ──────────────────────────────────────────────────
-// Pure URL → outcome mapping for the links Supabase emails out: password
-// recovery, signup confirmation, and hard errors. Deliberately DOM-free so it
-// can be unit-tested directly (test/authRedirect.test.js) — it is the only
-// thing standing between a reset email and the "set a new password" screen,
-// and its failure mode is a dead link with no explanation.
-//
-// Returns { kind, access_token, refresh_token, error } where kind is one of
-// "recovery" | "signup" | "email_change" | "error" | "none".
-function parseAuthRedirect(hash, search){
-  const hashParams = new URLSearchParams(String(hash || "").replace(/^#/, ""));
-  const searchParams = new URLSearchParams(String(search || "").replace(/^\?/, ""));
-  const type = hashParams.get("type") || searchParams.get("type");
-  const rawErr = hashParams.get("error_description") || searchParams.get("error_description");
-  const error = rawErr ? decodeURIComponent(rawErr.replace(/\+/g, " ")) : "";
-  const access_token = hashParams.get("access_token") || searchParams.get("access_token") || "";
-  const refresh_token = hashParams.get("refresh_token") || searchParams.get("refresh_token") || "";
-
-  if(type === "recovery"){
-    // Supabase sends error_description when the link is expired/already used;
-    // otherwise the session must be present. A recovery link carrying neither
-    // is a dead end, so say so rather than rendering an unusable form.
-    return {
-      kind: "recovery", access_token, refresh_token,
-      error: error || ((!access_token || !refresh_token) ? "This reset link is invalid or has already been used." : ""),
-    };
-  }
-  if(error) return { kind: "error", access_token, refresh_token, error };
-  if(type === "signup" || type === "email_change") return { kind: type, access_token, refresh_token, error: "" };
-  return { kind: "none", access_token, refresh_token, error: "" };
-}
 
 // ─── PASSWORD RECOVERY ──────────────────────────────────────────────────────
 // Backend contract, from server.js:

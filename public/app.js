@@ -242,8 +242,9 @@ window.editNiches = () => { S.mode = "onboard"; S.onboard = { step:0, name:S.use
 window.logOut = () => { if(confirm("Sign out?")){ clearSession(); S.mode="auth"; S.authTab="login"; S.authForm={email:"",password:"",name:""}; render(); } };
 
 // ─── AUTH REDIRECT DETECTION (email confirmation / recovery / errors) ───────
-// The URL→outcome mapping itself lives in parseAuthRedirect() (core.js) so it
-// can be unit-tested; this function only applies that outcome to app state.
+// The URL→outcome mapping itself lives in parseAuthRedirect() (lib/authRedirect.js,
+// loaded as a classic script above this file) so it can be unit-tested; this
+// function only applies that outcome to app state.
 function checkAuthRedirect(){
   try {
     const r = parseAuthRedirect(window.location.hash, window.location.search);
