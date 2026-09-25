@@ -478,3 +478,80 @@ test('spClamp: a non-finite value falls to the low bound, never to the middle', 
   assert.equal(P.spClamp(Infinity, 10, 90), 10);
   assert.equal(P.spClamp(50, 10, 90), 50);
 });
+
+// ── frame rate: ask for what the camera can actually do ───────────────────
+//
+// The complaint was "I want 60fps or more". Browsers never error when asked
+// for a rate they cannot deliver — they silently clamp it. So the app has to
+// read the camera's own reported ceiling and pick a rate inside it, or it ends
+// up claiming 120fps while writing a 30fps file.
+
+test('spPickFps: a 30fps camera is never asked for 60', () => {
+  assert.equal(P.spPickFps(60, { frameRateMax: 30 }), 30);
+  assert.equal(P.spPickFps(120, { frameRateMax: 30 }), 30);
+});
+
+test('spPickFps: a 60fps camera gets 60, not the 120 that was wished for', () => {
+  assert.equal(P.spPickFps(120, { frameRateMax: 60 }), 60);
+  assert.equal(P.spPickFps(60, { frameRateMax: 60 }), 60);
+});
+
+test('spPickFps: a camera with no reported ceiling keeps the wish intact', () => {
+  // MediaTrackCapabilities is not exposed everywhere. When it is missing we
+  // ask for what was wanted and let the browser clamp — better than inventing
+  // a lower number and under-delivering on a device that could have done more.
+  assert.equal(P.spPickFps(60, {}), 60);
+  assert.equal(P.spPickFps(60, null), 60);
+});
+
+test('spPickFps: a camera that really does 120 gets 120 (high-end phones)', () => {
+  assert.equal(P.spPickFps(120, { frameRateMax: 120 }), 120);
+  assert.equal(P.spPickFps(120, { frameRateMax: 240 }), 120);
+});
+
+test('spPickFps: a junk wish falls back to something sane, never to zero', () => {
+  // A zero frame rate would make getUserMedia fail outright, so this must
+  // never return 0 even when handed nonsense.
+  assert.equal(P.spPickFps(0, {}), 30);
+  assert.equal(P.spPickFps(NaN, {}), 30);
+  assert.ok(P.spPickFps(-5, { frameRateMax: 30 }) > 0);
+});
+
+test('spCaptureProfile: an explicit fps overrides the tier default', () => {
+  const p = P.spCaptureProfile('balanced', 60);
+  assert.equal(p.fps, 60);
+  assert.equal(p.tier, 'balanced');
+  // The size still comes from the tier — that is what keeps recording smooth.
+  assert.equal(p.width, 720);
+});
+
+test('spCaptureProfile: with no fps the tier default stands', () => {
+  assert.equal(P.spCaptureProfile('balanced').fps, 30);
+  assert.equal(P.spCaptureProfile('light').fps, 30);
+});
+
+test('spCaptureProfile: the high tier asks for 60fps, not more pixels', () => {
+  // This was the deliberate choice this round: on a phone, 60fps at 720p
+  // reads as "clearer" where 30fps at 1080p reads as "blurry and jerky".
+  const high = P.spCaptureProfile('high');
+  assert.equal(high.fps, 60);
+  assert.equal(high.width, 720);
+  assert.equal(high.height, 1280);
+});
+
+test('spFpsNote: a rate below the wish blames the camera, not the app', () => {
+  const note = P.spFpsNote(60, 30, { frameRateMax: 30 });
+  assert.match(note, /tops out at 30fps/);
+  assert.match(note, /not a setting you can push past/);
+});
+
+test('spFpsNote: a genuine 60fps recording is described as smooth', () => {
+  assert.match(P.spFpsNote(60, 60, { frameRateMax: 60 }), /smooth and clear/);
+  assert.match(P.spFpsNote(120, 120, { frameRateMax: 120 }), /smooth and clear/);
+});
+
+test('spFpsNote: an unknown rate never claims a number it does not have', () => {
+  const note = P.spFpsNote(60, 0, { frameRateMax: 60 });
+  assert.match(note, /decided by your camera/);
+  assert.doesNotMatch(note, /0fps/);
+});
