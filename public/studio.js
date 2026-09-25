@@ -1,2083 +1,2711 @@
-// ─── CREATE STUDIO v3 ───────────────────────────────────────────────────────
-// Camera · timeline · text + image overlays · word-by-word captions · music ·
-// ffmpeg.wasm export.
+/* ═══════════════════════════════════════════════════════════════════════════
+   CreatorPulse Studio — record → review → edit → export
+   ═══════════════════════════════════════════════════════════════════════════
+   Written from scratch to replace the previous Studio entirely. The old one
+   is not patched here; it is gone.
+
+   What the previous build did that this one does not:
+
+     • Pressing stop after a recording produced no acknowledgement at all. The
+       take existed in state but there was nothing on screen to show for it, so
+       the flow dead-ended. Here every take lands in a visible clip strip as a
+       block you can play, delete, or send straight to the editor, and the deck
+       keeps a running count.
+
+     • Trim opened a bottom sheet with two sliders and a "Done" button, and
+       trimming a clip did nothing you could see. Here trimming is the CapCut
+       gesture: tap the clip on the timeline, two handles grow out of its
+       edges, drag either one. The slider sheet still exists as a coarse
+       adjustment but it drives the same numbers, so the two can never
+       disagree.
+
+     • Zoom was fixed before recording started, and the "1x" next to the
+       sparkle icon in the side rail duplicated the separate zoom pill below
+       it. Here zoom is one control in one place, adjustable live, and the
+       side rail holds only things that are actually toggles.
+
+     • The header rendered partly underneath the browser's address bar, so the
+       back chevron overlapped the first characters of the title and the
+       side rail was clipped at the right edge. The new chrome respects the
+       safe-area insets (see studio.css) instead of assuming a full-height
+       viewport.
+
+   Layout of this file:
+
+     STATE        — the single studio state object and its normaliser
+     ICONS        — inline SVG paths
+     MEDIA POOL   — the one persistent <video>, never recreated per render
+     ROUTER       — pageCreate() and svAfterRender() called by core.js
+     RECORD       — camera view, clip strip, take review
+     EDITOR       — timeline, selection, CapCut trim handles
+     SHEETS       — trim, captions, text, image, video, music, effects, export
+     PLAYBACK     — the single rAF ticker that drives preview and captions
+     EXPORT       — ffmpeg.wasm render to a downloadable file
+     HISTORY      — undo / redo
+
+   Pure timeline maths (clip lengths, trim clamping, splitting, caption
+   timing, the export plan) lives in lib/studioModel.js and is unit-tested;
+   this file only wires it to the DOM.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── STATE ──────────────────────────────────────────────────────────────── */
+
+function svDefaultState(){
+  return {
+    mode: 'idle',                 // idle | camera | editor
+    projectName: 'New project',
+
+    // Teleprompter
+    script: '', showPrompter: false, showScriptEditor: false, promptSpeed: 60,
+
+    // Capture
+    running: false, paused: false, camReady: false, facing: 'user',
+    micOn: true, torch: false, zoom: 1, countdown: 0, mirror: true,
+    recStartedAt: 0, recAccumMs: 0, quality: null,
+
+    // Content
+    clips: [], overlays: [], captions: [], audioTracks: [],
+    selectedId: null, selectedType: null,
+
+    // Look
+    filter: 'none', adjust: { brightness: 100, contrast: 100, saturation: 100, warmth: 0 },
+    capStyle: { preset: 'classic', size: 34, width: 88, y: 78 },
+
+    // Transport
+    playhead: 0, playing: false,
+
+    // UI
+    sheet: null, editText: null, reviewId: null,
+    exporting: false, exportPct: 0, exportNote: '',
+    history: [], future: [],
+  };
+}
+
+// A studio state can outlive a deploy — if the user keeps the tab open across
+// a reload, or an older state is still in memory, every field added since must
+// appear. Normalising on entry means no render path ever has to guard for a
+// missing key.
+// Fills missing keys of `obj` from `defaults`, keeping the SAME object.
+function svFill(obj, defaults){
+  if (!obj || typeof obj !== 'object') return Object.assign({}, defaults);
+  for (const k in defaults){ if (obj[k] === undefined) obj[k] = defaults[k]; }
+  return obj;
+}
+
+// Returns the SAME object every time, only ever topping up missing keys.
 //
-// v3 rewrite (see CHANGELOG at the bottom):
-//  • Export no longer uses canvas capture + MediaRecorder. It builds one
-//    ffmpeg.wasm filter graph (trim → concat → colour → overlay PNGs → ASS
-//    captions → amix) and encodes offline. No realtime decode+encode race.
-//  • Two persistent <video> elements live OUTSIDE the render() innerHTML
-//    churn, so re-rendering the editor no longer orphans media decoders.
-//    That was the "dead after 5–6 edits" bug.
-//  • Split lands on the exact playhead sample, always.
-//  • Text AND image overlays: drag + corner resize + pinch.
-//  • Captions are word-timed (1–2 words per chunk), not sentence blocks.
-// ---------------------------------------------------------------------------
-
-const CS_FONTS = [
-  {id:"classic",  name:"Classic",        css:'"Inter", sans-serif',         weight:800, ass:"Inter"},
-  {id:"classic-m",name:"Classic Medium", css:'"Inter", sans-serif',         weight:600, ass:"Inter"},
-  {id:"classic-l",name:"Classic Light",  css:'"Inter", sans-serif',         weight:400, ass:"Inter"},
-  {id:"modern",   name:"Modern",         css:'"Archivo Black", sans-serif', weight:900, ass:"Archivo Black"},
-  {id:"modern-b", name:"Modern Bold",    css:'"Bebas Neue", sans-serif',    weight:400, ass:"Bebas Neue"},
-  {id:"anton",    name:"Anton",          css:'"Anton", sans-serif',         weight:400, ass:"Anton"},
-  {id:"oswald",   name:"Oswald",         css:'"Oswald", sans-serif',        weight:700, ass:"Oswald"},
-  {id:"signature",name:"Signature",      css:'"Dancing Script", cursive',   weight:700, ass:"Dancing Script"},
-  {id:"caveat",   name:"Handwritten",    css:'"Caveat", cursive',           weight:700, ass:"Caveat"},
-  {id:"marker",   name:"Marker",         css:'"Permanent Marker", cursive', weight:400, ass:"Permanent Marker"},
-  {id:"pacifico", name:"Script",         css:'"Pacifico", cursive',         weight:400, ass:"Pacifico"},
-  {id:"lobster",  name:"Lobster",        css:'"Lobster", cursive',          weight:400, ass:"Lobster"},
-  {id:"editor",   name:"Editor",         css:'"Special Elite", monospace',  weight:400, ass:"Special Elite"},
-  {id:"poster",   name:"Poster",         css:'"Abril Fatface", serif',      weight:400, ass:"Abril Fatface"},
-  {id:"playfair", name:"Elegant",        css:'"Playfair Display", serif',   weight:900, ass:"Playfair Display"},
-  {id:"zilla",    name:"Zilla",          css:'"Zilla Slab", serif',         weight:700, ass:"Zilla Slab"},
-  {id:"bungee",   name:"Bungee",         css:'"Bungee", sans-serif',        weight:400, ass:"Bungee"},
-  {id:"righteous",name:"Righteous",      css:'"Righteous", sans-serif',     weight:400, ass:"Righteous"},
-  {id:"pixel",    name:"Pixel",          css:'"Press Start 2P", monospace', weight:400, ass:"Press Start 2P"},
-];
-const CS_STYLES = [
-  {id:"none", name:"None"}, {id:"outline", name:"Outline"}, {id:"rev-outline", name:"Rev Outline"},
-  {id:"bg", name:"Background"}, {id:"rev-bg", name:"Rev Background"}, {id:"shadow", name:"Shadow"},
-];
-const CS_COLORS = ["#FFFFFF","#000000","#F5C518","#EF3355","#EC4899","#7C3AED","#3B82F6","#10B981","#F97316","#EAB308","#22D3EE","#F472B6"];
-
-// Each filter carries BOTH the CSS string (live preview) and an ffmpeg filter
-// chain (export). One preset, two renderers, identical intent.
-const CS_FILTERS = [
-  {id:"none", name:"None",  filter:"none",                                              ff:""},
-  {id:"vivid",name:"Vivid", filter:"saturate(1.4) contrast(1.15)",                       ff:"eq=saturation=1.4:contrast=1.15"},
-  {id:"warm", name:"Warm",  filter:"sepia(.2) saturate(1.2) hue-rotate(-8deg)",          ff:"eq=saturation=1.2,colorbalance=rs=.10:gs=.02:bs=-.08"},
-  {id:"cool", name:"Cool",  filter:"saturate(1.1) hue-rotate(12deg) brightness(1.05)",   ff:"eq=saturation=1.1:brightness=0.05,colorbalance=rs=-.06:bs=.10"},
-  {id:"mono", name:"Mono",  filter:"grayscale(1) contrast(1.1)",                         ff:"hue=s=0,eq=contrast=1.1"},
-  {id:"noir", name:"Noir",  filter:"grayscale(1) contrast(1.5) brightness(.9)",          ff:"hue=s=0,eq=contrast=1.5:brightness=-0.06"},
-  {id:"film", name:"Film",  filter:"sepia(.35) contrast(1.15) saturate(.9)",             ff:"eq=contrast=1.15:saturation=0.9,colorbalance=rs=.14:gs=.05:bs=-.10"},
-  {id:"dream",name:"Dream", filter:"blur(.4px) saturate(1.3) brightness(1.08)",          ff:"gblur=sigma=0.6,eq=saturation=1.3:brightness=0.06"},
-  {id:"punch",name:"Punch", filter:"saturate(1.6) contrast(1.25) brightness(1.02)",      ff:"eq=saturation=1.6:contrast=1.25:brightness=0.02"},
-];
-
-const CS_CAP_PRESETS = [
-  {id:"classic",  name:"Classic",  font:"classic",   color:"#F5C518", bg:"rgba(0,0,0,.72)", box:"block",  stroke:null,      shadow:false, upper:false, radius:.18},
-  {id:"clean",    name:"Clean",    font:"classic",   color:"#FFFFFF", bg:null,              box:"none",   stroke:null,      shadow:true,  upper:false, radius:0},
-  {id:"pop",      name:"Pop",      font:"modern",    color:"#FFFFFF", bg:null,              box:"none",   stroke:"#000000", shadow:false, upper:true,  radius:0},
-  {id:"karaoke",  name:"Karaoke",  font:"anton",     color:"#F5C518", bg:null,              box:"none",   stroke:"#111111", shadow:false, upper:true,  radius:0},
-  {id:"boxed",    name:"Boxed",    font:"classic",   color:"#0A0A0F", bg:"#FFFFFF",         box:"tight",  stroke:null,      shadow:false, upper:false, radius:.14},
-  {id:"neon",     name:"Neon",     font:"righteous", color:"#22D3EE", bg:"rgba(0,0,0,.55)", box:"block",  stroke:null,      shadow:true,  upper:false, radius:.5},
-  {id:"news",     name:"News",     font:"oswald",    color:"#FFFFFF", bg:"#EF3355",         box:"tight",  stroke:null,      shadow:false, upper:true,  radius:.06},
-  {id:"minimal",  name:"Minimal",  font:"classic-m", color:"#FFFFFF", bg:"rgba(0,0,0,.35)", box:"block",  stroke:null,      shadow:false, upper:false, radius:.3},
-  {id:"handnote", name:"Note",     font:"caveat",    color:"#FFFFFF", bg:null,              box:"none",   stroke:"#000000", shadow:true,  upper:false, radius:0},
-];
-function csCapPreset(id){ return CS_CAP_PRESETS.find(p=>p.id===id) || CS_CAP_PRESETS[0]; }
-function csFontById(id){ return CS_FONTS.find(f=>f.id===id) || CS_FONTS[0]; }
-function csFilterDef(id){ return CS_FILTERS.find(f=>f.id===id) || CS_FILTERS[0]; }
-function csFilterCss(id){ return csFilterDef(id).filter; }
-
-function csCapStyle(){
-  const st = S.studio;
-  const cs = st.capStyle || (st.capStyle = { preset:"classic", x:50, y:82, size:34, color:null, words:2 });
-  if(cs.preset == null) cs.preset = "classic";
-  if(cs.words == null) cs.words = 2;
-  const p = csCapPreset(cs.preset);
-  const f = csFontById(p.font);
-  return {
-    x: cs.x==null?50:cs.x, y: cs.y==null?82:cs.y, size: cs.size||34,
-    color: cs.color || p.color,
-    bg:p.bg, box:p.box, stroke:p.stroke, shadow:p.shadow, upper:p.upper, radius:p.radius,
-    fontCss:f.css, fontWeight:f.weight, fontAss:f.ass, preset:p.id, words:cs.words,
-  };
-}
-function csCapCss(s){
-  let out = `left:${s.x}%;top:${s.y}%;font-size:${s.size}px;color:${s.color};`
-          + `font-family:${s.fontCss};font-weight:${s.fontWeight};`
-          + `text-transform:${s.upper?'uppercase':'none'};border-radius:${s.radius}em;`;
-  out += s.bg && s.box!=='none'
-    ? `background:${s.bg};padding:${s.box==='tight'?'.16em .42em':'.28em .5em'};`
-    : `background:transparent;padding:.1em .2em;`;
-  if(s.stroke) out += `-webkit-text-stroke:${Math.max(1,Math.round(s.size*0.06))}px ${s.stroke};paint-order:stroke fill;`;
-  if(s.shadow) out += `text-shadow:0 ${Math.round(s.size*0.06)}px ${Math.round(s.size*0.28)}px rgba(0,0,0,.75);`;
-  return out;
-}
-function csStyleCss(style,color,bg){
-  bg = bg || "#000";
-  if(style==="outline")     return `-webkit-text-stroke:2px #000;paint-order:stroke fill;text-shadow:none;`;
-  if(style==="rev-outline") return `color:#000 !important;-webkit-text-stroke:2px ${color};paint-order:stroke fill;`;
-  if(style==="bg")          return `background:${bg};padding:6px 12px;border-radius:8px;`;
-  if(style==="rev-bg")      return `background:${color};color:${bg} !important;padding:6px 12px;border-radius:8px;`;
-  if(style==="shadow")      return `text-shadow:2px 4px 8px rgba(0,0,0,.7);`;
-  return ``;
-}
-
-function CS_ICON(name){
-  const p = {
-    close:'<path d="M18 6 6 18M6 6l12 12"/>',
-    check:'<path d="M20 6 9 17l-5-5"/>',
-    music:'<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
-    text:'<path d="M4 7V4h16v3M9 20h6M12 4v16"/>',
-    image:'<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/>',
-    voice:'<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 18v4"/>',
-    cc:'<rect x="2" y="4" width="20" height="16" rx="3"/><path d="M8 10a2 2 0 0 0-2 2v0a2 2 0 0 0 2 2M16 10a2 2 0 0 0-2 2v0a2 2 0 0 0 2 2"/>',
-    adjust:'<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
-    filter:'<path d="M4 6h16M7 12h10M10 18h4"/>',
-    split:'<path d="M12 3v6m0 6v6M8 12l-5 5M8 12l-5-5M16 12l5 5M16 12l5-5"/>',
-    trim:'<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.12 15.88M14.47 14.48 20 20M8.12 8.12 12 12"/>',
-    effects:'<path d="M12 3v3m0 12v3m9-9h-3M6 12H3m14.5-6.5-2 2m-7 7-2 2m11 0-2-2m-7-7-2-2"/>',
-    trash:'<path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>',
-    dup:'<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
-    copy:'<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
-    opacity:'<path d="M12 3l7 12a7 7 0 1 1-14 0z"/>',
-    replace:'<path d="M4 12a8 8 0 0 1 14-5m2 0v5h-5M20 12a8 8 0 0 1-14 5m-2 0v-5h5"/>',
-    play:'<path d="M7 4.5v15l12-7.5z" fill="currentColor" stroke="none"/>',
-    pause:'<rect x="6.5" y="4.5" width="4" height="15" rx="1.4" fill="currentColor" stroke="none"/><rect x="13.5" y="4.5" width="4" height="15" rx="1.4" fill="currentColor" stroke="none"/>',
-    undo:'<path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-4"/>',
-    redo:'<path d="m15 14 5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h4"/>',
-    plus:'<path d="M12 5v14M5 12h14"/>',
-    flash:'<path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>',
-    flip:'<path d="M4 8a8 8 0 0 1 14-3l2 2M20 4v4h-4M20 16a8 8 0 0 1-14 3l-2-2M4 20v-4h4"/>',
-    upload:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>',
-    layers:'<path d="M12 2 2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>',
-    timer:'<circle cx="12" cy="14" r="8"/><path d="M12 10v4l2 2M9 2h6"/>',
-    sparkle:'<path d="m12 3 2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/>',
-    volume:'<path d="M11 5 6 9H2v6h4l5 4zM15 9a5 5 0 0 1 0 6M19 5a10 10 0 0 1 0 14"/>',
-    resize:'<path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>',
-    download:'<path d="M12 3v12m0 0 4-4m-4 4-4-4M4 19h16"/>',
-  };
-  return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${p[name]||""}</svg>`;
-}
-
-// ─── DEVICE PROFILE ─────────────────────────────────────────────────────────
-// Drives export resolution/fps. ffmpeg.wasm is single-threaded in the default
-// build, so resolution matters more than it did with hardware MediaRecorder.
-const CS_QUALITY_PRESETS = {
-  "540p":  { width: 540,  height: 960,  fps: 24, crf: 27, preset: "ultrafast", label: "540p",  bitrate: 1_500_000 },
-  "720p":  { width: 720,  height: 1280, fps: 30, crf: 25, preset: "ultrafast", label: "720p",  bitrate: 2_500_000 },
-  "1080p": { width: 1080, height: 1920, fps: 30, crf: 23, preset: "veryfast",  label: "1080p", bitrate: 4_500_000 },
-  "2160p": { width: 2160, height: 3840, fps: 30, crf: 21, preset: "veryfast",  label: "4K",    bitrate: 12_000_000 },
-};
-const CS_DEVICE = (() => {
-  const cores = navigator.hardwareConcurrency || 4;
-  const mem   = navigator.deviceMemory || 4;
-  const tier  = (cores >= 8 && mem >= 6) ? "high" : (cores >= 4 && mem >= 3) ? "mid" : "low";
-  const autoQuality = tier === "high" ? "1080p" : tier === "mid" ? "720p" : "540p";
-  const mimeCandidates = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
-  const mime = mimeCandidates.find(m => window.MediaRecorder && MediaRecorder.isTypeSupported(m)) || 'video/webm';
-  return {
-    tier, cores, mem, mime,
-    // st.quality (set by the resolution picker) overrides the auto-detected tier when present.
-    get capture(){ return CS_QUALITY_PRESETS[S.studio?.quality || autoQuality]; },
-    get encode(){ return CS_QUALITY_PRESETS[S.studio?.quality || autoQuality]; },
-    get label(){ return CS_QUALITY_PRESETS[S.studio?.quality || autoQuality].label; },
-  };
-})();
-
-const CS_PX = 0.06;                 // timeline px per ms
-const CS_LBL = 84;                  // timeline label gutter width (px)
-
-// ═══════════════════════════════════════════════════════════════════════════
-//  VIEWS
-// ═══════════════════════════════════════════════════════════════════════════
-function csDefaultState(){
-  return {
-    mode:"camera",
-    projectName:"New project",
-    script:"", promptSpeed:60, mirror:true, running:false, showPrompter:false, showScriptEditor:false,
-    camReady:false, facing:"user", micOn:true, flash:false, zoom:1, speed:1, countdown:0,
-    clips:[], selectedId:null, selectedType:null,
-    overlays:[], captions:[], capWords:[], audioTracks:[],
-    filter:"none", adjust:{brightness:100,contrast:100,saturation:100,warmth:0},
-    capStyle:{ preset:"classic", x:50, y:82, size:34, color:null, words:2 },
-    playhead:0, playing:false, exporting:false, exportPct:0, exportNote:"",
-    sheet:null, editText:null, editTextTab:"font", capTab:"style",
-    history:[], future:[],
-  };
-}
-
-function pageCreate(){
-  const st = S.studio || (S.studio = csDefaultState());
-  if(st.mode === "editor") return edView(st);
-  if(st.mode !== "camera"){
-    st.mode = "camera";
-    setTimeout(() => { window.studioInitStage && window.studioInitStage(); }, 60);
+// This must not build a fresh object and reassign S.studio. Callers routinely
+// capture a reference and then call nested helpers:
+//
+//     const st = svState();
+//     svPush();                    // calls svState() internally
+//     st.clips = smRemoveClip(...); // was writing into the ORPHANED object
+//
+// Any reassignment here invalidated every such reference, so those writes went
+// to an object nothing else could see and the change silently vanished — which
+// is exactly what broke deleting a clip from the timeline.
+function svState(){
+  const d = svDefaultState();
+  const s = (S.studio && typeof S.studio === 'object') ? S.studio : (S.studio = {});
+  for (const k in d){ if (s[k] === undefined) s[k] = d[k]; }
+  // Sub-objects are topped up in place for the same reason.
+  svFill(s.adjust, d.adjust);
+  svFill(s.capStyle, d.capStyle);
+  for (const k of ['clips', 'overlays', 'captions', 'audioTracks', 'history', 'future']){
+    if (!Array.isArray(s[k])) s[k] = [];
   }
-  return camView(st);
+  return s;
 }
 
-// ── Camera ──────────────────────────────────────────────────────────────────
-function camView(st){
-  const rec = !!st.running;
+let __svN = 0;
+function svId(prefix){
+  __svN += 1;
+  return (prefix || 'x') + __svN.toString(36) + Date.now().toString(36).slice(-4);
+}
+function svNum(n, lo, hi){
+  n = Number(n);
+  if (!isFinite(n)) return lo;
+  return n < lo ? lo : (n > hi ? hi : n);
+}
+function svPxMs(){
+  try {
+    const v = parseFloat(getComputedStyle(document.querySelector('.sv-root')).getPropertyValue('--sv-px-ms'));
+    if (v > 0) return v;
+  } catch (_){}
+  return 0.09;
+}
+// Short, human label for a take or clip.
+function svLabel(i){ return 'Clip ' + (i + 1); }
+
+/* ── ICONS ──────────────────────────────────────────────────────────────── */
+
+function svIcon(name){
+  const P = {
+    close:   '<path d="M18 6 6 18M6 6l12 12"/>',
+    check:   '<path d="M20 6 9 17l-5-5"/>',
+    back:    '<path d="m15 18-6-6 6-6"/>',
+    text:    '<path d="M4 7V4h16v3M9 20h6M12 4v16"/>',
+    image:   '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/>',
+    video:   '<path d="m23 7-7 5 7 5z"/><rect x="1" y="5" width="15" height="14" rx="2"/>',
+    music:   '<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+    voice:   '<rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 18v4"/>',
+    cc:      '<rect x="2" y="4" width="20" height="16" rx="3"/><path d="M8 10a2 2 0 0 0-2 2v0a2 2 0 0 0 2 2M16 10a2 2 0 0 0-2 2v0a2 2 0 0 0 2 2"/>',
+    adjust:  '<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>',
+    filter:  '<path d="M4 6h16M7 12h10M10 18h4"/>',
+    stop:    '<rect x="6" y="6" width="12" height="12" rx="2.4" fill="currentColor" stroke="none"/>',
+    split:   '<path d="M12 3v6m0 6v6M8 12l-5 5M8 12l-5-5M16 12l5 5M16 12l5-5"/>',
+    trim:    '<path d="M6 3v18M18 3v18M6 8h5a4 4 0 0 1 0 8H6"/>',
+    trash:   '<path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>',
+    dup:     '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
+    replace: '<path d="M4 12a8 8 0 0 1 14-5m2 0v5h-5M20 12a8 8 0 0 1-14 5m-2 0v-5h5"/>',
+    play:    '<path d="M7 4.5v15l12-7.5z" fill="currentColor" stroke="none"/>',
+    pause:   '<rect x="6.5" y="4.5" width="4" height="15" rx="1.4" fill="currentColor" stroke="none"/><rect x="13.5" y="4.5" width="4" height="15" rx="1.4" fill="currentColor" stroke="none"/>',
+    undo:    '<path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-4"/>',
+    redo:    '<path d="m15 14 5-5-5-5"/><path d="M20 9H9a5 5 0 0 0 0 10h4"/>',
+    plus:    '<path d="M12 5v14M5 12h14"/>',
+    flash:   '<path d="M13 2 3 14h9l-1 8 10-12h-9z"/>',
+    flip:    '<path d="M4 8a8 8 0 0 1 14-3l2 2M20 4v4h-4M20 16a8 8 0 0 1-14 3l-2-2M4 20v-4h4"/>',
+    upload:  '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>',
+    layers:  '<path d="M12 2 2 7l10 5 10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>',
+    timer:   '<circle cx="12" cy="14" r="8"/><path d="M12 10v4l2 2M9 2h6"/>',
+    sparkle: '<path d="m12 3 2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/>',
+    volume:  '<path d="M11 5 6 9H2v6h4l5 4zM15 9a5 5 0 0 1 0 6M19 5a10 10 0 0 1 0 14"/>',
+    down:    '<path d="M12 3v12m0 0 4-4m-4 4-4-4M4 19h16"/>',
+    grid:    '<rect x="3" y="3" width="7" height="7" rx="1.6"/><rect x="14" y="3" width="7" height="7" rx="1.6"/><rect x="3" y="14" width="7" height="7" rx="1.6"/><rect x="14" y="14" width="7" height="7" rx="1.6"/>',
+    fx:      '<path d="M12 3v3m0 12v3m9-9h-3M6 12H3m14.5-6.5-2 2m-7 7-2 2m11 0-2-2m-7-7-2-2"/>',
+    cut:     '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.12 15.88M14.47 14.48 20 20"/>',
+    speed:   '<path d="M12 20a8 8 0 1 1 8-8"/><path d="m12 12 4-3"/><circle cx="12" cy="20" r="1.4" fill="currentColor"/>',
+    move:    '<path d="M5 9 2 12l3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3"/><path d="M2 12h20M12 2v20"/>',
+    mask:    '<circle cx="12" cy="12" r="9"/><path d="M12 3v18"/>',
+    spark:   '<path d="M12 2v4m0 12v4m10-10h-4M6 12H2m15.5-5.5-2.8 2.8M9.3 14.7l-2.8 2.8m11 0-2.8-2.8M9.3 9.3 6.5 6.5"/>',
+  };
+  return '<svg class="sv-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+    + 'stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">' + (P[name] || '') + '</svg>';
+}
+function svIconSm(name){ return svIcon(name).replace('class="sv-ico"', 'class="sv-ico sv-ico-sm"'); }
+
+/* ── MEDIA POOL ─────────────────────────────────────────────────────────── */
+// One <video> for the whole editor, created once and re-parented into the
+// stage on each render. The previous build's preview was rebuilt whenever the
+// view re-rendered, which dropped the decoder and left a black box; keeping
+// the element alive across renders is what fixes that.
+
+const SVMP = { v: null, host: null, loadedId: null };
+
+function svMedia(){
+  if (SVMP.v) return SVMP.v;
+  SVMP.host = document.createElement('div');
+  SVMP.host.style.display = 'none';
+  document.body.appendChild(SVMP.host);
+  const v = document.createElement('video');
+  v.id = 'sv-ed-video';
+  v.playsInline = true;
+  v.preload = 'auto';
+  v.setAttribute('webkit-playsinline', '');
+  SVMP.host.appendChild(v);
+  SVMP.v = v;
+  return v;
+}
+function svVideoSrc(url){
+  const v = svMedia();
+  if (v.dataset.src !== url){
+    v.dataset.src = url;
+    v.src = url;
+    try { v.load(); } catch (_){}
+  }
+  return v;
+}
+
+/* ── TEXT-TO-SPEECH / SYNTHESISED SOUND EFFECTS ─────────────────────────── */
+// Small built-in effects, synthesised to a WAV in the browser so the Sound
+// effects tool works with no bundled assets and no network.
+
+function svWav(mono, sampleRate){
+  const n = mono.length;
+  const buf = new ArrayBuffer(44 + n * 2);
+  const dv = new DataView(buf);
+  const ws = (off, s) => { for (let i = 0; i < s.length; i++) dv.setUint8(off + i, s.charCodeAt(i)); };
+  ws(0, 'RIFF'); dv.setUint32(4, 36 + n * 2, true); ws(8, 'WAVE');
+  ws(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true);
+  dv.setUint16(22, 1, true); dv.setUint32(24, sampleRate, true);
+  dv.setUint32(28, sampleRate * 2, true); dv.setUint16(32, 2, true);
+  dv.setUint16(34, 16, true); ws(36, 'data'); dv.setUint32(40, n * 2, true);
+  for (let i = 0; i < n; i++){
+    const s = Math.max(-1, Math.min(1, mono[i]));
+    dv.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+  }
+  return new Blob([buf], { type: 'audio/wav' });
+}
+
+const SV_SFX = [
+  { id: 'pop',    label: 'Pop' },
+  { id: 'whoosh', label: 'Whoosh' },
+  { id: 'riser',  label: 'Riser' },
+  { id: 'click',  label: 'Click' },
+];
+
+function svSfxBlob(kind){
+  const sr = 44100;
+  const dur = kind === 'riser' ? 1.3 : kind === 'whoosh' ? 0.7 : 0.22;
+  const n = Math.floor(sr * dur);
+  const out = new Float32Array(n);
+  for (let i = 0; i < n; i++){
+    const t = i / sr;
+    const p = t / dur;
+    if (kind === 'pop'){
+      out[i] = Math.sin(2 * Math.PI * (900 - 620 * p) * t) * Math.exp(-9 * p) * 0.85;
+    } else if (kind === 'whoosh'){
+      out[i] = (Math.random() * 2 - 1) * Math.exp(-3.4 * p) * 0.55
+             * (0.6 + 0.4 * Math.sin(2 * Math.PI * (320 + 900 * p) * t));
+    } else if (kind === 'riser'){
+      out[i] = Math.sin(2 * Math.PI * (180 + 1500 * p * p) * t)
+             * Math.min(1, p * 3) * Math.exp(-1.9 * (1 - p)) * 0.7;
+    } else {
+      // Short, dry click — a tick of filtered noise with a hard decay.
+      out[i] = (Math.random() * 2 - 1) * Math.exp(-55 * p) * 0.75;
+    }
+  }
+  return svWav(out, sr);
+}
+
+/* ── ROUTER ─────────────────────────────────────────────────────────────── */
+// core.js's renderApp() calls pageCreate() for the Create tab, and
+// svAfterRender() once the markup is in the DOM.
+
+window.pageCreate = function pageCreate(){
+  const st = svState();
+  if (st.mode === 'editor') return svEditorView(st);
+  if (st.mode === 'camera') return svCameraView(st);
+  return svStartView(st);
+};
+
+window.svAfterRender = function svAfterRender(){
+  if (!S.studio || S.tab !== 'create') return;
+  try {
+    const st = svState();
+    if (st.mode === 'camera'){
+      svAttachLive();
+      if (st.showPrompter && st.running && !st.paused) svPrompterRun();
+      else svPrompterStop();
+      if (st.running && !st.paused) svTimerRun(); else svTimerStop();
+    }
+    if (st.mode === 'editor'){
+      svAttachMedia();
+      svApplyPreview();
+      if (window.pushBackState) { /* back handled by csConfirmExitEditor */ }
+    }
+  } catch (err){ console.warn('[studio] afterRender', err); }
+};
+
+/* ── SHARED CHROME ──────────────────────────────────────────────────────── */
+
+function svCameraView(st){
   const clips = st.clips.length;
-  return `<div class="cs-fs cs-cam">
-    <div class="cs-topbar">
-      <button class="cs-icon-btn" onclick="csExitCamera()" aria-label="Close">${CS_ICON('close')}</button>
-      <div class="cs-title">${esc(st.projectName)}</div>
-      <div class="cs-topbar-r">
-        <button class="cs-chip" onclick="csOpenSheet('quality')">${CS_DEVICE.label}</button>
-        <button class="cs-cta" ${clips?'':'disabled'} onclick="csGoToEditor()">Next</button>
+  const live = st.running && !st.paused;
+  return `<div class="sv-root sv-rec" id="sv-root">
+    <div class="sv-bar">
+      <button class="sv-icon-btn" data-act="exitCamera" aria-label="Close studio">${svIcon('close')}</button>
+      <div class="sv-bar-title">${esc(st.projectName)}</div>
+      <div class="sv-bar-r">
+        <button class="sv-chip" data-act="sheet" data-arg="quality">${svQualityLabel(st)}</button>
+        <button class="sv-cta" data-act="toEditor" ${clips ? '' : 'disabled'}>Editor ${svIconSm('back')}</button>
       </div>
     </div>
-    ${st.sheet==='quality' ? `<div class="cs-sheet-inline">
-      <div class="cs-sheet-h"><h4>Recording quality</h4><button class="done" onclick="csCloseSheet()">Done</button></div>
-      <div class="cs-sheet-body">
-        ${Object.entries(CS_QUALITY_PRESETS).map(([key,p])=>`
-          <button class="cs-text-btn ${(st.quality||CS_DEVICE.tier==='high'&&'1080p'||CS_DEVICE.tier==='mid'&&'720p'||'540p')===key?'on':''}"
-            style="width:100%;justify-content:space-between;padding:14px 4px" onclick="csSetQuality('${key}')">
-            <span>${p.label}${key==='2160p'?' (4K)':''}</span>
-            <span class="cs-foot-meta">${p.width}×${p.height}</span>
-          </button>`).join('')}
-        <div class="cs-foot-meta" style="padding:8px 4px 0">Higher quality uses more storage and may be slower to export on older phones.</div>
-      </div>
-    </div>` : ''}
 
-    <div class="cs-cam-stage ${rec?'is-rec':''}" id="cs-cam-stage">
-      <video id="cs-cam-live" playsinline muted autoplay
-        style="transform:${st.mirror&&st.facing==='user'?'scaleX(-1) ':''}scale(${st.zoom})"></video>
+    <div class="sv-stage ${st.running ? 'is-rec' : ''}" id="sv-stage">
+      <video id="sv-cam-live" playsinline muted autoplay
+        style="transform:${st.mirror && st.facing === 'user' ? 'scaleX(-1) ' : ''}scale(${st.zoom})"></video>
 
-      ${st.showPrompter && st.script ? `<div class="cs-prompter">
-        <div class="cs-prompter-inner" id="cs-cam-prompter-inner">${esc(st.script)}</div>
-      </div>` : ''}
+      ${st.showPrompter && st.script
+        ? `<div class="sv-prompter-hd"><span>Teleprompter</span><span data-act="togglePrompter" style="cursor:pointer">Hide</span></div>
+           <div class="sv-prompter"><div class="sv-prompter-inner" id="sv-prompter-inner">${esc(st.script)}</div></div>`
+        : ''}
 
-      ${rec ? `<div class="cs-rec-pill"><span class="dot"></span><span id="cs-cam-time">0:00</span></div>` : ''}
+      ${st.running
+        ? `<div class="${st.paused ? 'sv-paused-pill' : 'sv-rec-pill'}">
+             ${st.paused ? 'Paused' : '<span class="dot"></span>'}<span id="sv-rec-time">0:00</span>
+           </div>`
+        : ''}
 
-      <div class="cs-cam-rail">
-        <button class="cs-rail-btn ${st.showPrompter?'on':''}" onclick="csPrompterTap()">${CS_ICON('text')}<span>Script</span></button>
-        <button class="cs-rail-btn ${st.countdown?'on':''}" onclick="csCycleCountdown()">${CS_ICON('timer')}<span>${st.countdown?st.countdown+'s':'Timer'}</span></button>
-        <button class="cs-rail-btn ${st.speed!==1?'on':''}" onclick="csCycleSpeed()">${CS_ICON('sparkle')}<span>${st.speed}×</span></button>
-        <button class="cs-rail-btn ${st.micOn?'':'warn'}" onclick="studioMic()">${CS_ICON('voice')}<span>${st.micOn?'Mic':'Muted'}</span></button>
+      <div class="sv-rail">
+        <button class="sv-rail-btn ${st.showPrompter ? 'on' : ''}" data-act="prompter">${svIcon('text')}<span>Script</span></button>
+        <button class="sv-rail-btn ${st.countdown ? 'on' : ''}" data-act="cycleCountdown">${svIcon('timer')}<span>${st.countdown ? st.countdown + 's' : 'Timer'}</span></button>
+        <button class="sv-rail-btn ${st.micOn ? '' : 'warn'}" data-act="mic">${svIcon('voice')}<span>${st.micOn ? 'Mic' : 'Muted'}</span></button>
       </div>
 
-      <div class="cs-zoom-pill">
-        ${[1,1.5,2,3].map(z=>`<button class="${st.zoom===z?'on':''}" data-z="${z}" onclick="csSetZoom(${z})">${z}×</button>`).join('')}
+      <div class="sv-zoom">
+        ${[1, 1.5, 2, 3].map(z => `<button class="${st.zoom === z ? 'on' : ''}" data-act="zoom" data-arg="${z}">${z}×</button>`).join('')}
       </div>
 
-      ${st.showScriptEditor ? `<div class="cs-sheet cs-sheet-inline" onclick="event.stopPropagation()">
-        <div class="cs-sheet-grip"></div>
-        <div class="cs-sheet-h"><h4>Teleprompter</h4><button class="done" onclick="csSaveScript()">Use script</button></div>
-        <div class="cs-sheet-body"><textarea class="cs-text-input" style="height:150px" autofocus
-          placeholder="Type or paste your script — it scrolls over the camera while you record."
-          oninput="S.studio.script=this.value">${esc(st.script)}</textarea></div>
-      </div>` : ''}
+      ${st.countdown && !st.running ? `<div class="sv-count" id="sv-count"></div>` : ''}
     </div>
 
-    <div class="cs-cam-bot">
-      <button class="cs-round ${st.flash?'on':''}" onclick="csToggleFlash()">${CS_ICON('flash')}</button>
-      <button class="cs-shutter ${rec?'rec':''}" onclick="csRecord()" aria-label="Record"><span></span></button>
-      <button class="cs-round" onclick="csFlip()">${CS_ICON('flip')}</button>
+    ${svStrip(st)}
+
+    <div class="sv-deck">
+      <div class="sv-shutter-row">
+        <button class="sv-round ${st.torch ? 'on' : ''}" data-act="torch" aria-label="Torch">${svIcon('flash')}</button>
+        <button class="sv-shutter ${st.running ? (st.paused ? 'paused' : 'rec') : ''}" data-act="record"
+          aria-label="${st.running ? (st.paused ? 'Resume recording' : 'Pause recording') : 'Start recording'}">
+          ${st.paused ? svIcon('play') : '<span></span>'}</button>
+        ${st.running
+          // While recording the flip button is dead anyway (the camera cannot
+          // be swapped mid-take), so that slot becomes the Stop control. This
+          // keeps pause and stop as separate actions — pausing used to leave
+          // no way back to recording.
+          ? `<button class="sv-round stop" data-act="stop" aria-label="Stop recording">${svIcon('stop')}</button>`
+          : `<button class="sv-round" data-act="flip" aria-label="Switch camera">${svIcon('flip')}</button>`}
+      </div>
+      <div class="sv-deck-foot">
+        <button class="sv-text-btn" data-act="upload">${svIconSm('upload')} Upload</button>
+        <div class="sv-deck-hint">${st.running ? (st.paused ? 'Paused — tap the circle to resume' : 'Tap the circle to pause') : (clips ? clips + ' clip' + (clips === 1 ? '' : 's') + ' ready' : 'Tap to record')}</div>
+        <button class="sv-text-btn" data-act="toEditor" ${clips ? '' : 'disabled'}>${svIconSm('layers')} Editor</button>
+      </div>
+      <input type="file" id="sv-upload" accept="video/*" multiple hidden>
+      <input type="file" id="sv-script-import" accept=".txt,text/plain" hidden>
     </div>
-    <div class="cs-cam-foot">
-      <button class="cs-text-btn" onclick="csOpenUpload()">${CS_ICON('upload')} Upload</button>
-      <span class="cs-foot-meta">${clips ? clips+' clip'+(clips===1?'':'s')+' ready' : 'Tap to record'}</span>
-      <button class="cs-text-btn" ${clips?'':'disabled'} onclick="csGoToEditor()">${CS_ICON('layers')} Editor</button>
-      <input type="file" id="cs-upload" accept="video/*,image/*" multiple style="display:none" onchange="csHandleUpload(event, true)"/>
+
+    ${st.reviewId ? svReview(st) : ''}
+    ${st.showScriptEditor ? svScriptSheet(st) : ''}
+    ${st.sheet ? svScrimAndSheet(st) : ''}
+  </div>`;
+}
+
+function svQualityLabel(st){
+  const q = st.quality || svAutoQuality();
+  const map = { '540p': '540p', '720p': '720p', '1080p': '1080p', '2160p': '4K' };
+  return map[q] || '720p';
+}
+function svAutoQuality(){
+  const cores = navigator.hardwareConcurrency || 4;
+  if (cores >= 8) return '1080p';
+  if (cores >= 4) return '720p';
+  return '540p';
+}
+
+function svScrimAndSheet(st){
+  return `<div class="sv-scrim" data-act="closeSheet"></div>${svSheet(st)}`;
+}
+
+/* ── CLIP STRIP ─────────────────────────────────────────────────────────── */
+// The feedback loop that was missing. Every recorded or uploaded take is a
+// block here: tap to play it back full-screen, tap the × to drop it.
+
+function svStrip(st){
+  return `<div class="sv-strip">
+    <div class="sv-strip-hd">
+      <span>Takes · ${st.clips.length}</span>
+      <span data-act="toEditor" style="cursor:pointer;color:${st.clips.length ? 'var(--ac2,#9F67FF)' : 'inherit'}">Edit all →</span>
+    </div>
+    ${st.clips.length ? `<div class="sv-strip-scroll">
+      ${st.clips.map((c, i) => `
+        <div class="sv-take ${st.selectedId === c.id ? 'on' : ''}" data-act="playTake" data-arg="${c.id}">
+          ${c.thumb ? `<img class="sv-take-thumb" src="${c.thumb}" alt="">` : `<video class="sv-take-thumb" src="${c.url}" muted playsinline preload="metadata"></video>`}
+          <div class="sv-take-play">${svIcon('play')}</div>
+          <div class="sv-take-meta">${smFormatMs(smClipMs(c))}</div>
+          <button class="sv-take-x" data-act="deleteTake" data-arg="${c.id}" aria-label="Delete take">${svIconSm('close')}</button>
+        </div>`).join('')}
+    </div>` : `<div class="sv-strip-empty">Recording stopped? Your takes appear here to watch back or delete.</div>`}
+  </div>`;
+}
+
+/* ── TAKE REVIEW ────────────────────────────────────────────────────────── */
+// Full-screen playback of one take, with the three decisions that actually
+// matter: keep it, bin it, or go edit.
+
+function svReview(st){
+  const c = st.clips.find(x => x.id === st.reviewId);
+  if (!c) return '';
+  return `<div class="sv-review">
+    <div class="sv-bar">
+      <button class="sv-icon-btn" data-act="closeReview" aria-label="Back to camera">${svIcon('back')}</button>
+      <div class="sv-bar-title">${esc(c.name || 'Take')} · ${smFormatMs(smClipMs(c))}</div>
+      <div class="sv-bar-r"></div>
+    </div>
+    <div class="sv-review-stage" data-act="toggleReviewPlay">
+      <video id="sv-review-video" src="${c.url}" playsinline controls playsinline></video>
+    </div>
+    <div class="sv-review-foot">
+      <button class="sv-btn-wide danger" data-act="deleteReviewTake">${svIconSm('trash')} Delete</button>
+      <button class="sv-btn-wide primary" data-act="toEditor">${svIconSm('layers')} Edit</button>
     </div>
   </div>`;
 }
 
-// ── Editor ──────────────────────────────────────────────────────────────────
-// The two <video> buffers are NOT in this markup. They are persistent elements
-// owned by CSM (media pool) and re-parented into #cs-ed-media after render.
-function edView(st){
-  const total = csTotalMs();
-  const cap = csCapStyle();
-  const tool = st.sheet || null;
-  const hasSel = !!st.selectedId;
-  return `<div class="cs-fs cs-ed">
-    <div class="cs-topbar">
-      <button class="cs-icon-btn" onclick="csConfirmExitEditor()" aria-label="Back">${CS_ICON('close')}</button>
-      <div class="cs-title">${esc(st.projectName)}</div>
-      <div class="cs-topbar-r">
-        <span class="cs-chip">${CS_DEVICE.label}</span>
-        <button class="cs-cta" ${st.clips.length&&!st.exporting?'':'disabled'} onclick="csExport()">
-          ${st.exporting?'Exporting…':'Export'}</button>
+/* ── SCRIPT SHEET (teleprompter) ────────────────────────────────────────── */
+
+function svScriptSheet(st){
+  return `<div class="sv-scrim" data-act="closeScript"></div>
+    <div class="sv-sheet" style="z-index:31">
+      <div class="sv-sheet-grip"><i></i></div>
+      <div class="sv-sheet-hd"><h4>Teleprompter script</h4>
+        <button class="done" data-act="saveScript">Use script</button></div>
+      <div class="sv-sheet-body">
+        <div class="sv-field">
+          <label>Script</label>
+          <textarea class="sv-input" id="sv-script-input" autofocus
+            placeholder="Type or paste your script. It scrolls over the camera while you record.">${esc(st.script)}</textarea>
+        </div>
+        <div class="sv-field">
+          <label>Scroll speed</label>
+          <input class="sv-slider" type="range" min="20" max="140" value="${st.promptSpeed}"
+            data-input="promptSpeed">
+          <div class="sv-sheet-note">Roughly ${Math.round(st.promptSpeed / 1.4)} words per minute. Slower is easier to read on camera.</div>
+        </div>
+        <button class="sv-add" data-act="importScript">${svIconSm('upload')} Import a .txt file</button>
+      </div>
+    </div>`;
+}
+
+/* ── EDITOR VIEW ────────────────────────────────────────────────────────── */
+
+function svEditorView(st){
+  const total = smTotalMs(st.clips);
+  const sel = st.selectedType ? st.clips.find(c => c.id === st.selectedId) : null;
+  return `<div class="sv-root sv-ed" id="sv-root">
+    <div class="sv-bar">
+      <button class="sv-icon-btn" data-act="exitEditor" aria-label="Back to camera">${svIcon('close')}</button>
+      <div class="sv-bar-title">${esc(st.projectName)}</div>
+      <div class="sv-bar-r">
+        <button class="sv-chip" data-act="sheet" data-arg="quality">${svQualityLabel(st)}</button>
+        <button class="sv-cta" data-act="export" ${st.clips.length && !st.exporting ? '' : 'disabled'}>
+          ${st.exporting ? '<span class="sp"></span> Exporting' : svIconSm('down') + ' Export'}</button>
       </div>
     </div>
 
-    <div class="cs-ed-stage" id="cs-ed-stage">
-      <div class="cs-ed-media" id="cs-ed-media"></div>
-      <div class="cs-ed-layer" id="cs-ed-layer">
-        ${st.overlays.map(o=>csOverlayHtml(o, st)).join('')}
-        <div class="cs-ed-cap ${st.selectedType==='caption'?'sel':''} ${csCapAt(st.playhead)?'':'off'}"
-          id="cs-ed-cap" style="${csCapCss(cap)}"
-          onpointerdown="csCaptionPointerDown(event)">${esc(csCapAt(st.playhead)?.text||'')}</div>
+    <div class="sv-ed-stage" id="sv-ed-stage">
+      <div class="sv-media" id="sv-media"></div>
+      <div class="sv-layer" id="sv-layer">
+        ${st.overlays.map(o => svOverlayHtml(o, st)).join('')}
+        <div class="sv-cap ${st.selectedType === 'caption' ? 'sel' : ''} ${smCaptionAt(st.captions, st.playhead) ? '' : 'off'}"
+          id="sv-ed-cap" style="${svCapCss(st)}" data-ptr="cap">${esc(smCaptionAt(st.captions, st.playhead) ? smCaptionAt(st.captions, st.playhead).text : '')}</div>
       </div>
 
-      <div class="cs-ed-hud">
-        <button class="cs-hud-btn cs-ed-play" onclick="csTogglePlay()">${CS_ICON(st.playing?'pause':'play')}</button>
-        <div class="cs-ed-time"><span class="cur">${_fmtTs(st.playhead/1000)}</span><span class="tot">/ ${_fmtTs(total/1000)}</span></div>
-        <div class="cs-hud-right">
-          <button class="cs-hud-btn" onclick="csUndo()" ${st.history&&st.history.length?'':'disabled'}>${CS_ICON('undo')}</button>
-          <button class="cs-hud-btn" onclick="csRedo()" ${st.future&&st.future.length?'':'disabled'}>${CS_ICON('redo')}</button>
+      <div class="sv-hud">
+        <button class="sv-hud-play" data-act="togglePlay">${svIcon(st.playing ? 'pause' : 'play')}</button>
+        <div class="sv-hud-time"><span>${smFormatMs(st.playhead)}</span> <span class="tot">/ ${smFormatMs(total)}</span></div>
+        <div class="sv-hud-right">
+          <button class="sv-hud-btn" data-act="undo" ${st.history.length ? '' : 'disabled'}>${svIcon('undo')}</button>
+          <button class="sv-hud-btn" data-act="redo" ${st.future.length ? '' : 'disabled'}>${svIcon('redo')}</button>
         </div>
       </div>
 
-      ${st.exporting ? `<div class="cs-export-veil">
-        <div class="cs-export-ring"><svg viewBox="0 0 36 36">
-          <circle class="bg" cx="18" cy="18" r="16"/>
-          <circle class="fg" id="cs-exp-arc" cx="18" cy="18" r="16" stroke-dasharray="100.5" stroke-dashoffset="${100.5*(1-(st.exportPct||0)/100)}"/>
-        </svg><span id="cs-exp-pct">${Math.round(st.exportPct||0)}%</span></div>
-        <div class="cs-export-note" id="cs-exp-note">${esc(st.exportNote||('Rendering '+CS_DEVICE.label))}</div>
-        <button class="cs-ghost-pill" onclick="csCancelExport()">Cancel</button>
-      </div>`:''}
+      ${st.exporting ? svExportVeil(st) : ''}
     </div>
 
-    <div class="cs-timeline" id="cs-ed-tracks" onpointerdown="csScrubStart(event)">
-      <div class="cs-playhead" id="cs-playhead" style="transform:translateX(${CS_LBL+st.playhead*CS_PX}px)"></div>
-      ${csRuler(total)}
-      ${csRenderTrack('video',st)}
-      ${csRenderTrack('overlay',st)}
-      ${csRenderTrack('caption',st)}
-      ${csRenderTrack('audio',st)}
-    </div>
-
-    <div class="cs-toolbar">
-      <div class="cs-tb-row cs-tb-context ${hasSel?'':'is-hidden'}">
-        <button class="cs-tb" onclick="csSplit()">${CS_ICON('split')}<span>Split</span></button>
-        <button class="cs-tb" onclick="csOpenSheet('trim')">${CS_ICON('trim')}<span>Trim</span></button>
-        <button class="cs-tb" onclick="csDuplicate()">${CS_ICON('dup')}<span>Duplicate</span></button>
-        <button class="cs-tb" onclick="csReplaceClick()">${CS_ICON('replace')}<span>Replace</span></button>
-        <button class="cs-tb danger" onclick="csDeleteSelected()">${CS_ICON('trash')}<span>Delete</span></button>
-      </div>
-      <div class="cs-tb-row cs-tb-main">
-        <button class="cs-tb" onclick="csAddClipClick()">${CS_ICON('plus')}<span>Add clip</span></button>
-        <button class="cs-tb" onclick="csAddText()">${CS_ICON('text')}<span>Text</span></button>
-        <button class="cs-tb" onclick="csAddImageClick()">${CS_ICON('image')}<span>Image</span></button>
-        <button class="cs-tb ${tool==='captions'?'active':''}" onclick="csOpenSheet('captions')">${CS_ICON('cc')}<span>Captions</span></button>
-        <button class="cs-tb ${tool==='audio'?'active':''}" onclick="csOpenSheet('audio')">${CS_ICON('music')}<span>Music</span></button>
-        <button class="cs-tb ${tool==='voice'?'active':''}" onclick="csOpenSheet('voice')">${CS_ICON('voice')}<span>Voice</span></button>
-        <button class="cs-tb ${tool==='filter'?'active':''}" onclick="csOpenSheet('filter')">${CS_ICON('filter')}<span>Filters</span></button>
-        <button class="cs-tb ${tool==='adjust'?'active':''}" onclick="csOpenSheet('adjust')">${CS_ICON('adjust')}<span>Adjust</span></button>
+    <div class="sv-timeline" id="sv-timeline">
+      <div class="sv-tl-scroll" id="sv-tl-scroll">
+        <div class="sv-tl-inner" id="sv-tl-inner" style="width:${Math.max(100, smTotalMs(st.clips) * svPxMs() + 32)}px">
+          <div class="sv-playhead" id="sv-playhead" style="transform:translateX(${16 + st.playhead * svPxMs()}px)"></div>
+          ${svRuler()}
+          ${svVideoTrack(st)}
+          ${svOverlayTrack(st)}
+          ${svCaptionTrack(st)}
+          ${svAudioTrack(st)}
+        </div>
       </div>
     </div>
 
-    ${st.sheet ? `<div class="cs-scrim" onclick="csCloseSheet()"></div>` : ''}
-    ${csRenderSheet(st)}
-    <input type="file" id="cs-add-clip"     accept="video/*,image/*" multiple style="display:none" onchange="csHandleUpload(event, true)"/>
-    <input type="file" id="cs-replace-clip" accept="video/*,image/*"          style="display:none" onchange="csHandleReplace(event)"/>
-    <input type="file" id="cs-add-image"    accept="image/*"                  style="display:none" onchange="csHandleImageOverlay(event)"/>
+    <div class="sv-toolbar">
+      ${st.selectedType ? `<div class="sv-tb-row sv-tb-context">
+        <button class="sv-tb" data-act="split">${svIcon('split')}<span>Split</span></button>
+        <button class="sv-tb on" data-act="trimOn">${svIcon('trim')}<span>Trim</span></button>
+        <button class="sv-tb" data-act="duplicate">${svIcon('dup')}<span>Duplicate</span></button>
+        <button class="sv-tb" data-act="replace">${svIcon('replace')}<span>Replace</span></button>
+        <button class="sv-tb danger" data-act="deleteSel">${svIcon('trash')}<span>Delete</span></button>
+      </div>` : `<div class="sv-tb-row sv-tb-context">
+        <button class="sv-tb" data-act="sheet" data-arg="clips">${svIcon('grid')}<span>All clips</span></button>
+      </div>`}
+      <div class="sv-tb-row sv-tb-main">
+        <button class="sv-tb" data-act="addClip">${svIcon('plus')}<span>Add clip</span></button>
+        <button class="sv-tb" data-act="addText">${svIcon('text')}<span>Text</span></button>
+        <button class="sv-tb" data-act="sheet" data-arg="overlays">${svIcon('image')}<span>Overlay</span></button>
+        <button class="sv-tb ${st.sheet === 'captions' ? 'on' : ''}" data-act="sheet" data-arg="captions">${svIcon('cc')}<span>Captions</span></button>
+        <button class="sv-tb ${st.sheet === 'audio' ? 'on' : ''}" data-act="sheet" data-arg="audio">${svIcon('music')}<span>Audio</span></button>
+        <button class="sv-tb ${st.sheet === 'effects' ? 'on' : ''}" data-act="sheet" data-arg="effects">${svIcon('fx')}<span>Effects</span></button>
+        <button class="sv-tb ${st.sheet === 'adjust' ? 'on' : ''}" data-act="sheet" data-arg="adjust">${svIcon('adjust')}<span>Adjust</span></button>
+      </div>
+      <input type="file" id="sv-add-clip" accept="video/*" multiple hidden>
+      <input type="file" id="sv-replace-clip" accept="video/*" hidden>
+      <input type="file" id="sv-refable-add-image" accept="image/*" hidden>
+      <input type="file" id="sv-add-image" accept="image/*" hidden>
+      <input type="file" id="sv-add-video-ov" accept="video/*" hidden>
+      <input type="file" id="sv-add-music" accept="audio/*" hidden>
+    </div>
+
+    ${st.sheet ? svScrimAndSheet(st) : ''}
   </div>`;
 }
 
-// One markup path for both overlay kinds — identical drag/resize affordances.
-function csOverlayHtml(o, st){
-  const sel = st.selectedId===o.id && st.selectedType==='overlay';
-  const on  = st.playhead>=o.startMs && st.playhead<=o.endMs;
-  const handles = sel ? `
-    <button class="ov-del" onpointerdown="event.stopPropagation()" onclick="event.stopPropagation();csDeleteOverlay('${o.id}')">${CS_ICON('close')}</button>
-    <span class="ov-handle br" onpointerdown="csOverlayResizeStart(event,'${o.id}')">${CS_ICON('resize')}</span>` : '';
-  if(o.type === 'image'){
-    return `<div class="cs-ed-overlay is-img ${sel?'sel':''} ${on?'':'off'}"
-      data-ovid="${o.id}" data-start="${o.startMs}" data-end="${o.endMs}"
-      style="left:${o.x}%;top:${o.y}%;width:${o.w}%;opacity:${(o.alpha==null?100:o.alpha)/100}"
-      onpointerdown="csOverlayPointerDown(event,'${o.id}')">
-      <img src="${o.url}" alt="" draggable="false"/>${handles}</div>`;
+function svExportVeil(st){
+  const C = 2 * Math.PI * 16;
+  const off = C * (1 - svNum(st.exportPct, 0, 100) / 100);
+  return `<div class="sv-export">
+    <div class="sv-ring">
+      <svg viewBox="0 0 36 36"><circle class="bg" cx="18" cy="18" r="16"/>
+      <circle class="fg" cx="18" cy="18" r="16" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}"/></svg>
+      <span>${Math.round(svNum(st.exportPct, 0, 100))}%</span>
+    </div>
+    <div class="sv-export-note">${esc(st.exportNote || 'Rendering your video…')}</div>
+    <button class="sv-btn-wide ghost" style="max-width:180px" data-act="cancelExport">Cancel</button>
+  </div>`;
+}
+
+/* ── TIMELINE TRACKS ────────────────────────────────────────────────────── */
+// Clip blocks are positioned straight from the model: left = clip start,
+// width = kept length. studioModel decides both, so what is drawn can never
+// drift from what will be exported.
+
+function svRuler(){
+  const px = svPxMs();
+  const stepMs = 1000;
+  const spanMs = Math.max(10000, Math.ceil((smTotalMs(S.studio.clips) + 4000) / stepMs) * stepMs);
+  let out = '<div class="sv-ruler">';
+  for (let ms = 0; ms <= spanMs; ms += stepMs){
+    const x = 16 + ms * px;
+    out += `<i style="left:${x}px"></i>`;
+    if (ms % 2000 === 0) out += `<b style="left:${x}px">${smFormatMs(ms)}</b>`;
   }
-  const f = csFontById(o.font);
-  return `<div class="cs-ed-overlay is-text ${sel?'sel':''} ${on?'':'off'}"
-    data-ovid="${o.id}" data-start="${o.startMs}" data-end="${o.endMs}"
-    style="left:${o.x}%;top:${o.y}%;font-family:${f.css};font-weight:${f.weight};font-size:${o.size}px;color:${o.color};${csStyleCss(o.style,o.color,o.bg)}"
-    onpointerdown="csOverlayPointerDown(event,'${o.id}')"><span class="ov-txt">${esc(o.text)}</span>${handles}</div>`;
+  return out + '</div>';
 }
 
-function csRuler(total){
-  const secs = Math.max(4, Math.ceil(total/1000));
-  let ticks = '';
-  for(let s=0; s<=secs; s++){
-    ticks += `<div class="cs-tick ${s%5===0?'maj':''}" style="left:${CS_LBL + s*1000*CS_PX}px">${s%5===0?`<span>${_fmtTs(s)}</span>`:''}</div>`;
+function svVideoTrack(st){
+  const px = svPxMs();
+  if (!st.clips.length){
+    return `<div class="sv-track" id="sv-track-video"><div class="sv-track-empty">Add a clip to start editing</div></div>`;
   }
-  return `<div class="cs-ruler" style="width:${CS_LBL + secs*1000*CS_PX + 60}px">${ticks}</div>`;
+  let acc = 0;
+  const body = st.clips.map((c, i) => {
+    const len = smClipMs(c);
+    const x = 16 + acc * px;
+    const w = Math.max(18, len * px);
+    acc += len;
+    return `<div class="sv-clip ${st.selectedId === c.id && st.selectedType === 'video' ? 'sel' : ''}"
+        data-ptr="clip" data-arg="${c.id}" style="left:${x}px;width:${w}px">
+      ${c.thumb ? `<img src="${c.thumb}" alt="">` : ''}
+      <span class="sv-clip-dur">${smFormatMs(len)}</span>
+      <span class="sv-clip-name">${esc(c.name || svLabel(i))}</span>
+      <div class="sv-grab l" data-ptr="grabIn" data-arg="${c.id}"></div>
+      <div class="sv-grab r" data-ptr="grabOut" data-arg="${c.id}"></div>
+    </div>`;
+  }).join('');
+  return `<div class="sv-track" id="sv-track-video">${body}</div>`;
 }
 
-function csRenderTrack(kind, st){
-  const px = CS_PX;
-  if(kind==='video'){
-    if(!st.clips.length) return `<div class="cs-track"><div class="cs-track-lbl">Video</div><div class="cs-track-empty">No clips yet</div></div>`;
-    const chunks = st.clips.map((c,i) => {
-      const dur = Math.max(120, c.outMs - c.inMs);
-      const w = Math.max(46, dur*px);
-      const sel = st.selectedId===c.id && st.selectedType==='video';
-      return `<div class="cs-clip cs-clip-video ${sel?'sel':''}" style="width:${w}px" onclick="csSelect('${c.id}','video')">
-        ${c.thumb?`<img class="cs-clip-thumb" src="${c.thumb}" alt=""/>`:''}
-        <span class="cs-clip-name">${c.kind==='image'?'Photo':'Clip'} ${i+1}</span>
-        <span class="cs-clip-dur">${(dur/1000).toFixed(1)}s</span>
-      </div>`;
-    }).join('');
-    return `<div class="cs-track"><div class="cs-track-lbl">Video</div><div class="cs-track-lane">${chunks}<button class="cs-lane-add" onclick="csAddClipClick()">${CS_ICON('plus')}</button></div></div>`;
-  }
-  if(kind==='overlay'){
-    const items = st.overlays.map(o=>{
-      const w = Math.max(46,(o.endMs-o.startMs)*px), x = o.startMs*px;
-      const sel = st.selectedId===o.id && st.selectedType==='overlay';
-      const label = o.type==='image' ? 'Image' : o.text.slice(0,22);
-      return `<div class="cs-clip ${o.type==='image'?'cs-clip-img':'cs-clip-text'} ${sel?'sel':''}"
-        style="position:absolute;left:${x}px;width:${w}px" onclick="csSelect('${o.id}','overlay')"><span class="cs-clip-name">${esc(label)}</span></div>`;
-    }).join('');
-    return `<div class="cs-track"><div class="cs-track-lbl">Overlays</div><div class="cs-track-lane rel">${items||'<div class="cs-track-empty">Add text or an image</div>'}</div></div>`;
-  }
-  if(kind==='caption'){
-    const caps = st.captions||[];
-    // Word chunks are dense; draw at most 120 pills so the timeline stays cheap.
-    const step = Math.max(1, Math.ceil(caps.length/120));
-    const items = caps.filter((_,i)=>i%step===0).map(c=>{
-      const w = Math.max(10, ((c.end||c.start+0.4)-c.start)*1000*px), x = c.start*1000*px;
-      return `<div class="cs-clip cs-clip-cap" style="position:absolute;left:${x}px;width:${w}px" onclick="csOpenSheet('captions')"><span class="cs-clip-name">${esc((c.text||'').slice(0,10))}</span></div>`;
-    }).join('');
-    return `<div class="cs-track"><div class="cs-track-lbl">Captions</div><div class="cs-track-lane rel">${items||'<div class="cs-track-empty">Auto-caption available</div>'}</div></div>`;
-  }
-  if(kind==='audio'){
-    const items = (st.audioTracks||[]).map(a=>{
-      const w = Math.max(46,(a.durMs||10000)*px), x = (a.startMs||0)*px;
-      return `<div class="cs-clip cs-clip-audio" style="position:absolute;left:${x}px;width:${w}px" onclick="csOpenSheet('audio')"><span class="cs-clip-name">${esc(a.name||'Track')}</span></div>`;
-    }).join('');
-    return `<div class="cs-track"><div class="cs-track-lbl">Audio</div><div class="cs-track-lane rel">${items||'<div class="cs-track-empty">Add background music</div>'}</div></div>`;
-  }
-  return '';
+function svOverlayTrack(st){
+  const px = svPxMs();
+  const empty = !st.overlays.length
+    ? '<div class="sv-track-empty">Add text, a photo or a video on top</div>' : '';
+  const body = st.overlays.map(o => {
+    const x = 16 + o.startMs * px;
+    const w = Math.max(16, (o.endMs - o.startMs) * px);
+    return `<div class="sv-clip-ov ${st.selectedId === o.id && st.selectedType === 'overlay' ? '' : ''}"
+      data-act="selectOverlay" data-arg="${o.id}" style="left:${x}px;width:${w}px">${esc((o.text || (o.kind === 'image' ? 'Photo' : 'Video')).slice(0, 16))}</div>`;
+  }).join('');
+  return `<div class="sv-track sv-track-ov" id="sv-track-overlay">${empty}${body}</div>`;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  MEDIA POOL  (the fix for "editor dies after 5–6 edits")
-//  render() replaces #root.innerHTML, so any <video> written into the editor
-//  markup was destroyed and re-created on EVERY edit — while still holding a
-//  decoder and a blob-backed source. Chrome/Android caps concurrent media
-//  decoders (~6–16); after a handful of edits the cap was hit and every later
-//  play()/load() silently failed. These two elements are created once, live
-//  outside the render tree, and are re-parented into the stage after render.
-// ═══════════════════════════════════════════════════════════════════════════
-const CSM = { a:null, b:null, activeIsA:true, host:null };
-
-function csMakeVideo(){
-  const v = document.createElement('video');
-  v.className = 'cs-ed-vid';
-  v.playsInline = true; v.preload = 'auto';
-  v.setAttribute('playsinline',''); v.setAttribute('webkit-playsinline','');
-  v.setAttribute('disablepictureinpicture','');
-  v.dataset.cid = '';
-  // Listeners are attached ONCE here, never per-load. The old code assigned
-  // v.onloadedmetadata on every seek/advance, which stacked closures that each
-  // captured a stale clip and fought each other.
-  v.addEventListener('loadedmetadata', () => {
-    const pending = v._pendingSeek;
-    if(pending != null){ v._pendingSeek = null; try { v.currentTime = pending; } catch(_){} }
-    if(S.studio && S.studio.playing && v === csActiveVideo()) v.play().catch(()=>{});
-  });
-  v.addEventListener('error', () => { v.dataset.cid = ''; });
-  return v;
-}
-function csEnsureMedia(){
-  if(!CSM.a){ CSM.a = csMakeVideo(); CSM.b = csMakeVideo(); CSM.b.muted = true; }
-  return CSM;
-}
-window.csActiveVideo = function(){ csEnsureMedia(); return CSM.activeIsA ? CSM.a : CSM.b; };
-function csIdleVideo(){ csEnsureMedia(); return CSM.activeIsA ? CSM.b : CSM.a; };
-
-// Re-parent the persistent buffers into the freshly rendered stage.
-function csAttachStage(){
-  const host = document.getElementById('cs-ed-media');
-  if(!host) return false;
-  csEnsureMedia();
-  if(CSM.a.parentNode !== host){ host.appendChild(CSM.a); host.appendChild(CSM.b); }
-  CSM.host = host;
-  csActiveVideo().classList.add('on');
-  csIdleVideo().classList.remove('on');
-  CSE.ovEls = null;              // DOM was rebuilt → drop cached node list
-  CSE.capEl = null;
-  return true;
+function svCaptionTrack(st){
+  const px = svPxMs();
+  const empty = !st.captions.length
+    ? '<div class="sv-track-empty">Auto-captions available — open Captions</div>' : '';
+  const body = st.captions.map(c => {
+    const x = 16 + c.startMs * px;
+    const w = Math.max(14, (c.endMs - c.startMs) * px);
+    return `<div class="sv-clip-cap" data-act="sheet" data-arg="captions" style="left:${x}px;width:${w}px">${esc(c.text.slice(0, 14))}</div>`;
+  }).join('');
+  return `<div class="sv-track sv-track-cap" id="sv-track-caption">${empty}${body}</div>`;
 }
 
-// Hard release: called when leaving the editor / the Create tab. Without this
-// the decoders stayed warm in the background and Android reclaimed the tab.
-function csReleaseMedia(){
-  [CSM.a, CSM.b].forEach(v => {
-    if(!v) return;
-    try { v.pause(); v.removeAttribute('src'); v.load(); } catch(_){}
-    v.dataset.cid = ''; v._pendingSeek = null;
-  });
+function svAudioTrack(st){
+  const px = svPxMs();
+  const empty = !st.audioTracks.length
+    ? '<div class="sv-track-empty">No music or effects yet</div>' : '';
+  const body = st.audioTracks.map(a => {
+    const startMs = a.startMs || 0;
+    const lenMs = a.lenMs || Math.max(1000, smTotalMs(st.clips) - startMs);
+    const x = 16 + startMs * px;
+    const w = Math.max(16, lenMs * px);
+    return `<div class="sv-clip-aud" data-act="sheet" data-arg="audio" style="left:${x}px;width:${w}px">
+      ${svIconSm(a.kind === 'sfx' ? 'spark' : 'music')}${esc(a.name || 'Track')}</div>`;
+  }).join('');
+  return `<div class="sv-track sv-track-aud" id="sv-track-audio">${empty}${body}</div>`;
 }
 
-// ── Blob URL ledger ─────────────────────────────────────────────────────────
-// Splits and duplicates share a source URL. Revoking on the first delete broke
-// the surviving copies (and never revoking leaked ~every imported file).
-// Ref-count instead: one owner per createObjectURL, released at zero.
-const CSURL = new Map();
-function csHoldUrl(url){ if(!url) return url; CSURL.set(url, (CSURL.get(url)||0)+1); return url; }
-function csMakeUrl(blob){ return csHoldUrl(URL.createObjectURL(blob)); }
-function csDropUrl(url){
-  if(!url || !CSURL.has(url)) return;
-  const n = CSURL.get(url) - 1;
-  if(n > 0){ CSURL.set(url, n); return; }
-  CSURL.delete(url);
-  try { URL.revokeObjectURL(url); } catch(_){}
+/* ── OVERLAYS (text / image / video on the video) ───────────────────────── */
+
+function svOverlayHtml(o, st){
+  const sel = st.selectedId === o.id && st.selectedType === 'overlay';
+  const on = st.playhead >= o.startMs && st.playhead <= o.endMs;
+  if (!on && !sel) return '';
+  const base = `position:absolute;left:${o.x}%;top:${o.y}%;transform:translate(-50%,-50%)`;
+  const inner = o.kind === 'text'
+    ? `<span style="${svTextStyle(o)}">${esc(o.text || '')}</span>`
+    : o.kind === 'image'
+      ? `<img src="${o.url}" alt="" style="width:${Math.round(160 * (o.scale || 1))}px">`
+      : `<video src="${o.url}" muted playsinline style="width:${Math.round(160 * (o.scale || 1))}px;border-radius:8px"></video>`;
+  return `<div class="sv-overlay ${sel ? 'sel' : ''}" style="${base}" data-ptr="ovBody" data-arg="${o.id}">
+    ${inner}
+    <button class="sv-ov-x" data-act="deleteOverlay" data-arg="${o.id}" aria-label="Remove">${svIconSm('close')}</button>
+  </div>`;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  TIMING HELPERS
-// ═══════════════════════════════════════════════════════════════════════════
-function _fmtTs(s){ s=Math.max(0,+s||0); const m=Math.floor(s/60), r=Math.floor(s%60); return `${m}:${String(r).padStart(2,'0')}`; }
-function studioTotalDur(){ return (S.studio.clips||[]).reduce((n,c)=>n+Math.max(0,(c.outMs-c.inMs))/1000, 0); }
-function csTotalMs(){
-  const st = S.studio;
-  const vid = st.clips.reduce((n,c)=>n+Math.max(0,(c.outMs-c.inMs)), 0);
-  const ov  = st.overlays.reduce((n,o)=>Math.max(n,o.endMs), 0);
-  return Math.max(vid, ov, 1000);
-}
-function csClipStart(id){
-  const st=S.studio; let acc=0;
-  for(const c of st.clips){ if(c.id===id) return acc; acc += (c.outMs-c.inMs); }
-  return 0;
-}
-// Which clip owns a global timeline position, and where inside it.
-function csLocate(ms){
-  const st = S.studio; let acc = 0;
-  for(let i=0;i<st.clips.length;i++){
-    const c = st.clips[i], dur = c.outMs - c.inMs;
-    if(ms < acc + dur || i === st.clips.length-1){
-      return { clip:c, index:i, start:acc, localMs: Math.max(0, Math.min(dur, ms-acc)) };
-    }
-    acc += dur;
-  }
-  return null;
-}
-// Caption lookup with a moving cursor: the old linear scan ran over every
-// caption on every animation frame, which word-level captions made 20× worse.
-function csCapAt(ms){
-  const caps = S.studio.captions || [];
-  if(!caps.length) return null;
-  const t = ms/1000;
-  let i = CSE.capIdx || 0;
-  if(i >= caps.length) i = caps.length-1;
-  if(caps[i] && t < caps[i].start){ while(i > 0 && caps[i-1].start > t) i--; if(i>0) i--; }
-  while(i < caps.length-1 && t >= (caps[i].end != null ? caps[i].end : caps[i].start+0.4)) i++;
-  CSE.capIdx = i;
-  const c = caps[i];
-  const end = c.end != null ? c.end : c.start + 0.4;
-  return (t >= c.start && t <= end) ? c : null;
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-//  PLAYBACK ENGINE
-//  One rAF loop. It never calls render(). Per-frame DOM work is: one transform,
-//  one text node, and class toggles on a CACHED overlay node list.
-// ═══════════════════════════════════════════════════════════════════════════
-const CSE = { raf:null, scrubbing:false, seekPending:false, loading:false, capIdx:0, ovEls:null, capEl:null, lastCap:null, lastSec:-1 };
-
-function csEnsureEngine(){
-  if(CSE.raf) return;
-  const loop = () => {
-    const st = S.studio;
-    if(!st || st.mode !== 'editor' || S.tab !== 'create'){ csStopEngine(); return; }
-    CSE.raf = requestAnimationFrame(loop);
-    const v = csActiveVideo();
-    if(v && v.dataset.cid && !CSE.scrubbing && !v.paused){
-      const cur = st.clips.find(c=>c.id===v.dataset.cid);
-      if(cur){
-        st.playhead = csClipStart(cur.id) + Math.max(0, v.currentTime*1000 - cur.inMs);
-        if(v.currentTime >= cur.outMs/1000 - 0.03) csAdvanceClip();
-      }
-    }
-    csPaint();
+function svTextStyle(o){
+  const s = o.style || 'bold';
+  const size = Math.round((o.size || 30) * 1.6);
+  const color = o.color || '#FFFFFF';
+  const map = {
+    bold:      `font:800 ${size}px var(--sans,sans-serif);color:${color}`,
+    clean:     `font:600 ${size}px var(--sans,sans-serif);color:${color};letter-spacing:.02em`,
+    serif:     `font:700 ${size}px var(--serif,Georgia,serif);color:${color}`,
+    outline:   `font:800 ${size}px var(--sans,sans-serif);color:${color};-webkit-text-stroke:2px #000;paint-order:stroke`,
+    shadow:    `font:800 ${size}px var(--sans,sans-serif);color:${color};text-shadow:2px 4px 10px rgba(0,0,0,.85)`,
+    highlight: `font:800 ${size}px var(--sans,sans-serif);color:#0A0A0F;background:${color};padding:2px 8px;border-radius:6px`,
   };
-  CSE.raf = requestAnimationFrame(loop);
-}
-function csStopEngine(){ if(CSE.raf){ cancelAnimationFrame(CSE.raf); CSE.raf = null; } }
-
-function csPaint(){
-  const st = S.studio;
-  const ph = document.getElementById('cs-playhead');
-  if(ph) ph.style.transform = `translateX(${CS_LBL + st.playhead*CS_PX}px)`;
-
-  // Clock only changes once per second — skip 29 of 30 text writes.
-  const sec = Math.floor(st.playhead/1000);
-  if(sec !== CSE.lastSec){
-    CSE.lastSec = sec;
-    const t = document.querySelector('.cs-ed-time .cur');
-    if(t) t.textContent = _fmtTs(st.playhead/1000);
-  }
-
-  if(!CSE.ovEls){
-    const layer = document.getElementById('cs-ed-layer');
-    CSE.ovEls = layer ? Array.from(layer.querySelectorAll('.cs-ed-overlay')) : [];
-    CSE.capEl = document.getElementById('cs-ed-cap');
-    CSE.lastCap = undefined;
-  }
-  for(let i=0;i<CSE.ovEls.length;i++){
-    const el = CSE.ovEls[i];
-    const on = st.playhead >= +el.dataset.start && st.playhead <= +el.dataset.end;
-    if(el.classList.contains('off') === on) el.classList.toggle('off', !on);
-  }
-  const capEl = CSE.capEl;
-  if(capEl){
-    const cap = csCapAt(st.playhead);
-    const txt = cap ? cap.text : '';
-    if(txt !== CSE.lastCap){
-      CSE.lastCap = txt;
-      capEl.textContent = txt;
-      capEl.classList.toggle('off', !cap);
-    }
-  }
+  return (map[s] || map.bold) + ';white-space:nowrap';
 }
 
-// ── Loading / seeking ───────────────────────────────────────────────────────
-function csSetClipSource(v, clip, seekSec){
-  if(v.dataset.cid === clip.id){
-    if(seekSec != null && Math.abs(v.currentTime - seekSec) > 0.04){
-      try { v.fastSeek ? v.fastSeek(seekSec) : (v.currentTime = seekSec); } catch(_){}
-    }
-    return;
-  }
-  v.dataset.cid = clip.id;
-  v._pendingSeek = seekSec == null ? clip.inMs/1000 : seekSec;
-  v.src = clip.url;
-  v.load();
-}
-
-window.csLoadCurrent = function(seekToPlayhead){
-  const st = S.studio;
-  if(!st || st.mode !== 'editor') return;
-  if(!csAttachStage()) return;
-  if(!st.clips.length){ csReleaseMedia(); return; }
-  const loc = csLocate(st.playhead) || { clip: st.clips[0], localMs:0 };
-  const cur = (st.selectedType==='video' && st.clips.find(c=>c.id===st.selectedId)) || loc.clip;
-  const v = csActiveVideo();
-  v.volume = Math.min(1, (st.clipVolume==null?100:st.clipVolume)/100);
-  v.muted = false;
-  const seek = seekToPlayhead ? (cur.inMs + (cur===loc.clip ? loc.localMs : 0))/1000 : cur.inMs/1000;
-  if(cur.kind !== 'image') csSetClipSource(v, cur, seek);
-  csPreloadNext(cur.id);
-  csEnsureEngine();
-};
-
-function csPreloadNext(curId){
-  const st = S.studio;
-  const next = st.clips[st.clips.findIndex(c=>c.id===curId)+1];
-  const b = csIdleVideo();
-  if(!b) return;
-  if(!next || next.kind === 'image'){
-    if(b.dataset.cid){ b.dataset.cid=''; try{ b.removeAttribute('src'); b.load(); }catch(_){} }
-    return;
-  }
-  if(b.dataset.cid === next.id) return;
-  b.muted = true;
-  csSetClipSource(b, next, next.inMs/1000);
-}
-
-function csPlay(){
-  const st = S.studio;
-  const v = csActiveVideo(); if(!v) return;
-  if(!v.dataset.cid) window.csLoadCurrent(true);
-  st.playing = true;
-  v.muted = false;
-  v.play().catch(()=>{});
-  csEnsureEngine(); csSyncPlayBtn();
-}
-function csPause(){
-  const v = csActiveVideo();
-  if(S.studio) S.studio.playing = false;
-  if(v) v.pause();
-  csSyncPlayBtn();
-}
-function csSyncPlayBtn(){
-  const btn = document.querySelector('.cs-ed-play');
-  if(btn) btn.innerHTML = CS_ICON(S.studio && S.studio.playing?'pause':'play');
-  document.getElementById('cs-ed-stage')?.classList.toggle('is-playing', !!(S.studio&&S.studio.playing));
-}
-window.csTogglePlay = () => { S.studio.playing ? csPause() : csPlay(); };
-window.csOnTime = () => {};
-window.csOnClipEnded = () => csAdvanceClip();
-
-// Buffer swap: no element ID rewriting (that confused every getElementById
-// caller, including core.js). We flip one pointer and one class.
-function csAdvanceClip(){
-  const st = S.studio;
-  const a = csActiveVideo(), b = csIdleVideo();
-  const i = st.clips.findIndex(c=>c.id===a.dataset.cid);
-  const next = st.clips[i+1];
-  if(!next){ csPause(); st.playhead = csTotalMs(); csPaint(); csSyncTrackSelection(); return; }
-
-  if(b.dataset.cid === next.id && b.readyState >= 2){
-    a.pause(); a.muted = true; a.classList.remove('on');
-    b.muted = false; b.volume = Math.min(1,(st.clipVolume==null?100:st.clipVolume)/100);
-    b.classList.add('on');
-    CSM.activeIsA = !CSM.activeIsA;
-    if(st.playing) b.play().catch(()=>{});
-    a.dataset.cid = ''; try { a.removeAttribute('src'); a.load(); } catch(_){}
-  } else {
-    csSetClipSource(a, next, next.inMs/1000);
-  }
-  st.selectedId = next.id; st.selectedType = 'video';
-  csPreloadNext(next.id);
-  csSyncTrackSelection();
-}
-
-function csSyncTrackSelection(){
-  const st = S.studio;
-  document.querySelectorAll('.cs-clip-video').forEach((el,i)=>{
-    el.classList.toggle('sel', !!(st.clips[i] && st.clips[i].id===st.selectedId && st.selectedType==='video'));
-  });
-}
-
-// Seek the preview to wherever the playhead is. Coalesced to one call/frame.
-function csQueueSeek(){
-  if(CSE.seekPending) return;
-  CSE.seekPending = true;
-  requestAnimationFrame(() => { CSE.seekPending = false; csSyncToPlayhead(); });
-}
-function csSyncToPlayhead(){
-  const st = S.studio;
-  const loc = csLocate(st.playhead);
-  if(!loc) return;
-  const v = csActiveVideo();
-  if(v && loc.clip.kind !== 'image'){
-    csSetClipSource(v, loc.clip, (loc.clip.inMs + loc.localMs)/1000);
-    if(v.dataset.cid !== loc.clip.id) csPreloadNext(loc.clip.id);
-  }
-  if(st.selectedId !== loc.clip.id || st.selectedType !== 'video'){
-    st.selectedId = loc.clip.id; st.selectedType = 'video';
-    csSyncTrackSelection();
-    csSyncToolbarContext();
-  }
-}
-function csSyncToolbarContext(){
-  const row = document.querySelector('.cs-tb-context');
-  if(row) row.classList.toggle('is-hidden', !S.studio.selectedId);
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-//  SCRUBBING + DIRECT MANIPULATION
-// ═══════════════════════════════════════════════════════════════════════════
-window.csScrubStart = (e) => {
-  const tracks = document.getElementById('cs-ed-tracks');
-  if(!tracks) return;
-  if(e.target.closest('.cs-clip, .cs-lane-add')) return;   // taps select, drags scrub
-  const rect = tracks.getBoundingClientRect();
-  const wasPlaying = S.studio.playing;
-  if(wasPlaying) csPause();
-  CSE.scrubbing = true;
-  tracks.classList.add('scrubbing');
-  csEnsureEngine();
-
-  const apply = (clientX) => {
-    const x = clientX - rect.left - CS_LBL + tracks.scrollLeft;
-    S.studio.playhead = Math.max(0, Math.min(csTotalMs(), x / CS_PX));
-    csQueueSeek();
+function svCapCss(st){
+  const c = st.capStyle;
+  const size = Math.round(c.size || 34);
+  const presets = {
+    classic: 'font:700 SIZEpx var(--sans,sans-serif);color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.9)',
+    boxed:   'font:800 SIZEpx var(--sans,sans-serif);color:#0A0A0F;background:#fff;padding:2px 10px;border-radius:6px',
+    pop:     'font:800 SIZEpx var(--sans,sans-serif);color:#F5C518;-webkit-text-stroke:2px #000;paint-order:stroke',
+    italic:  'font:600 italic SIZEpx var(--serif,Georgia,serif);color:#fff;text-shadow:0 2px 8px rgba(0,0,0,.9)',
+    karaoke: 'font:800 SIZEpx var(--sans,sans-serif);color:#fff;background:rgba(124,58,237,.85);padding:2px 10px;border-radius:6px',
+    minimal: 'font:500 SIZEpx var(--sans,sans-serif);color:rgba(255,255,255,.92);letter-spacing:.03em',
   };
-  apply(e.clientX);
-  const move = ev => apply(ev.clientX);
-  const up = () => {
-    document.removeEventListener('pointermove', move);
-    document.removeEventListener('pointerup', up);
-    document.removeEventListener('pointercancel', up);
-    CSE.scrubbing = false;
-    tracks.classList.remove('scrubbing');
-    csSyncToPlayhead();                    // settle exactly on the parked frame
-    if(wasPlaying) csPlay();
-  };
-  document.addEventListener('pointermove', move, {passive:true});
-  document.addEventListener('pointerup', up);
-  document.addEventListener('pointercancel', up);
-};
-
-window.csSelect = (id, type) => {
-  const st = S.studio;
-  st.selectedId = id; st.selectedType = type;
-  if(type==='video'){ st.playhead = csClipStart(id); window.csLoadCurrent(true); }
-  render();
-};
-window.csSelectOverlay = (id) => {
-  const st = S.studio;
-  const o = st.overlays.find(x=>x.id===id); if(!o) return;
-  st.selectedId = id; st.selectedType = 'overlay';
-  st.editText = o;
-  st.sheet = o.type === 'image' ? 'imageov' : 'text';
-  if(o.type !== 'image') st.editTextTab = 'font';
-  render();
-};
-
-// ── Overlay drag / pinch / handle-resize — text AND image ───────────────────
-const CSPTR = { pts:new Map(), mode:null, o:null, el:null, base:null };
-
-function csOverlayScale(o, el, factor){
-  if(o.type === 'image'){
-    o.w = Math.max(6, Math.min(100, +(o.w * factor).toFixed(2)));
-    el.style.width = o.w + '%';
-    const lbl = document.querySelector('[data-ov-size]'); if(lbl) lbl.textContent = Math.round(o.w)+'%';
-  } else {
-    o.size = Math.max(12, Math.min(180, Math.round(o.size * factor)));
-    el.style.fontSize = o.size + 'px';
-    const lbl = document.querySelector('[data-ov-size]'); if(lbl) lbl.textContent = o.size+'px';
-  }
+  const css = (presets[c.preset] || presets.classic).replace(/SIZE/g, String(size));
+  return `bottom:${Math.max(2, 100 - (c.y || 78))}%;width:${c.width || 88}%;${css}`;
 }
 
-window.csOverlayPointerDown = (e, id) => {
+/* ── DELEGATED EVENTS ───────────────────────────────────────────────────── */
+// One click listener and one pointerdown listener for the whole Studio, so no
+// dynamic markup has to embed a quoted JavaScript string in an attribute —
+// which is where the old file's inline handlers kept breaking on real data.
+
+const SV_ACT = {
+  /* camera */
+  exitCamera:      () => svExitCamera(),
+  record:          () => svRecordTap(),
+  stop:            () => svStopRecording(),
+  flip:            () => svFlip(),
+  torch:           () => svTorch(),
+  mic:             () => svMic(),
+  zoom:            a => svSetZoom(Number(a)),
+  cycleCountdown:  () => svCycleCountdown(),
+  prompter:        () => svPrompterTap(),
+  togglePrompter:  () => { const st = svState(); st.showPrompter = !st.showPrompter; render(); },
+  promptSpeed:     (a, el) => { svState().promptSpeed = Number(el.value); },
+  saveScript:      () => svSaveScript(),
+  closeScript:     () => { const st = svState(); st.showScriptEditor = false; render(); },
+  importScript:    () => document.getElementById('sv-script-import') && document.getElementById('sv-script-import').click(),
+  upload:          () => document.getElementById('sv-upload') && document.getElementById('sv-upload').click(),
+
+  /* takes */
+  playTake:        a => svPlayTake(a),
+  deleteTake:      a => svDeleteTake(a),
+  closeReview:     () => { const st = svState(); st.reviewId = null; render(); },
+  toggleReviewPlay: () => svToggleReview(),
+  deleteReviewTake: () => { const st = svState(); const id = st.reviewId; st.reviewId = null; svDeleteTake(id); },
+
+  /* navigation */
+  toEditor:        () => svGoToEditor(),
+  exitEditor:      () => svConfirmExitEditor(),
+
+  /* editing */
+  selectOverlay:   a => svSelect(a, 'overlay'),
+  deleteOverlay:   a => svDeleteOverlay(a),
+  addText:         () => svAddText(),
+  addClip:         () => { const el = document.getElementById('sv-add-clip'); if (el) el.click(); },
+  replace:         () => { const el = document.getElementById('sv-replace-clip'); if (el) el.click(); },
+  split:           () => svSplit(),
+  duplicate:       () => svDuplicate(),
+  deleteSel:       () => svDeleteSelected(),
+  trimOn:          () => svOpenSheet('trim'),
+
+  /* transport + history */
+  togglePlay:      () => svTogglePlay(),
+  undo:            () => svUndo(),
+  redo:            () => svRedo(),
+
+  /* sheets */
+  sheet:           a => svOpenSheet(a),
+  closeSheet:      () => svCloseSheet(),
+
+  /* idle screen entry points */
+  newProject:      () => svNewProject(),
+  upload2:         () => { const el = document.getElementById('sv-upload'); if (el) el.click(); },
+
+  /* captions */
+  autoCaps:        () => svAutoCaptions(),
+  capPreset:       (a, el) => { const st = svState(); st.capStyle.preset = a; render(); },
+  capSize:         (a, el) => { const st = svState(); st.capStyle.size = Number(el.value); svApplyCapLive(); },
+  capPos:          (a, el) => { const st = svState(); st.capStyle.y = Number(el.value); svApplyCapLive(); },
+  capWord:         (a, el) => { const st = svState(); st.capWords = Number(el.value); svAutoCaptions(); },
+  delCap:          a => { const st = svState(); st.captions = st.captions.filter(c => c.id !== a); render(); },
+
+  /* text overlay editor */
+  ovStyle:         a => { const st = svState(); const o = svFindOverlay(st.editText); if (o) o.style = a; render(); },
+  ovColor:         (a, el) => { const st = svState(); const o = svFindOverlay(st.editText); if (o) o.color = a; render(); },
+  ovSize:          (a, el) => { const st = svState(); const o = svFindOverlay(st.editText); if (o) o.size = Number(el.value); render(); },
+  ovText:          (a, el) => { const st = svState(); const o = svFindOverlay(st.editText); if (o) o.text = el.value; svApplyOverlayLive(); },
+  ovDone:          () => { const st = svState(); st.editText = null; st.sheet = null; svPush(); render(); },
+  addImageOv:      () => { const el = document.getElementById('sv-add-image'); if (el) el.click(); },
+  addVideoOv:      () => { const el = document.getElementById('sv-add-video-ov'); if (el) el.click(); },
+  ovDur:           (a, el) => { const st = svState(); const o = svFindOverlay(st.editText); if (o) o.endMs = o.startMs + Number(el.value) * 1000; render(); },
+
+  /* audio */
+  addMusic:        () => { const el = document.getElementById('sv-add-music'); if (el) el.click(); },
+  addSfx:          a => svAddSfx(a),
+  delAudio:        a => { const st = svState(); st.audioTracks = st.audioTracks.filter(t => t.id !== a); render(); },
+  musicVol:        (a, el) => { const st = svState(); const t = st.audioTracks.find(x => x.id === a); if (t) t.volume = Number(el.value); },
+
+  /* effects + adjust */
+  pickFilter:      a => { const st = svState(); st.filter = a; svApplyPreview(); svRenderSheetOnly(); },
+  adj:             (a, el) => { const st = svState(); st.adjust[a] = Number(el.value); svApplyPreview(); },
+  resetAdjust:     () => { const st = svState(); st.adjust = { brightness: 100, contrast: 100, saturation: 100, warmth: 0 }; svApplyPreview(); svRenderSheetOnly(); },
+
+  /* quality */
+  setQuality:      a => { const st = svState(); st.quality = a; render(); },
+
+  /* clip list */
+  pickClip:        a => { svSelect(a, 'video'); svCloseSheet(); },
+
+  /* export */
+  export:          () => svExport(),
+  cancelExport:    () => svCancelExport(),
+};
+
+const SV_PTR = {
+  clip:    (e, id) => svSelect(id, 'video'),
+  grabIn:  (e, id) => svBeginTrim(e, id, 'in'),
+  grabOut: (e, id) => svBeginTrim(e, id, 'out'),
+  ovBody:  (e, id) => svBeginOverlayDrag(e, id),
+  cap:     (e)    => svSelectCaption(),
+  scrub:   (e)    => svBeginScrub(e),
+};
+
+document.addEventListener('click', function (e){
+  const host = e.target.closest && e.target.closest('.sv-root');
+  if (!host) return;
+  const t = e.target.closest('[data-act]');
+  if (!t) return;
+  const fn = SV_ACT[t.dataset.act];
+  if (!fn) return;
+  e.preventDefault();
   e.stopPropagation();
-  const stage = document.getElementById('cs-ed-stage');
-  const el = e.currentTarget;
-  const o  = S.studio.overlays.find(x => x.id === id);
-  if(!stage || !o) return;
-  try { el.setPointerCapture(e.pointerId); } catch(_){}
-  CSPTR.pts.set(e.pointerId, {x:e.clientX, y:e.clientY});
+  try { fn(t.dataset.arg, t); } catch (err){ console.warn('[studio] action ' + t.dataset.act, err); svToast('Something went wrong there'); }
+}, false);
 
-  if(CSPTR.pts.size === 2 && CSPTR.o === o){
-    const [a,b] = [...CSPTR.pts.values()];
-    CSPTR.mode = 'pinch';
-    CSPTR.base.dist = Math.hypot(a.x-b.x, a.y-b.y) || 1;
-    CSPTR.base.startSize = o.type==='image' ? o.w : o.size;
-    return;
-  }
-
-  const rect = stage.getBoundingClientRect();
-  CSPTR.o = o; CSPTR.el = el; CSPTR.mode = 'drag';
-  CSPTR.base = { x:e.clientX, y:e.clientY, px:o.x, py:o.y, rect, moved:false };
-
-  const move = (ev) => {
-    if(CSPTR.pts.has(ev.pointerId)) CSPTR.pts.set(ev.pointerId, {x:ev.clientX, y:ev.clientY});
-    if(CSPTR.mode === 'pinch' && CSPTR.pts.size >= 2){
-      const [a,b] = [...CSPTR.pts.values()];
-      const d = Math.hypot(a.x-b.x, a.y-b.y) || 1;
-      const startSize = CSPTR.base.startSize;
-      const cur = o.type==='image' ? o.w : o.size;
-      csOverlayScale(o, el, (startSize * (d/CSPTR.base.dist)) / cur);
-      CSPTR.base.moved = true;
+document.addEventListener('pointerdown', function (e){
+  const host = e.target.closest && e.target.closest('.sv-root');
+  if (!host) return;
+  const t = e.target.closest('[data-ptr]');
+  if (t){
+    const fn = SV_PTR[t.dataset.ptr];
+    if (fn){
+      // Selection runs on pointerdown so a clip highlights the instant it is
+      // touched, before any drag begins.
+      try { fn(e, t.dataset.arg); } catch (err){ console.warn('[studio] pointer ' + t.dataset.ptr, err); }
       return;
     }
-    const dx = ev.clientX - CSPTR.base.x, dy = ev.clientY - CSPTR.base.y;
-    if(Math.abs(dx) > 9 || Math.abs(dy) > 9) CSPTR.base.moved = true;
-    // Free positioning across the whole frame (1%–99%, both axes).
-    const nx = Math.max(1, Math.min(99, CSPTR.base.px + (dx / CSPTR.base.rect.width) * 100));
-    const ny = Math.max(1, Math.min(99, CSPTR.base.py + (dy / CSPTR.base.rect.height) * 100));
-    el.style.left = nx + '%'; el.style.top = ny + '%';
-    o._px = nx; o._py = ny;
-  };
-  const up = (ev) => {
-    CSPTR.pts.delete(ev.pointerId);
-    if(CSPTR.pts.size > 0) return;
-    document.removeEventListener('pointermove', move);
-    document.removeEventListener('pointerup', up);
-    document.removeEventListener('pointercancel', up);
-    const moved = CSPTR.base && CSPTR.base.moved;
-    if(moved){
-      if(o._px != null){ o.x = o._px; o.y = o._py; delete o._px; delete o._py; }
-      csPushHistory();
-    } else {
-      window.csSelectOverlay(id);
-    }
-    CSPTR.mode = null; CSPTR.o = null; CSPTR.el = null; CSPTR.base = null;
-  };
-  document.addEventListener('pointermove', move, {passive:true});
-  document.addEventListener('pointerup', up);
-  document.addEventListener('pointercancel', up);
-};
-
-window.csOverlayResizeStart = (e, id) => {
-  e.stopPropagation(); e.preventDefault();
-  const o = S.studio.overlays.find(x=>x.id===id); if(!o) return;
-  const el = document.querySelector(`.cs-ed-overlay[data-ovid="${id}"]`); if(!el) return;
-  const stage = document.getElementById('cs-ed-stage');
-  const rect = stage.getBoundingClientRect();
-  const cx = rect.left + rect.width * (o.x/100), cy = rect.top + rect.height * (o.y/100);
-  const d0 = Math.max(12, Math.hypot(e.clientX-cx, e.clientY-cy));
-  const s0 = o.type==='image' ? o.w : o.size;
-  try { e.currentTarget.setPointerCapture(e.pointerId); } catch(_){}
-  const move = (ev) => {
-    const d = Math.max(8, Math.hypot(ev.clientX-cx, ev.clientY-cy));
-    const cur = o.type==='image' ? o.w : o.size;
-    csOverlayScale(o, el, (s0 * (d/d0)) / cur);
-  };
-  const up = () => {
-    document.removeEventListener('pointermove', move);
-    document.removeEventListener('pointerup', up);
-    document.removeEventListener('pointercancel', up);
-    csPushHistory();
-  };
-  document.addEventListener('pointermove', move, {passive:true});
-  document.addEventListener('pointerup', up);
-  document.addEventListener('pointercancel', up);
-};
-
-window.csCaptionPointerDown = (e) => {
-  e.stopPropagation();
-  const stage = document.getElementById('cs-ed-stage');
-  const el = e.currentTarget;
-  const cs = S.studio.capStyle;
-  if(!stage) return;
-  const rect = stage.getBoundingClientRect();
-  const x0=e.clientX, y0=e.clientY, px=cs.x==null?50:cs.x, py=cs.y==null?82:cs.y;
-  let moved=false;
-  try { el.setPointerCapture(e.pointerId); } catch(_){}
-  const move = ev => {
-    const dx=ev.clientX-x0, dy=ev.clientY-y0;
-    if(Math.abs(dx)>3||Math.abs(dy)>3) moved=true;
-    const nx=Math.max(4,Math.min(96, px + dx/rect.width*100));
-    const ny=Math.max(4,Math.min(96, py + dy/rect.height*100));
-    el.style.left=nx+'%'; el.style.top=ny+'%';
-    cs._x=nx; cs._y=ny;
-  };
-  const up = () => {
-    document.removeEventListener('pointermove', move);
-    document.removeEventListener('pointerup', up);
-    document.removeEventListener('pointercancel', up);
-    if(moved && cs._x!=null){ cs.x=cs._x; cs.y=cs._y; delete cs._x; delete cs._y; }
-    else { S.studio.selectedType='caption'; S.studio.selectedId=null; window.csOpenSheet('captions'); }
-  };
-  document.addEventListener('pointermove', move, {passive:true});
-  document.addEventListener('pointerup', up);
-  document.addEventListener('pointercancel', up);
-};
-
-// ═══════════════════════════════════════════════════════════════════════════
-//  CLIP EDITS
-// ═══════════════════════════════════════════════════════════════════════════
-// SPLIT — exactly at the parked playhead.
-// Old behaviour read the <video>'s currentTime, which is the *decoder's*
-// position: after a seek Chrome snaps to the nearest keyframe and reports it
-// asynchronously, so the cut landed up to ~500ms away from the playhead (and
-// silently fell back to the clip midpoint whenever the buffer had been swapped).
-// The playhead is now the single source of truth, and the clip under it is
-// resolved by accumulated trimmed durations, so the cut is frame-exact.
-window.csSplit = () => {
-  const st = S.studio;
-  if(!st.clips.length){ toast('Add a clip first'); return; }
-  const loc = csLocate(st.playhead);
-  if(!loc){ toast('Move the playhead over a clip'); return; }
-  const c = loc.clip;
-  const at = Math.round(c.inMs + loc.localMs);        // exact source-time cut point
-  if(at <= c.inMs + 40 || at >= c.outMs - 40){ toast('Park the playhead inside the clip to split'); return; }
-  csPushHistory();
-  const i = st.clips.indexOf(c);
-  const right = { ...c, id: csId('c'), inMs: at, outMs: c.outMs };
-  csHoldUrl(right.url);                                // shared source, +1 ref
-  c.outMs = at;
-  st.clips.splice(i+1, 0, right);
-  st.selectedId = right.id; st.selectedType = 'video';
-  st.playhead = csClipStart(right.id);                 // playhead sits on the cut
-  render();
-};
-
-window.csDeleteSelected = () => {
-  const st = S.studio;
-  if(st.selectedType==='overlay'){ csPushHistory(); window.csDeleteOverlay(st.selectedId, true); render(); return; }
-  if(st.selectedType!=='video') return;
-  const i = st.clips.findIndex(c=>c.id===st.selectedId); if(i<0) return;
-  csPushHistory();
-  const gone = st.clips.splice(i,1)[0];
-  csDropUrl(gone.url);
-  st.selectedId = st.clips[0]?.id || null;
-  st.selectedType = st.clips.length ? 'video' : null;
-  st.playhead = Math.min(st.playhead, csTotalMs());
-  const v = csActiveVideo(); if(v){ v.dataset.cid=''; try{ v.removeAttribute('src'); v.load(); }catch(_){} }
-  render();
-};
-window.csDuplicate = () => {
-  const st = S.studio;
-  if(st.selectedType!=='video') return;
-  const c = st.clips.find(x=>x.id===st.selectedId); if(!c) return;
-  csPushHistory();
-  const copy = { ...c, id: csId('c') };
-  csHoldUrl(copy.url);
-  st.clips.splice(st.clips.indexOf(c)+1, 0, copy);
-  render();
-};
-window.csCopy = () => { window.__cs_clip = { ...S.studio.clips.find(x=>x.id===S.studio.selectedId) }; toast('Copied'); };
-window.csSetTrim = (which, valMs) => {
-  const st = S.studio;
-  const c = st.clips.find(x=>x.id===st.selectedId); if(!c) return;
-  const max = Math.round((c.dur||0)*1000) || c.outMs;
-  if(which==='in')  c.inMs  = Math.max(0, Math.min(valMs, c.outMs-100));
-  else              c.outMs = Math.min(max, Math.max(valMs, c.inMs+100));
-  const lbl = document.querySelector(`[data-trim="${which}"]`);
-  if(lbl) lbl.textContent = ((which==='in'?c.inMs:c.outMs)/1000).toFixed(2)+'s';
-  const dur = document.querySelector('[data-trim="dur"]');
-  if(dur) dur.textContent = ((c.outMs-c.inMs)/1000).toFixed(2)+'s';
-};
-window.csCommitTrim = () => { csPushHistory(); render(); };
-
-function csId(p){ return p + Date.now().toString(36) + Math.random().toString(36).slice(2,6); }
-
-// ── Overlays ────────────────────────────────────────────────────────────────
-window.csAddText = () => {
-  csPushHistory();
-  const st = S.studio;
-  const o = {
-    id: csId('o'), type:'text',
-    text:'Tap to edit', font:'classic', style:'none', color:'#FFFFFF', bg:'#000000',
-    size:38, x:50, y:70, startMs: st.playhead, endMs: Math.min(csTotalMs(), st.playhead + 3000),
-  };
-  if(o.endMs - o.startMs < 800) o.endMs = o.startMs + 3000;
-  st.overlays.push(o);
-  st.selectedId=o.id; st.selectedType='overlay'; st.editText=o; st.sheet='text'; st.editTextTab='font';
-  render();
-};
-window.csAddImageClick = () => document.getElementById('cs-add-image')?.click();
-window.csHandleImageOverlay = async (e) => {
-  const f = (e.target.files||[])[0]; e.target.value='';
-  if(!f) return;
-  csPushHistory();
-  const st = S.studio;
-  const url = csMakeUrl(f);
-  const dims = await csImageSize(url).catch(()=>({w:1,h:1}));
-  const o = {
-    id: csId('o'), type:'image', url, blob:f, ar: dims.w/Math.max(1,dims.h),
-    w:45, x:50, y:45, alpha:100,
-    startMs: st.playhead, endMs: Math.min(csTotalMs(), st.playhead + 4000),
-  };
-  if(o.endMs - o.startMs < 800) o.endMs = o.startMs + 4000;
-  st.overlays.push(o);
-  st.selectedId=o.id; st.selectedType='overlay'; st.editText=o; st.sheet='imageov';
-  render();
-};
-function csImageSize(url){
-  return new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res({w:i.naturalWidth,h:i.naturalHeight}); i.onerror=rej; i.src=url; });
-}
-window.csEditOverlayField = (k, v) => {
-  const o = S.studio.editText; if(!o) return;
-  o[k] = v;
-  const el = document.querySelector(`.cs-ed-overlay[data-ovid="${o.id}"]`);
-  if(k === 'text'){
-    const span = el && el.querySelector('.ov-txt');
-    if(span) span.textContent = v;
-    const chip = document.querySelector('.cs-clip-text.sel .cs-clip-name');
-    if(chip) chip.textContent = v.slice(0,22);
-    return;
   }
-  if(el && o.type !== 'image'){
-    const f = csFontById(o.font);
-    el.setAttribute('style', `left:${o.x}%;top:${o.y}%;font-family:${f.css};font-weight:${f.weight};font-size:${o.size}px;color:${o.color};${csStyleCss(o.style,o.color,o.bg)}`);
+  // Tapping empty timeline space scrubs to that position.
+  const scroller = e.target.closest('#sv-tl-scroll');
+  if (scroller){
+    try { SV_PTR.scrub(e); } catch (err){ console.warn('[studio] scrub', err); }
   }
-  const sheet = document.querySelector('.cs-sheet');
-  if(sheet && S.studio.sheet==='text') sheet.outerHTML = csTextSheet(S.studio);
-};
-window.csLiveOverlaySize = (v) => {
-  const o = S.studio.editText; if(!o) return;
-  const el = document.querySelector(`.cs-ed-overlay[data-ovid="${o.id}"]`);
-  if(o.type==='image'){ o.w = v; if(el) el.style.width = v+'%'; }
-  else { o.size = v; if(el) el.style.fontSize = v+'px'; }
-  const lbl = document.querySelector('[data-ov-size]');
-  if(lbl) lbl.textContent = o.type==='image' ? v+'%' : v+'px';
-};
-window.csLiveOverlayAlpha = (v) => {
-  const o = S.studio.editText; if(!o) return;
-  o.alpha = v;
-  const el = document.querySelector(`.cs-ed-overlay[data-ovid="${o.id}"]`);
-  if(el) el.style.opacity = v/100;
-  const lbl = document.querySelector('[data-ov-alpha]'); if(lbl) lbl.textContent = v+'%';
-};
-window.csEditOverlayDuration = (ms) => {
-  const o = S.studio.editText; if(!o) return;
-  o.endMs = o.startMs + ms;
-  const el = document.querySelector(`.cs-ed-overlay[data-ovid="${o.id}"]`);
-  if(el) el.dataset.end = o.endMs;
-  const chip = document.querySelector('.cs-clip-text.sel, .cs-clip-img.sel');
-  if(chip) chip.style.width = Math.max(46, ms*CS_PX)+'px';
-  const lbl = document.querySelector('[data-ov-dur]'); if(lbl) lbl.textContent = (ms/1000).toFixed(1)+'s';
-};
-window.csDeleteOverlay = (id, skipRender) => {
-  const st = S.studio;
-  const i = st.overlays.findIndex(o=>o.id===id); if(i<0) return;
-  const gone = st.overlays.splice(i,1)[0];
-  if(gone.type==='image') csDropUrl(gone.url);
-  if(st.selectedId===id){ st.selectedId=null; st.selectedType=null; st.editText=null; st.sheet=null; }
-  if(!skipRender) render();
-};
+}, false);
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  SHEETS — one chrome, fixed heights, no layout jump between tools
-// ═══════════════════════════════════════════════════════════════════════════
-function csSheet(title, body, opts){
-  opts = opts || {};
-  return `<div class="cs-sheet ${opts.tall?'tall':''}" onclick="event.stopPropagation()">
-    <div class="cs-sheet-grip" onpointerdown="csSheetDragStart(event)"></div>
-    <div class="cs-sheet-h"><h4>${esc(title)}</h4><button class="done" onclick="csCloseSheet()">Done</button></div>
-    <div class="cs-sheet-body">${body}</div>
-  </div>`;
-}
-function csRenderSheet(st){
-  switch(st.sheet){
-    case 'text':     return st.editText ? csTextSheet(st) : '';
-    case 'imageov':  return st.editText ? csImageSheet(st) : '';
-    case 'trim':     return csTrimSheet(st);
-    case 'filter':   return csFilterSheet(st);
-    case 'audio':    return csAudioSheet(st);
-    case 'captions': return csCaptionsSheet(st);
-    case 'adjust':   return csAdjustSheet(st);
-    case 'voice':    return csVoiceSheet(st);
-    default:         return '';
-  }
-}
-// Swap only the sheet markup — never re-render the editor (that would tear the
-// preview stage down mid-interaction).
-function csSwapSheet(html){
-  const sheet = document.querySelector('.cs-sheet');
-  if(sheet) sheet.outerHTML = html; else render();
-}
-
-function csTextSheet(st){
-  const o = st.editText, tab = st.editTextTab;
-  const body = `
-    <textarea class="cs-text-input" placeholder="Type text…" oninput="csEditOverlayField('text',this.value)">${esc(o.text)}</textarea>
-    <div class="cs-sheet-tabs">
-      ${['font','style','color','size'].map(t=>`<button class="${tab===t?'on':''}" onclick="csSetTextTab('${t}')">${t[0].toUpperCase()+t.slice(1)}</button>`).join('')}
-    </div>
-    <div class="cs-tabpane">
-    ${tab==='font' ? `<div class="cs-font-grid">
-      ${CS_FONTS.map(f=>`<button class="cs-font-cell ${o.font===f.id?'on':''}" style="font-family:${f.css};font-weight:${f.weight}" onclick="csEditOverlayField('font','${f.id}')">${f.name}</button>`).join('')}
-    </div>` : ''}
-    ${tab==='style' ? `<div class="cs-style-grid">
-      ${CS_STYLES.map(s=>`<button class="cs-style-cell ${o.style===s.id?'on':''}" style="${csStyleCss(s.id,o.color,'#000')}" onclick="csEditOverlayField('style','${s.id}')">${s.name}</button>`).join('')}
-    </div>` : ''}
-    ${tab==='color' ? `<div class="cs-color-row">
-      ${CS_COLORS.map(c=>`<button class="cs-color-dot ${o.color===c?'on':''}" style="background:${c}" onclick="csEditOverlayField('color','${c}')"></button>`).join('')}
-    </div>` : ''}
-    ${tab==='size' ? `<div class="cs-pad">
-      <div class="cs-row-lbl"><span>Size</span><span data-ov-size>${o.size}px</span></div>
-      <input class="cs-slider" type="range" min="14" max="160" value="${o.size}" oninput="csLiveOverlaySize(+this.value)" onchange="csPushHistory()"/>
-      <div class="cs-row-lbl" style="margin-top:16px"><span>Time on screen</span><span data-ov-dur>${((o.endMs-o.startMs)/1000).toFixed(1)}s</span></div>
-      <input class="cs-slider" type="range" min="500" max="${Math.max(1500,csTotalMs())}" value="${o.endMs-o.startMs}" oninput="csEditOverlayDuration(+this.value)"/>
-      <div class="cs-note">Drag the text on the preview to move it anywhere. Pinch, or drag the ⤢ corner, to resize.</div>
-    </div>` : ''}
-    </div>`;
-  return csSheet('Text', body, {tall:true});
-}
-window.csSetTextTab = (t) => { S.studio.editTextTab = t; csSwapSheet(csTextSheet(S.studio)); };
-
-function csImageSheet(st){
-  const o = st.editText;
-  const body = `
-    <div class="cs-img-preview"><img src="${o.url}" alt=""/></div>
-    <div class="cs-pad">
-      <div class="cs-row-lbl"><span>Size</span><span data-ov-size>${Math.round(o.w)}%</span></div>
-      <input class="cs-slider" type="range" min="6" max="100" value="${Math.round(o.w)}" oninput="csLiveOverlaySize(+this.value)" onchange="csPushHistory()"/>
-      <div class="cs-row-lbl" style="margin-top:16px"><span>Opacity</span><span data-ov-alpha>${o.alpha==null?100:o.alpha}%</span></div>
-      <input class="cs-slider" type="range" min="10" max="100" value="${o.alpha==null?100:o.alpha}" oninput="csLiveOverlayAlpha(+this.value)"/>
-      <div class="cs-row-lbl" style="margin-top:16px"><span>Time on screen</span><span data-ov-dur>${((o.endMs-o.startMs)/1000).toFixed(1)}s</span></div>
-      <input class="cs-slider" type="range" min="500" max="${Math.max(1500,csTotalMs())}" value="${o.endMs-o.startMs}" oninput="csEditOverlayDuration(+this.value)"/>
-      <button class="cs-ghost" onclick="csDeleteOverlay('${o.id}')">Remove image</button>
-      <div class="cs-note">Drag to move, pinch or drag the ⤢ corner to resize.</div>
-    </div>`;
-  return csSheet('Image overlay', body);
-}
-
-function csTrimSheet(st){
-  const c = st.clips.find(x=>x.id===st.selectedId);
-  if(!c) return csSheet('Trim', '<div class="cs-note">Select a clip first.</div>');
-  const max = Math.round((c.dur||0)*1000) || c.outMs;
-  return csSheet('Trim', `
-    <div class="cs-pad">
-      <div class="cs-row-lbl"><span>Start</span><span data-trim="in">${(c.inMs/1000).toFixed(2)}s</span></div>
-      <input class="cs-slider" type="range" min="0" max="${max}" step="10" value="${c.inMs}" oninput="csSetTrim('in',+this.value)" onchange="csCommitTrim()"/>
-      <div class="cs-row-lbl" style="margin-top:16px"><span>End</span><span data-trim="out">${(c.outMs/1000).toFixed(2)}s</span></div>
-      <input class="cs-slider" type="range" min="0" max="${max}" step="10" value="${c.outMs}" oninput="csSetTrim('out',+this.value)" onchange="csCommitTrim()"/>
-      <div class="cs-row-lbl" style="margin-top:16px"><span>Clip length</span><span data-trim="dur">${((c.outMs-c.inMs)/1000).toFixed(2)}s</span></div>
-      <div class="cs-note">Or park the playhead and tap Split for a frame-exact cut.</div>
-    </div>`);
-}
-
-function csFilterSheet(st){
-  return csSheet('Filters', `
-    <div class="cs-filter-grid">
-      ${CS_FILTERS.map(f=>`<button class="cs-filter-cell ${st.filter===f.id?'on':''}" data-fid="${f.id}" onclick="csPickFilter('${f.id}',this)">
-        <div class="ph" style="filter:${f.filter==='none'?'none':f.filter}"></div><div class="n">${f.name}</div>
-      </button>`).join('')}
-    </div>
-    <div class="cs-note">Filters are burned into the exported file.</div>`);
-}
-window.csPickFilter = (id, btn) => {
-  S.studio.filter = id;
-  const grid = btn && btn.closest('.cs-filter-grid');
-  if(grid) grid.querySelectorAll('.cs-filter-cell').forEach(el => el.classList.toggle('on', el.getAttribute('data-fid')===id));
-  csApplyPreview();
-};
-
-function csAudioSheet(st){
-  const tracks = st.audioTracks||[];
-  return csSheet('Audio', `
-    <label class="cs-upload-btn">${CS_ICON('music')} Add background music
-      <input type="file" accept="audio/*" style="display:none" onchange="csAddAudio(event)"/>
-    </label>
-    ${tracks.length ? `<div class="cs-track-list">${tracks.map(a=>`
-      <div class="cs-track-item"><span class="n">${esc(a.name)}</span><span class="d">${_fmtTs((a.durMs||0)/1000)}</span>
-        <button class="x" onclick="csRemoveAudio('${a.id}')">${CS_ICON('trash')}</button></div>`).join('')}</div>` : ''}
-    <div class="cs-row-lbl" style="margin-top:18px"><span>Music volume</span><span id="cs-vol-val">${(st.volume==null?100:st.volume)}%</span></div>
-    <input class="cs-slider" type="range" min="0" max="200" value="${(st.volume==null?100:st.volume)}" oninput="S.studio.volume=+this.value;document.getElementById('cs-vol-val').textContent=this.value+'%'"/>
-    <div class="cs-row-lbl" style="margin-top:14px"><span>Original clip volume</span><span id="cs-cvol-val">${(st.clipVolume==null?100:st.clipVolume)}%</span></div>
-    <input class="cs-slider" type="range" min="0" max="150" value="${(st.clipVolume==null?100:st.clipVolume)}" oninput="csSetClipVolume(+this.value)"/>`, {tall:true});
-}
-window.csSetClipVolume = (v) => {
-  S.studio.clipVolume = v;
-  const l = document.getElementById('cs-cvol-val'); if(l) l.textContent = v+'%';
-  [CSM.a, CSM.b].forEach(el => { if(el) el.volume = Math.min(1, v/100); });
-};
-window.csRemoveAudio = (id) => {
-  const st = S.studio;
-  const i = (st.audioTracks||[]).findIndex(a=>a.id===id); if(i<0) return;
-  csDropUrl(st.audioTracks.splice(i,1)[0].url);
-  render();
-};
-
-function csCaptionsSheet(st){
-  const tab = st.capTab || 'style';
-  const cs = st.capStyle, eff = csCapStyle();
-  const body = `
-    <button class="cs-primary" ${st.transcribing?'disabled':''} onclick="csAutoCaption()">
-      ${CS_ICON('sparkle')} ${st.transcribing?'Transcribing…':'Auto-generate captions'}
-    </button>
-    <div class="cs-sheet-tabs" style="margin-top:14px">
-      ${[['style','Style'],['pace','Pace'],['color','Color'],['size','Size'],['list','Lines']].map(([t,l])=>`<button class="${tab===t?'on':''}" onclick="csSetCapTab('${t}')">${l}</button>`).join('')}
-    </div>
-    <div class="cs-tabpane">
-    ${tab==='style' ? `<div class="cs-cap-grid">
-      ${CS_CAP_PRESETS.map(p=>{
-        const f = csFontById(p.font);
-        const inner = `font-family:${f.css};font-weight:${f.weight};color:${p.color};`
-          + (p.bg?`background:${p.bg};padding:.16em .4em;border-radius:${p.radius}em;`:'')
-          + (p.stroke?`-webkit-text-stroke:1px ${p.stroke};paint-order:stroke fill;`:'')
-          + (p.shadow?`text-shadow:0 2px 6px rgba(0,0,0,.8);`:'')
-          + (p.upper?`text-transform:uppercase;`:'');
-        return `<button class="cs-cap-cell ${eff.preset===p.id?'on':''}" onclick="csPickCapPreset('${p.id}')">
-          <span class="prev" style="${inner}">Aa</span><span class="n">${p.name}</span></button>`;
-      }).join('')}
-    </div>` : ''}
-    ${tab==='pace' ? `<div class="cs-pad">
-      <div class="cs-row-lbl"><span>Words on screen</span><span>${eff.words===1?'One at a time':'Two at a time'}</span></div>
-      <div class="cs-seg">
-        <button class="${eff.words===1?'on':''}" onclick="csSetCapWords(1)">1 word</button>
-        <button class="${eff.words===2?'on':''}" onclick="csSetCapWords(2)">2 words</button>
-      </div>
-      <div class="cs-note">TikTok/CapCut style: captions pop word by word, timed to the actual speech using word-level timestamps from the transcriber.
-      ${st.capWords && st.capWords.length ? `<br><b>${st.capWords.length}</b> timed words in this take.` : ''}</div>
-    </div>` : ''}
-    ${tab==='color' ? `<div class="cs-color-row">
-      <button class="cs-color-dot ${!cs.color?'on':''}" style="background:conic-gradient(#F5C518,#EC4899,#22D3EE,#F5C518)" onclick="csSetCapField('color',null)"></button>
-      ${CS_COLORS.map(c=>`<button class="cs-color-dot ${cs.color===c?'on':''}" style="background:${c}" onclick="csSetCapField('color','${c}')"></button>`).join('')}
-    </div><div class="cs-note">First swatch keeps the preset's own colour.</div>` : ''}
-    ${tab==='size' ? `<div class="cs-pad">
-      <div class="cs-row-lbl"><span>Size</span><span id="cs-cap-size-v">${eff.size}px</span></div>
-      <input class="cs-slider" type="range" min="18" max="96" value="${eff.size}" oninput="csSetCapField('size',+this.value)"/>
-      <div class="cs-row-lbl" style="margin-top:16px"><span>Vertical position</span><span id="cs-cap-y-v">${Math.round(eff.y)}%</span></div>
-      <input class="cs-slider" type="range" min="8" max="94" value="${Math.round(eff.y)}" oninput="csSetCapField('y',+this.value)"/>
-      <div class="cs-note">You can also drag the caption on the preview.</div>
-    </div>` : ''}
-    ${tab==='list' ? ((st.captions||[]).length ? `<div class="cs-cap-list">${st.captions.map((c,i)=>`
-      <div class="cs-cap-line"><div class="t">${c.start.toFixed(1)}s</div>
-        <input class="cs-cap-edit" value="${esc(c.text)}" oninput="S.studio.captions[${i}].text=this.value;csSyncCaption()"/>
-      </div>`).join('')}</div>` : '<div class="cs-note" style="text-align:center;padding:22px 0">No captions yet.</div>') : ''}
-    </div>`;
-  return csSheet('Captions', body, {tall:true});
-}
-window.csSetCapTab = (t) => { S.studio.capTab = t; csSwapSheet(csCaptionsSheet(S.studio)); };
-window.csPickCapPreset = (id) => {
-  S.studio.capStyle.preset = id;
-  csSyncCaption();
-  document.querySelectorAll('.cs-cap-cell').forEach((el,i)=>el.classList.toggle('on', CS_CAP_PRESETS[i].id===id));
-};
-window.csSetCapField = (k, v) => {
-  S.studio.capStyle[k] = v;
-  csSyncCaption();
-  if(k==='size'){ const l=document.getElementById('cs-cap-size-v'); if(l) l.textContent=v+'px'; }
-  if(k==='y'){ const l=document.getElementById('cs-cap-y-v'); if(l) l.textContent=Math.round(v)+'%'; }
-  if(k==='color'){ document.querySelectorAll('.cs-color-row .cs-color-dot').forEach((el,i)=>el.classList.toggle('on', i===0 ? v==null : CS_COLORS[i-1]===v)); }
-};
-window.csSetCapWords = (n) => {
-  S.studio.capStyle.words = n;
-  csRebuildCaptions();
-  csSwapSheet(csCaptionsSheet(S.studio));
-  csSyncCaption();
-};
-function csSyncCaption(){
-  const el = document.getElementById('cs-ed-cap'); if(!el) return;
-  el.setAttribute('style', csCapCss(csCapStyle()));
-  CSE.capEl = el; CSE.lastCap = undefined;
-  const cap = csCapAt(S.studio.playhead);
-  el.classList.toggle('off', !cap);
-  el.textContent = cap ? cap.text : '';
-}
-
-function csAdjustSheet(st){
-  const a = st.adjust || (st.adjust = {brightness:100,contrast:100,saturation:100,warmth:0});
-  const rows = [['brightness',0,200],['contrast',0,200],['saturation',0,200],['warmth',-100,100]];
-  return csSheet('Adjust', rows.map(([k,mn,mx])=>`<div class="cs-adj-row">
-      <div class="cs-row-lbl"><span>${k[0].toUpperCase()+k.slice(1)}</span><span data-adj-val="${k}">${a[k]}</span></div>
-      <input class="cs-slider" type="range" min="${mn}" max="${mx}" value="${a[k]}" oninput="S.studio.adjust.${k}=+this.value;csApplyPreview();csUpdateSliderLabel(this,'${k}')"/>
-    </div>`).join('') + `<button class="cs-ghost" onclick="csResetAdjust()">Reset all</button>`);
-}
-window.csUpdateSliderLabel = (input, key) => {
-  const lbl = document.querySelector(`[data-adj-val="${key}"]`);
-  if(lbl) lbl.textContent = input.value;
-};
-window.csResetAdjust = () => {
-  S.studio.adjust = {brightness:100,contrast:100,saturation:100,warmth:0};
-  csApplyPreview();
-  csSwapSheet(csAdjustSheet(S.studio));
-};
-
-function csVoiceSheet(st){
-  return csSheet('Voiceover', `
-    <div class="cs-note" style="margin-bottom:16px">Hold to record a voiceover. It starts at the current playhead position.</div>
-    <button class="cs-primary" id="cs-voice-btn"
-      onpointerdown="csVoiceStart()" onpointerup="csVoiceStop()" onpointercancel="csVoiceStop()" onpointerleave="csVoiceStop()">
-      ${CS_ICON('voice')} <span id="cs-voice-lbl">Hold to record</span>
-    </button>`);
-}
-
-window.csSheetDragStart = (e) => {
-  const sheet = e.currentTarget.closest('.cs-sheet'); if(!sheet) return;
-  const y0 = e.clientY; let dy = 0;
-  sheet.style.transition = 'none';
-  const move = ev => { dy = Math.max(0, ev.clientY - y0); sheet.style.transform = `translateY(${dy}px)`; };
-  const up = () => {
-    document.removeEventListener('pointermove', move);
-    document.removeEventListener('pointerup', up);
-    document.removeEventListener('pointercancel', up);
-    sheet.style.transition = '';
-    if(dy > 90){ sheet.style.transform = 'translateY(100%)'; setTimeout(window.csCloseSheet, 180); }
-    else sheet.style.transform = '';
+/* File inputs are wired once, not per render — a listener attached inside the
+   markup string would be re-bound on every render and fire twice. */
+function svWireInputs(){
+  const bind = (id, fn) => {
+    const el = document.getElementById(id);
+    if (el && !el.dataset.wired){ el.dataset.wired = '1'; el.addEventListener('change', fn); }
   };
-  document.addEventListener('pointermove', move, {passive:true});
-  document.addEventListener('pointerup', up);
-  document.addEventListener('pointercancel', up);
-};
-window.csOpenSheet = (name) => {
-  S.studio.sheet = name; render();
-  if(window.pushBackState) window.pushBackState(() => window.csCloseSheet());
-};
-window.csSetQuality = (key) => {
-  if(!CS_QUALITY_PRESETS[key]) return;
-  S.studio.quality = key;
-  S.studio.sheet = null;
-  toast('Recording quality: ' + CS_QUALITY_PRESETS[key].label);
-  render();
-  // Re-open the camera at the new resolution if it's already running.
-  if(S.studio.mode === 'camera') csOpenCamera();
-};
+  bind('sv-upload', e => svHandleUpload(e));
+  bind('sv-add-clip', e => svHandleUpload(e));
+  bind('sv-replace-clip', e => svHandleReplace(e));
+  bind('sv-add-image', e => svHandleImageOverlay(e));
+  bind('sv-add-video-ov', e => svHandleVideoOverlay(e));
+  bind('sv-add-music', e => svHandleMusic(e));
+  bind('sv-script-import', e => svImportScript(e));
+}
+document.addEventListener('change', function (e){
+  if (e.target.closest && e.target.closest('.sv-root')) svWireInputs();
+}, true);
 
-window.csCloseSheet = () => { S.studio.sheet = null; S.studio.editText = null; render(); };
+/* ── CAMERA LIFECYCLE ───────────────────────────────────────────────────── */
 
-// Live preview styling (filters + adjust) — media layer only.
-function csApplyPreview(){
+const SVC = { stream: null, rec: null, chunks: [], track: null, timer: null, prompter: null, segStart: 0 };
+
+async function svOpenCamera(){
+  const st = svState();
+  svCloseCamera();
+  const q = svQualityFor(st);
   try {
-    const st = S.studio; if(!st) return;
-    const stage = document.getElementById('cs-ed-stage'); if(!stage) return;
-    const filt = csFilterCss(st.filter);
-    const a = st.adjust || {brightness:100,contrast:100,saturation:100,warmth:0};
-    const adjFilter = `brightness(${a.brightness}%) contrast(${a.contrast}%) saturate(${a.saturation}%) hue-rotate(${a.warmth*0.36}deg)`;
-    const combined = (filt && filt !== 'none') ? `${filt} ${adjFilter}` : adjFilter;
-    [CSM.a, CSM.b].forEach(v => { if(v) v.style.filter = combined; });
-    csEnsureEngine();
-  } catch(_){}
-}
-window.csApplyPreview = csApplyPreview;
-
-// ═══════════════════════════════════════════════════════════════════════════
-//  CAMERA
-// ═══════════════════════════════════════════════════════════════════════════
-// One stream, one recorder, one rAF ticker — all tracked so they can be torn
-// down deterministically. The old build re-acquired getUserMedia on every
-// render and never stopped the previous tracks, which is what made the camera
-// go black after a few round-trips.
-const CSCAM = { stream:null, rec:null, chunks:[], timer:null, prompter:null, startedAt:0, track:null };
-
-window.studioInitStage = async function(){
-  if(S.studio.mode !== 'camera') return;
-  const vid = document.getElementById('cs-cam-live');
-  if(!vid) return;
-  if(CSCAM.stream && CSCAM.stream.active && vid.srcObject === CSCAM.stream) return;
-  await csOpenCamera();
-};
-
-async function csOpenCamera(){
-  const st = S.studio;
-  csCloseCamera();
-  try {
-    const p = CS_DEVICE.capture;
-    CSCAM.stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: st.facing, width:{ideal:p.width}, height:{ideal:p.height}, frameRate:{ideal:p.fps} },
-      audio: st.micOn ? { echoCancellation:true, noiseSuppression:true } : false,
+    SVC.stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: st.facing,
+        width: { ideal: q.width }, height: { ideal: q.height }, frameRate: { ideal: q.fps },
+      },
+      audio: st.micOn ? { echoCancellation: true, noiseSuppression: true } : false,
     });
-  } catch(err){
+  } catch (err){
     console.warn('[studio] camera', err);
-    toast(err && err.name === 'NotAllowedError' ? 'Camera permission denied' : 'Camera unavailable');
+    svToast(err && err.name === 'NotAllowedError'
+      ? 'Camera blocked — allow camera access for this site'
+      : 'Camera unavailable on this device');
     return;
   }
-  CSCAM.track = CSCAM.stream.getVideoTracks()[0] || null;
-  const vid = document.getElementById('cs-cam-live');
-  if(vid){ vid.srcObject = CSCAM.stream; vid.play().catch(()=>{}); }
-  csApplyZoom();
+  SVC.track = SVC.stream.getVideoTracks()[0] || null;
+  st.camReady = true;
+  svAttachLive();
+  svApplyHardwareZoom();
 }
-function csCloseCamera(){
-  try { CSCAM.rec && CSCAM.rec.state !== 'inactive' && CSCAM.rec.stop(); } catch(_){}
-  CSCAM.rec = null;
-  if(CSCAM.stream){ CSCAM.stream.getTracks().forEach(t => { try{ t.stop(); }catch(_){} }); }
-  CSCAM.stream = null; CSCAM.track = null;
-  clearInterval(CSCAM.timer); CSCAM.timer = null;
-  cancelAnimationFrame(CSCAM.prompter); CSCAM.prompter = null;
-}
-window.csExitCamera = () => {
-  const st = S.studio;
-  if(st.clips && st.clips.length){
-    const ok = window.confirm(st.clips.length === 1
-      ? "Discard this recording? It hasn't been saved."
-      : `Discard these ${st.clips.length} clips? They haven't been saved.`);
-    if(!ok) return; // stay in camera, keep the clips
-    st.clips.forEach(c => { if(c.url) csDropUrl(c.url); });
-    st.clips = [];
-    st.overlays = [];
-    st.captions = [];
+
+function svAttachLive(){
+  const v = document.getElementById('sv-cam-live');
+  if (v && SVC.stream && v.srcObject !== SVC.stream){
+    v.srcObject = SVC.stream;
+    v.play().catch(() => {});
   }
-  csCloseCamera();
-  S.studio.mode = 'idle';
-  S.page = 'home';
-  render();
-};
-window.studioMic = () => {
-  const st = S.studio;
-  st.micOn = !st.micOn;
-  if(CSCAM.stream){ CSCAM.stream.getAudioTracks().forEach(t => t.enabled = st.micOn); }
-  if(st.micOn && CSCAM.stream && !CSCAM.stream.getAudioTracks().length){ csOpenCamera(); return; }
-  render();
-};
-window.csFlip = async () => {
-  const st = S.studio;
-  if(st.running) return toast('Stop recording first');
-  st.facing = st.facing === 'user' ? 'environment' : 'user';
-  st.flash = false;
-  await csOpenCamera();
-  render();
-};
-window.csSetZoom = (z) => {
-  S.studio.zoom = z;
-  const v = document.getElementById('cs-cam-live');
-  const st = S.studio;
-  if(v) v.style.transform = `${st.mirror && st.facing==='user' ? 'scaleX(-1) ' : ''}scale(${z})`;
-  document.querySelectorAll('.cs-zoom-pill button').forEach(b => b.classList.toggle('on', +b.dataset.z === z));
-  csApplyZoom();
-};
-// Use the real hardware zoom when the device exposes it; fall back to the CSS
-// transform above (which is already applied) when it doesn't.
-function csApplyZoom(){
-  const t = CSCAM.track; if(!t || !t.getCapabilities) return;
+}
+
+function svCloseCamera(){
+  try { if (SVC.rec && SVC.rec.state !== 'inactive') SVC.rec.stop(); } catch (_){}
+  SVC.rec = null;
+  if (SVC.stream) SVC.stream.getTracks().forEach(t => { try { t.stop(); } catch (_){} });
+  SVC.stream = null; SVC.track = null;
+  clearInterval(SVC.timer); SVC.timer = null;
+  cancelAnimationFrame(SVC.prompter); SVC.prompter = null;
+  if (S.studio) S.studio.camReady = false;
+}
+
+function svQualityFor(st){
+  const P = {
+    '540p':  { width: 540,  height: 960,  fps: 24, crf: 27, preset: 'ultrafast', label: '540p', bitrate: 1500000 },
+    '720p':  { width: 720,  height: 1280, fps: 30, crf: 25, preset: 'ultrafast', label: '720p', bitrate: 2500000 },
+    '1080p': { width: 1080, height: 1920, fps: 30, crf: 23, preset: 'veryfast',  label: '1080p', bitrate: 4500000 },
+    '2160p': { width: 2160, height: 3840, fps: 30, crf: 21, preset: 'veryfast',  label: '4K', bitrate: 12000000 },
+  };
+  return P[st.quality || svAutoQuality()] || P['720p'];
+}
+function svMime(){
+  const list = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm', 'video/mp4'];
+  return list.find(m => window.MediaRecorder && MediaRecorder.isTypeSupported(m)) || 'video/webm';
+}
+
+/* Torch + hardware zoom: real capabilities where the phone exposes them, and
+   a silent no-op where it does not, so the button never lies about state. */
+async function svApplyHardwareZoom(){
+  const t = SVC.track;
+  if (!t || !t.getCapabilities) return;
   try {
     const caps = t.getCapabilities();
-    if(caps.zoom){
+    if (caps.zoom){
       const z = Math.min(caps.zoom.max, Math.max(caps.zoom.min, S.studio.zoom));
-      t.applyConstraints({ advanced:[{ zoom:z }] });
-      const v = document.getElementById('cs-cam-live');
-      if(v) v.style.transform = `${S.studio.mirror && S.studio.facing==='user' ? 'scaleX(-1) ' : ''}scale(1)`;
+      await t.applyConstraints({ advanced: [{ zoom: z }] });
+      const v = document.getElementById('sv-cam-live');
+      if (v) v.style.transform = (S.studio.mirror && S.studio.facing === 'user' ? 'scaleX(-1) ' : '') + 'scale(1)';
     }
-  } catch(_){}
+  } catch (_){}
 }
-window.csToggleFlash = async () => {
-  const t = CSCAM.track;
-  if(!t || !t.getCapabilities || !t.getCapabilities().torch) return toast('Flash not supported here');
-  S.studio.flash = !S.studio.flash;
-  try { await t.applyConstraints({ advanced:[{ torch: S.studio.flash }] }); } catch(_){ toast('Flash unavailable'); }
+async function svTorch(){
+  const t = SVC.track;
+  const caps = t && t.getCapabilities ? t.getCapabilities() : null;
+  if (!caps || !caps.torch) return svToast('Torch is not available on this camera');
+  const st = svState();
+  st.torch = !st.torch;
+  try { await t.applyConstraints({ advanced: [{ torch: st.torch }] }); }
+  catch (_){ st.torch = false; return svToast('Could not switch the torch on'); }
   render();
+}
+window.svSetZoom = function (z){
+  const st = svState();
+  st.zoom = svNum(z, 1, 3);
+  const v = document.getElementById('sv-cam-live');
+  if (v) v.style.transform = (st.mirror && st.facing === 'user' ? 'scaleX(-1) ' : '') + 'scale(' + st.zoom + ')';
+  document.querySelectorAll('.sv-zoom button').forEach(b => b.classList.toggle('on', Number(b.dataset.arg) === st.zoom));
+  svApplyHardwareZoom();
 };
-window.csCycleCountdown = () => { const o=[0,3,5,10]; S.studio.countdown = o[(o.indexOf(S.studio.countdown)+1)%o.length]; render(); };
-window.csCycleSpeed = () => { const o=[0.5,1,1.5,2]; S.studio.speed = o[(o.indexOf(S.studio.speed)+1)%o.length]; render(); };
-window.csPrompterTap = () => {
-  const st = S.studio;
-  if(!st.script) st.showScriptEditor = true; else st.showPrompter = !st.showPrompter;
+async function svFlip(){
+  const st = svState();
+  if (st.running) return svToast('Stop the recording first');
+  st.facing = st.facing === 'user' ? 'environment' : 'user';
+  st.torch = false;
+  await svOpenCamera();
   render();
-};
-window.csSaveScript = () => { const st=S.studio; st.showScriptEditor=false; st.showPrompter=!!st.script; render(); };
+}
+function svMic(){
+  const st = svState();
+  st.micOn = !st.micOn;
+  if (SVC.stream) SVC.stream.getAudioTracks().forEach(t => { t.enabled = st.micOn; });
+  if (st.micOn && SVC.stream && !SVC.stream.getAudioTracks().length) return svOpenCamera().then(render);
+  render();
+}
+function svCycleCountdown(){
+  const st = svState();
+  const opts = [0, 3, 5, 10];
+  st.countdown = opts[(opts.indexOf(st.countdown) + 1) % opts.length];
+  render();
+}
+function svPrompterTap(){
+  const st = svState();
+  if (!st.script) st.showScriptEditor = true;
+  else st.showPrompter = !st.showPrompter;
+  render();
+}
+function svSaveScript(){
+  const st = svState();
+  const el = document.getElementById('sv-script-input');
+  if (el) st.script = el.value;
+  st.showScriptEditor = false;
+  st.showPrompter = !!st.script.trim();
+  render();
+  svToast(st.showPrompter ? 'Teleprompter ready — it scrolls while you record' : 'Script saved');
+}
+async function svImportScript(e){
+  const f = (e.target.files || [])[0];
+  e.target.value = '';
+  if (!f) return;
+  const text = await f.text();
+  const st = svState();
+  st.script = text.slice(0, 20000);
+  st.showPrompter = true;
+  st.showScriptEditor = false;
+  render();
+  svToast('Script loaded onto the teleprompter');
+}
 
-window.csRecord = async () => {
-  const st = S.studio;
-  if(st.running) return csStopRecording();
-  if(!CSCAM.stream) { await csOpenCamera(); if(!CSCAM.stream) return; }
-  if(st.countdown){ await csCountdown(st.countdown); if(!CSCAM.stream) return; }
+/* ── RECORDING ──────────────────────────────────────────────────────────── */
 
-  const mime = CS_DEVICE.mime;
-  try {
-    CSCAM.rec = new MediaRecorder(CSCAM.stream, { mimeType: mime, videoBitsPerSecond: CS_DEVICE.capture.bitrate });
-  } catch(_){
-    try { CSCAM.rec = new MediaRecorder(CSCAM.stream); } catch(e){ return toast('Recording not supported'); }
+async function svRecordTap(){
+  const st = svState();
+  if (!st.running) return svStartRecording();
+  // While recording the shutter is a pause/resume toggle. Finishing is its own
+  // button, so a pause can always be undone — previously a second tap stopped
+  // the take outright, which left no way back to recording.
+  if (!st.paused) return svPauseRecording();
+  return svResumeRecording();
+}
+
+async function svStartRecording(){
+  const st = svState();
+  if (!SVC.stream){ await svOpenCamera(); if (!SVC.stream) return; }
+  if (!st.micOn && SVC.stream.getAudioTracks().length){
+    SVC.stream.getAudioTracks().forEach(t => { t.enabled = false; });
   }
-  CSCAM.chunks = [];
-  CSCAM.rec.ondataavailable = e => { if(e.data && e.data.size) CSCAM.chunks.push(e.data); };
-  CSCAM.rec.onstop = () => csFinishRecording(CSCAM.rec ? CSCAM.rec.mimeType : mime);
-  CSCAM.rec.start(1000);
-  st.running = true; st.recStart = Date.now();
+  if (st.countdown){
+    await svCountdown(st.countdown);
+    if (!SVC.stream) return;
+  }
+  const mime = svMime();
+  const q = svQualityFor(st);
+  try {
+    SVC.rec = new MediaRecorder(SVC.stream, { mimeType: mime, videoBitsPerSecond: q.bitrate });
+  } catch (_){
+    try { SVC.rec = new MediaRecorder(SVC.stream); }
+    catch (e2){ return svToast('Recording is not supported in this browser'); }
+  }
+  SVC.chunks = [];
+  SVC.rec.ondataavailable = ev => { if (ev.data && ev.data.size) SVC.chunks.push(ev.data); };
+  SVC.rec.onstop = () => svFinishRecording(SVC.rec ? (SVC.rec.mimeType || mime) : mime);
+  SVC.rec.start(1000);
+
+  st.running = true; st.paused = false;
+  st.recStartedAt = Date.now(); st.recAccumMs = 0;
   render();
-  csTickRecording();
-  if(st.showPrompter && st.script) csStartPrompter();
-};
-function csStopRecording(){
-  S.studio.running = false;
-  clearInterval(CSCAM.timer); CSCAM.timer = null;
-  cancelAnimationFrame(CSCAM.prompter); CSCAM.prompter = null;
-  try { CSCAM.rec && CSCAM.rec.state !== 'inactive' && CSCAM.rec.stop(); } catch(_){}
+  svTimerRun();
+  if (st.showPrompter && st.script) svPrompterRun();
 }
-function csTickRecording(){
-  clearInterval(CSCAM.timer);
-  CSCAM.timer = setInterval(() => {
-    const el = document.getElementById('cs-cam-time');
-    if(!el || !S.studio.running) return;
-    el.textContent = _fmtTs((Date.now() - S.studio.recStart)/1000);
-  }, 250);
+
+function svPauseRecording(){
+  const st = svState();
+  try { if (SVC.rec && SVC.rec.state === 'recording') SVC.rec.pause(); } catch (_){}
+  st.paused = true;
+  st.recAccumMs += Date.now() - st.recStartedAt;
+  svTimerStop();
+  svPrompterStop();
+  render();
 }
-function csStartPrompter(){
-  const box = document.getElementById('cs-cam-prompter-inner');
-  if(!box) return;
+
+function svResumeRecording(){
+  const st = svState();
+  try { if (SVC.rec && SVC.rec.state === 'paused') SVC.rec.resume(); } catch (_){}
+  st.paused = false;
+  st.recStartedAt = Date.now();
+  svTimerRun();
+  if (st.showPrompter && st.script) svPrompterRun();
+  render();
+}
+
+function svStopRecording(){
+  const st = svState();
+  if (st.paused) st.recAccumMs += 0; // already banked at pause
+  else st.recAccumMs += Date.now() - st.recStartedAt;
+  st.running = false; st.paused = false;
+  svTimerStop();
+  svPrompterStop();
+  try { if (SVC.rec && SVC.rec.state !== 'inactive') SVC.rec.stop(); } catch (_){}
+}
+
+function svTimerRun(){
+  svTimerStop();
+  SVC.timer = setInterval(() => {
+    const st = S.studio;
+    if (!st || !st.running || st.paused) return;
+    const el = document.getElementById('sv-rec-time');
+    if (el) el.textContent = smFormatMs(st.recAccumMs + (Date.now() - st.recStartedAt));
+  }, 200);
+}
+function svTimerStop(){ clearInterval(SVC.timer); SVC.timer = null; }
+
+function svPrompterRun(){
+  const box = document.getElementById('sv-prompter-inner');
+  if (!box) return;
+  cancelAnimationFrame(SVC.prompter);
   const parent = box.parentElement;
-  const dist = Math.max(0, box.scrollHeight - parent.clientHeight);
-  const words = (S.studio.script||'').trim().split(/\s+/).length;
-  const total = Math.max(6000, (words/2.6)*1000);        // ~160 wpm
+  const dist = Math.max(0, box.scrollHeight - parent.clientHeight + 30);
+  if (dist <= 0) return;
+  // Duration is derived from the word count at the chosen reading speed, so
+  // the text finishes roughly when the script does.
+  const words = String(S.studio.script || '').trim().split(/\s+/).filter(Boolean).length;
+  const wpm = Math.max(60, (S.studio.promptSpeed || 60) * 1.4);
+  const total = Math.max(4000, (words / wpm) * 60000);
   const t0 = performance.now();
-  const step = (t) => {
-    if(!S.studio.running) return;
-    const p = Math.min(1, (t - t0)/total);
-    box.style.transform = `translateY(${-dist*p}px)`;
-    if(p < 1) CSCAM.prompter = requestAnimationFrame(step);
+  const startY = -SVP.prompterY;
+  const step = t => {
+    const st = S.studio;
+    if (!st || !st.running || st.paused) return;
+    const p = Math.min(1, (t - t0) / total);
+    const y = startY - dist * p;
+    SVP.prompterY = -y;
+    box.style.transform = 'translateY(' + y.toFixed(1) + 'px)';
+    if (p < 1) SVC.prompter = requestAnimationFrame(step);
   };
-  CSCAM.prompter = requestAnimationFrame(step);
+  SVC.prompter = requestAnimationFrame(step);
 }
-function csCountdown(n){
+function svPrompterStop(){ cancelAnimationFrame(SVC.prompter); SVC.prompter = null; }
+const SVP = { prompterY: 0 };
+
+function svCountdown(n){
   return new Promise(res => {
-    const stage = document.getElementById('cs-cam-stage');
-    if(!stage) return res();
-    const el = document.createElement('div');
-    el.className = 'cs-countdown';
-    stage.appendChild(el);
+    const host = document.getElementById('sv-count');
+    if (!host) return res();
     let left = n;
     const tick = () => {
-      el.textContent = left;
-      el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
-      if(left-- <= 0){ clearInterval(iv); el.remove(); res(); }
+      host.innerHTML = '<span class="pop">' + left + '</span>';
+      if (left-- <= 0){ clearInterval(iv); res(); }
     };
     tick();
     const iv = setInterval(tick, 1000);
   });
 }
-async function csFinishRecording(mime){
-  const st = S.studio;
-  const blob = new Blob(CSCAM.chunks, { type: (mime||'video/webm').split(';')[0] });
-  CSCAM.chunks = [];
-  if(blob.size < 1000){ toast('Clip too short'); render(); return; }
-  const clip = await csMakeClip(blob, 'Take ' + (st.clips.length + 1));
-  clip.speed = st.speed;
-  st.clips.push(clip);
-  csPushHistory();
-  toast('Clip added');
-  render();
-}
 
-// Build a clip record + read its true duration once (webm from MediaRecorder
-// often reports Infinity until it is seeked to the end — handled here so the
-// timeline never gets a NaN-width clip).
-async function csMakeClip(blob, name){
-  const url = csMakeUrl(blob);
-  const dur = await csProbeDuration(url);
-  return {
-    id: csId('c'), url, blob, name,
-    dur, inMs: 0, outMs: Math.round(dur*1000),
-    speed: 1, volume: 100, kind: 'video',
-  };
-}
-function csProbeDuration(url){
+/* Reads the true duration of a recorded blob. webm from MediaRecorder reports
+   Infinity until it is seeked — handled so a clip never lands on the timeline
+   with a NaN width. */
+function svProbeDuration(url){
   return new Promise(res => {
     const v = document.createElement('video');
     v.preload = 'metadata'; v.muted = true;
     let done = false;
-    const finish = d => { if(done) return; done = true; v.removeAttribute('src'); try{v.load();}catch(_){} res(Math.max(0.1, d||0.1)); };
+    const finish = d => {
+      if (done) return;
+      done = true;
+      try { v.removeAttribute('src'); v.load(); } catch (_){}
+      res(Math.max(0.2, Number(d) || 0.2));
+    };
     v.onloadedmetadata = () => {
-      if(v.duration === Infinity || isNaN(v.duration)){
+      if (v.duration === Infinity || isNaN(v.duration)){
         v.currentTime = 1e6;
         v.ontimeupdate = () => { v.ontimeupdate = null; finish(v.duration); };
       } else finish(v.duration);
     };
-    v.onerror = () => finish(0.1);
+    v.onerror = () => finish(0.2);
     setTimeout(() => finish(v.duration), 4000);
     v.src = url;
   });
 }
 
-window.csOpenUpload = () => document.getElementById('cs-upload')?.click();
-window.csAddClipClick = () => document.getElementById('cs-add-clip')?.click();
-window.csReplaceClick = () => document.getElementById('cs-replace-clip')?.click();
-window.csHandleUpload = async (e, fromCamera) => {
-  const files = [...(e.target.files||[])]; e.target.value = '';
-  if(!files.length) return;
-  const st = S.studio;
-  for(const f of files){
-    if(!/^video\//.test(f.type)){ toast('Only video files can go on the timeline'); continue; }
-    st.clips.push(await csMakeClip(f, f.name.replace(/\.[^.]+$/, '').slice(0,24)));
-  }
-  csPushHistory();
-  if(!fromCamera && !st.selectedId){ st.selectedId = st.clips[0]?.id; st.selectedType='video'; }
-  render();
-};
-window.csHandleReplace = async (e) => {
-  const f = (e.target.files||[])[0]; e.target.value='';
-  const st = S.studio;
-  if(!f || st.selectedType!=='video') return;
-  const i = st.clips.findIndex(c=>c.id===st.selectedId); if(i<0) return;
-  csPushHistory();
-  const old = st.clips[i];
-  const next = await csMakeClip(f, f.name.replace(/\.[^.]+$/,'').slice(0,24));
-  next.id = old.id;
-  csDropUrl(old.url);
-  st.clips[i] = next;
-  const v = csActiveVideo(); if(v) v.dataset.cid = '';
-  render();
-};
+/* Poster frame for the strip and the timeline block. Without it a take is a
+   black rectangle and the user cannot tell two recordings apart. */
+function svGrabThumb(url){
+  return new Promise(res => {
+    const v = document.createElement('video');
+    v.muted = true; v.playsInline = true; v.preload = 'auto';
+    let done = false;
+    const finish = data => {
+      if (done) return;
+      done = true;
+      try { v.removeAttribute('src'); v.load(); } catch (_){}
+      res(data || '');
+    };
+    const snap = () => {
+      try {
+        const c = document.createElement('canvas');
+        c.width = 150; c.height = 200;
+        const ctx = c.getContext('2d');
+        const vw = v.videoWidth || 9, vh = v.videoHeight || 16;
+        // Cover-fit so the poster is never letterboxed.
+        const scale = Math.max(c.width / vw, c.height / vh);
+        const dw = vw * scale, dh = vh * scale;
+        ctx.drawImage(v, (c.width - dw) / 2, (c.height - dh) / 2, dw, dh);
+        finish(c.toDataURL('image/jpeg', 0.7));
+      } catch (_){ finish(''); }
+    };
+    v.onloadeddata = () => { try { v.currentTime = Math.min(0.4, (v.duration || 1) / 3); } catch (_){ snap(); } };
+    v.onseeked = snap;
+    v.onerror = () => finish('');
+    setTimeout(() => finish(''), 3500);
+    v.src = url;
+  });
+}
 
-window.csGoToEditor = () => {
-  const st = S.studio;
-  if(!st.clips.length) return toast('Record or upload a clip first');
-  csCloseCamera();
-  st.mode = 'editor';
-  st.selectedId = st.selectedId || st.clips[0].id;
-  st.selectedType = 'video';
-  st.playhead = 0;
+async function svFinishRecording(mime){
+  const st = svState();
+  const blob = new Blob(SVC.chunks, { type: (mime || 'video/webm').split(';')[0] });
+  SVC.chunks = [];
+  const wasSelected = st.selectedId;
+  if (blob.size < 1200){ svToast('That take was too short to keep'); render(); return; }
+
+  const url = svHoldUrl(URL.createObjectURL(blob));
+  const dur = await svProbeDuration(url);
+  const thumb = await svGrabThumb(url);
+  const clip = {
+    id: svId('c'), name: svLabel(st.clips.length), url, blob, thumb,
+    dur, inMs: 0, outMs: Math.round(dur * 1000), kind: 'video',
+  };
+  // Land the take next to whatever was selected when it was shot, so several
+  // takes in a row keep the order they were recorded in.
+  st.clips = smInsertAfter(st.clips, clip, wasSelected);
+  st.selectedId = clip.id; st.selectedType = 'video';
+  svPush();
+  // Paint first, then report. The strip block has to exist before the toast
+  // tells the user to look for it — the thumbnail and duration are already
+  // resolved above, so there is nothing left to await.
   render();
-  if(window.pushBackState) window.pushBackState(() => window.csConfirmExitEditor());
-};
-window.csConfirmExitEditor = () => {
-  const st = S.studio;
-  if(st.sheet) return window.csCloseSheet();
-  csStopEngine();
+  svToast('Take saved — tap it in the strip below to watch it back');
+}
+
+/* ── TAKE ACTIONS ───────────────────────────────────────────────────────── */
+
+function svPlayTake(id){
+  const st = svState();
+  st.reviewId = id;
+  st.selectedId = id; st.selectedType = 'video';
+  render();
+}
+function svToggleReview(){
+  const v = document.getElementById('sv-review-video');
+  if (!v) return;
+  if (v.paused) v.play().catch(() => {}); else v.pause();
+}
+function svDeleteTake(id){
+  const st = svState();
+  const c = st.clips.find(x => x.id === id);
+  if (!c) return;
+  if (!window.confirm('Delete this take? This cannot be undone.')) return;
+  svReleaseUrl(c.url);
+  st.clips = smRemoveClip(st.clips, id);
+  if (st.selectedId === id){ st.selectedId = null; st.selectedType = null; }
+  if (st.reviewId === id) st.reviewId = null;
+  svPush();
+  svToast('Take deleted');
+  render();
+}
+
+/* ── OBJECT URL LIFETIME ────────────────────────────────────────────────── */
+// A revoked URL is worse than a leaked one: the block renders black. So URLs
+// are reference-counted and only released when the last holder lets go.
+
+const SVURL = new Map();
+function svHoldUrl(u){ if (!u) return u; SVURL.set(u, (SVURL.get(u) || 0) + 1); return u; }
+function svReleaseUrl(u){
+  if (!u) return;
+  const n = (SVURL.get(u) || 1) - 1;
+  if (n <= 0){ SVURL.delete(u); try { URL.revokeObjectURL(u); } catch (_){} }
+  else SVURL.set(u, n);
+}
+
+// Parked media for clips removed from the timeline but still reachable through
+// Undo. Deleting must NOT revoke the object URL: the snapshot only carries clip
+// metadata, so revoking here left Undo with a clip it could not re-attach media
+// to, and smRestore then dropped it — the clip simply never came back.
+// Everything parked here is released when the project is torn down.
+const SVPARK = new Map();
+function svParkClip(c){ if (c && c.id) SVPARK.set(c.id, { url: c.url, blob: c.blob, thumb: c.thumb }); }
+function svParkedOf(id){ return SVPARK.get(id) || null; }
+function svClearParked(){
+  SVPARK.forEach(m => svReleaseUrl(m && m.url));
+  SVPARK.clear();
+}
+
+/* ── UPLOAD / REPLACE ───────────────────────────────────────────────────── */
+
+async function svHandleUpload(e){
+  const files = Array.from(e.target.files || []);
+  e.target.value = '';
+  if (!files.length) return;
+  const st = svState();
+  for (const f of files){
+    if (!/^video\//.test(f.type)){ svToast('Only video files can go on the timeline'); continue; }
+    const url = svHoldUrl(URL.createObjectURL(f));
+    const dur = await svProbeDuration(url);
+    const thumb = await svGrabThumb(url);
+    st.clips.push({
+      id: svId('c'), name: f.name.replace(/\.[^.]+$/, '').slice(0, 20) || svLabel(st.clips.length),
+      url, blob: f, thumb, dur, inMs: 0, outMs: Math.round(dur * 1000), kind: 'video',
+    });
+  }
+  svPush();
+  render();
+  svToast(files.length + (files.length === 1 ? ' clip added' : ' clips added'));
+}
+
+async function svHandleReplace(e){
+  const f = (e.target.files || [])[0];
+  e.target.value = '';
+  const st = svState();
+  if (!f || st.selectedType !== 'video') return;
+  const i = st.clips.findIndex(c => c.id === st.selectedId);
+  if (i < 0) return;
+  const old = st.clips[i];
+  const url = svHoldUrl(URL.createObjectURL(f));
+  const dur = await svProbeDuration(url);
+  const thumb = await svGrabThumb(url);
+  svPush();
+  svReleaseUrl(old.url);
+  st.clips[i] = {
+    id: old.id, name: f.name.replace(/\.[^.]+$/, '').slice(0, 20) || old.name,
+    url, blob: f, thumb, dur, inMs: 0, outMs: Math.round(dur * 1000), kind: 'video',
+  };
+  st.playhead = smClipStart(st.clips, old.id);
+  render();
+  svToast('Clip replaced');
+}
+
+/* ── NAVIGATION BETWEEN STUDIO SCREENS ──────────────────────────────────── */
+
+function svExitCamera(){
+  const st = svState();
+  if (st.clips.length){
+    const ok = window.confirm(st.clips.length === 1
+      ? 'Leave the studio? Your recording will be discarded.'
+      : 'Leave the studio? All ' + st.clips.length + ' takes will be discarded.');
+    if (!ok) return;
+    st.clips.forEach(c => svReleaseUrl(c.url));
+    svClearParked();
+    st.clips = []; st.overlays = []; st.captions = []; st.audioTracks = [];
+    st.history = []; st.future = [];
+  }
+  svCloseCamera();
+  st.mode = 'idle'; st.running = false; st.paused = false; st.reviewId = null;
+  st.sheet = null; st.showScriptEditor = false;
+  S.tab = 'home';
+  render();
+}
+
+function svGoToEditor(){
+  const st = svState();
+  if (!st.clips.length) return svToast('Record or add a clip first');
+  svCloseCamera();
+  st.mode = 'editor';
+  st.reviewId = null;
+  st.sheet = null;
+  if (!st.selectedId){ st.selectedId = st.clips[0].id; st.selectedType = 'video'; }
+  st.playhead = smClipStart(st.clips, st.selectedId);
+  if (st.playhead < 0) st.playhead = 0;
+  render();
+  if (window.pushBackState) window.pushBackState(() => svConfirmExitEditor());
+}
+
+function svConfirmExitEditor(){
+  const st = svState();
+  if (st.sheet) return svCloseSheet();
+  svPause();
   st.mode = 'camera';
+  st.selectedType = null;
   st.sheet = null;
   render();
-  setTimeout(() => window.studioInitStage && window.studioInitStage(), 60);
-};
-
-// ═══════════════════════════════════════════════════════════════════════════
-//  HISTORY (undo / redo)
-// ═══════════════════════════════════════════════════════════════════════════
-// Structural snapshot only: never clone Blobs or object URLs, or undo would
-// resurrect revoked URLs. Clips/overlays keep their url+blob references.
-function csSnapshot(){
-  const st = S.studio;
-  return JSON.stringify({
-    clips: st.clips, overlays: st.overlays, captions: st.captions, capWords: st.capWords,
-    capStyle: st.capStyle, filter: st.filter, adjust: st.adjust,
-    audioTracks: st.audioTracks, volume: st.volume, clipVolume: st.clipVolume,
-    selectedId: st.selectedId, selectedType: st.selectedType,
-  }, (k,v) => k === 'blob' ? undefined : v);
-}
-window.csPushHistory = () => {
-  const st = S.studio;
-  st.history = st.history || []; st.future = [];
-  st.history.push(csSnapshot());
-  if(st.history.length > 30) st.history.shift();
-  csSyncUndoButtons();
-};
-function csRestore(snap){
-  const st = S.studio;
-  const blobs = new Map();
-  st.clips.forEach(c => blobs.set(c.id, c.blob));
-  st.overlays.forEach(o => o.blob && blobs.set(o.id, o.blob));
-  st.audioTracks.forEach(a => blobs.set(a.id, a.blob));
-  const d = JSON.parse(snap);
-  Object.assign(st, d);
-  st.clips.forEach(c => { if(blobs.has(c.id)) c.blob = blobs.get(c.id); });
-  st.overlays.forEach(o => { if(blobs.has(o.id)) o.blob = blobs.get(o.id); });
-  st.audioTracks.forEach(a => { if(blobs.has(a.id)) a.blob = blobs.get(a.id); });
-  st.playhead = Math.min(st.playhead, csTotalMs());
-  const v = csActiveVideo(); if(v) v.dataset.cid = '';
-  render();
-}
-window.csUndo = () => {
-  const st = S.studio;
-  if(!st.history || !st.history.length) return;
-  st.future = st.future || [];
-  st.future.push(csSnapshot());
-  csRestore(st.history.pop());
-};
-window.csRedo = () => {
-  const st = S.studio;
-  if(!st.future || !st.future.length) return;
-  st.history.push(csSnapshot());
-  csRestore(st.future.pop());
-};
-function csSyncUndoButtons(){
-  const st = S.studio;
-  const u = document.querySelector('[data-hist="undo"]'), r = document.querySelector('[data-hist="redo"]');
-  if(u) u.disabled = !(st.history||[]).length;
-  if(r) r.disabled = !(st.future||[]).length;
+  setTimeout(() => svOpenCamera(), 60);
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  AUDIO + VOICEOVER
-// ═══════════════════════════════════════════════════════════════════════════
-window.csAddAudio = async (e) => {
-  const f = (e.target.files||[])[0]; e.target.value='';
-  if(!f) return;
-  csPushHistory();
-  const url = csMakeUrl(f);
-  const durMs = Math.round(await csProbeDuration(url) * 1000);
-  S.studio.audioTracks.push({ id: csId('a'), url, blob:f, name: f.name.slice(0,28), durMs, startMs: 0, kind:'music' });
+/* ── TIMELINE: SELECTION, SCRUB, TRIM ───────────────────────────────────── */
+
+function svSelect(id, type){
+  const st = svState();
+  st.selectedId = id;
+  st.selectedType = type;
+  if (type === 'video'){
+    const start = smClipStart(st.clips, id);
+    if (start >= 0) st.playhead = start;
+    svLoadAt(st.playhead, true);
+  }
   render();
-};
-const CSVOICE = { rec:null, stream:null, chunks:[] };
-window.csVoiceStart = async () => {
-  if(CSVOICE.rec) return;
-  try { CSVOICE.stream = await navigator.mediaDevices.getUserMedia({ audio:true }); }
-  catch(_){ return toast('Microphone unavailable'); }
-  CSVOICE.chunks = [];
-  CSVOICE.rec = new MediaRecorder(CSVOICE.stream);
-  CSVOICE.rec.ondataavailable = ev => ev.data && ev.data.size && CSVOICE.chunks.push(ev.data);
-  CSVOICE.rec.onstop = async () => {
-    const blob = new Blob(CSVOICE.chunks, { type:'audio/webm' });
-    CSVOICE.stream.getTracks().forEach(t => t.stop());
-    CSVOICE.stream = null; CSVOICE.rec = null; CSVOICE.chunks = [];
-    if(blob.size < 800) return;
-    const url = csMakeUrl(blob);
-    csPushHistory();
-    S.studio.audioTracks.push({
-      id: csId('a'), url, blob, name:'Voiceover', kind:'voice',
-      startMs: Math.round(S.studio.playhead), durMs: Math.round(await csProbeDuration(url)*1000),
-    });
+}
+
+function svSelectCaption(){
+  const st = svState();
+  st.selectedType = 'caption';
+  st.selectedId = null;
+  render();
+}
+
+function svTimelineTimeAt(clientX){
+  const inner = document.getElementById('sv-tl-inner');
+  const scroller = document.getElementById('sv-tl-scroll');
+  if (!inner || !scroller) return 0;
+  const rect = inner.getBoundingClientRect();
+  const x = clientX - rect.left - 16;
+  const ms = x / svPxMs();
+  return svNum(ms, 0, Math.max(0, smTotalMs(svState().clips)));
+}
+
+function svBeginScrub(e){
+  const st = svState();
+  const move = ev => {
+    st.playhead = svTimelineTimeAt(ev.clientX);
+    svPaintPlayhead();
+    svLoadAt(st.playhead, false);
+  };
+  move(e);
+  const up = () => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    svLoadAt(st.playhead, true);
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+}
+
+/* The CapCut gesture. Pointerdown on a handle captures the drag; every move
+   recomputes the trim from the pointer's distance from the clip's left edge,
+   and the visible block is resized in place rather than re-rendering the
+   whole editor on every frame. */
+function svBeginTrim(e, id, edge){
+  e.preventDefault();
+  e.stopPropagation();
+  const st = svState();
+  const clip = st.clips.find(c => c.id === id);
+  if (!clip) return;
+  const scroller = document.getElementById('sv-tl-scroll');
+  const node = document.querySelector('.sv-clip[data-arg="' + id + '"]');
+  const inner = document.getElementById('sv-tl-inner');
+  if (!node || !inner) return;
+
+  svSelect(id, 'video');
+  const px = svPxMs();
+  const startLeft = parseFloat(node.style.left) || 0;
+  const startWidth = parseFloat(node.style.width) || 0;
+  const startX = e.clientX;
+  const minMs = 400;
+  const orig = { inMs: clip.inMs, outMs: clip.outMs };
+  if (scroller) scroller.classList.add('is-trimming');
+
+  const move = ev => {
+    const dxMs = (ev.clientX - startX) / px;
+    let next;
+    if (edge === 'in'){
+      const t = smTrim(clip, { inMs: orig.inMs + dxMs }, minMs);
+      next = { inMs: t.inMs, outMs: orig.outMs };
+    } else {
+      const t = smTrim(clip, { outMs: orig.outMs + dxMs }, minMs);
+      next = { inMs: orig.inMs, outMs: t.outMs };
+    }
+    clip.inMs = next.inMs; clip.outMs = next.outMs;
+    // Live geometry, straight from the model.
+    if (edge === 'in'){
+      const delta = smClipMs({ dur: clip.dur, inMs: next.inMs, outMs: orig.outMs }) - smClipMs({ dur: clip.dur, inMs: orig.inMs, outMs: orig.outMs });
+      node.style.left = (startLeft + delta * px) + 'px';
+    }
+    node.style.width = Math.max(18, smClipMs(clip) * px) + 'px';
+    const durEl = node.querySelector('.sv-clip-dur');
+    if (durEl) durEl.textContent = smFormatMs(smClipMs(clip));
+    const read = document.getElementById('sv-trim-read');
+    if (read){
+      read.innerHTML = '<span>In</span>' + smFormatMs(clip.inMs) +
+        '<span>Length</span>' + smFormatMs(smClipMs(clip)) +
+        '<span>Out</span>' + smFormatMs(clip.outMs);
+    }
+    svTimelineWidth();
+    svRepaintTimeline();
+  };
+  const up = () => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    if (scroller) scroller.classList.remove('is-trimming');
+    svPush();
     render();
   };
-  CSVOICE.rec.start();
-  const l = document.getElementById('cs-voice-lbl'); if(l) l.textContent = 'Recording… release to stop';
-  document.getElementById('cs-voice-btn')?.classList.add('rec');
-};
-window.csVoiceStop = () => {
-  if(!CSVOICE.rec) return;
-  try { CSVOICE.rec.stop(); } catch(_){}
-  const l = document.getElementById('cs-voice-lbl'); if(l) l.textContent = 'Hold to record';
-  document.getElementById('cs-voice-btn')?.classList.remove('rec');
-};
-
-// ═══════════════════════════════════════════════════════════════════════════
-//  AUTO-CAPTIONS — word-level, TikTok/CapCut style
-// ═══════════════════════════════════════════════════════════════════════════
-// The transcriber is asked for timestamp_granularities[]=word, so every word
-// carries its own start/end. Words are grouped into 1- or 2-word cues that pop
-// exactly on the beat instead of the old sentence-long blocks.
-window.csAutoCaption = async () => {
-  const st = S.studio;
-  if(st.transcribing) return;
-  if(!st.clips.length) return toast('Add a clip first');
-  st.transcribing = true;
-  csSwapSheet(csCaptionsSheet(st));
-  try {
-    const words = [];
-    let offset = 0;
-    for(const c of st.clips){
-      const dur = (c.outMs - c.inMs);
-      const res = await csTranscribe(c.blob);
-      (res.words||[]).forEach(w => {
-        const sMs = w.start*1000, eMs = w.end*1000;
-        if(eMs <= c.inMs || sMs >= c.outMs) return;              // trimmed away
-        words.push({
-          text: String(w.word||'').trim(),
-          start: (Math.max(sMs, c.inMs) - c.inMs + offset)/1000,
-          end:   (Math.min(eMs, c.outMs) - c.inMs + offset)/1000,
-        });
-      });
-      offset += dur;
-    }
-    if(!words.length){ toast('No speech detected'); return; }
-    csPushHistory();
-    st.capWords = words.filter(w => w.text);
-    csRebuildCaptions();
-    st.capTab = 'style';
-    toast(words.length + ' words captioned');
-  } catch(err){
-    console.warn('[studio] transcribe', err);
-    toast(err.message || 'Could not transcribe');
-  } finally {
-    st.transcribing = false;
-    render();
-  }
-};
-async function csTranscribe(blob){
-  const fd = new FormData();
-  fd.append('file', blob, 'clip.webm');
-  fd.append('granularity', 'word');
-  const r = await fetch('/api/transcribe', { method:'POST', body: fd, credentials:'include' });
-  if(!r.ok) throw new Error(r.status === 401 ? 'Please sign in again' : 'Transcription failed');
-  return r.json();
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
 }
-// Group timed words into cues (1 or 2 words per cue).
-window.csRebuildCaptions = function(){
-  const st = S.studio;
-  const per = csCapStyle().words === 2 ? 2 : 1;
-  const out = [];
-  const w = st.capWords || [];
-  for(let i=0; i<w.length; i+=per){
-    const grp = w.slice(i, i+per);
-    out.push({ start: grp[0].start, end: grp[grp.length-1].end, text: grp.map(g=>g.text).join(' ') });
+
+// Repaint the non-video tracks after a trim, without a full re-render — a
+// full render mid-drag would replace the node being dragged.
+function svRepaintTimeline(){
+  const st = svState();
+  const tl = document.getElementById('sv-timeline');
+  if (!tl) return;
+  ['sv-track-overlay', 'sv-track-caption', 'sv-track-audio'].forEach((id, i) => {
+    const host = document.getElementById(id);
+    if (!host) return;
+    const fn = [svOverlayTrack, svCaptionTrack, svAudioTrack][i];
+    const fresh = document.createElement('div');
+    fresh.innerHTML = fn(st);
+    host.innerHTML = fresh.firstElementChild.innerHTML;
+  });
+  svPaintPlayhead();
+}
+
+function svTimelineWidth(){
+  const st = svState();
+  const inner = document.getElementById('sv-tl-inner');
+  if (inner) inner.style.width = Math.max(100, smTotalMs(st.clips) * svPxMs() + 32) + 'px';
+  const ruler = document.querySelector('.sv-ruler');
+  if (ruler){
+    const fresh = document.createElement('div');
+    fresh.innerHTML = svRuler();
+    ruler.replaceWith(fresh.firstElementChild);
   }
-  // Close micro-gaps so a word never flickers off between beats.
-  for(let i=0; i<out.length-1; i++){
-    if(out[i+1].start - out[i].end < 0.12) out[i].end = out[i+1].start;
+}
+
+function svPaintPlayhead(){
+  const ph = document.getElementById('sv-playhead');
+  if (ph) ph.style.transform = 'translateX(' + (16 + svState().playhead * svPxMs()) + 'px)';
+}
+
+/* ── OVERLAY DRAG + RESIZE ──────────────────────────────────────────────── */
+
+function svBeginOverlayDrag(e, id){
+  e.preventDefault();
+  const st = svState();
+  const o = st.overlays.find(x => x.id === id);
+  if (!o) return;
+  svSelect(id, 'overlay');
+  const stage = document.getElementById('sv-ed-stage');
+  if (!stage) return;
+  const rect = stage.getBoundingClientRect();
+  const el = e.target.closest('.sv-overlay');
+  const resizing = e.target.classList && e.target.classList.contains('sel') === false && false;
+
+  const move = ev => {
+    const nx = ((ev.clientX - rect.left) / rect.width) * 100;
+    const ny = ((ev.clientY - rect.top) / rect.height) * 100;
+    o.x = svNum(nx, 2, 98);
+    o.y = svNum(ny, 2, 98);
+    if (el){ el.style.left = o.x + '%'; el.style.top = o.y + '%'; }
+  };
+  const up = () => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    svPush();
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+}
+
+/* ── EDIT ACTIONS ───────────────────────────────────────────────────────── */
+
+function svSplit(){
+  const st = svState();
+  if (!st.clips.length) return;
+  const r = smSplitAt(st.clips, st.playhead, () => svId('c'), 400);
+  if (!r.newId) return svToast('Move the playhead away from the clip edge to split');
+  const src = st.clips.find(c => c.id === r.clips[r.clips.indexOf(r.clips.find(x => x.id === r.newId))].id);
+  // Carry the poster frame onto both halves so neither goes black.
+  const parent = st.clips.find(c => c.id === (r.clips.find(x => x.id === r.newId) || {}).id) || null;
+  st.clips = r.clips.map((c, i) => {
+    const orig = st.clips.find(o => o.id === c.id) || st.clips.find(o => o.inMs === c.inMs && o.outMs === c.outMs);
+    return Object.assign({}, c, {
+      url: (orig && orig.url) || c.url,
+      blob: (orig && orig.blob) || c.blob,
+      thumb: (orig && orig.thumb) || c.thumb || '',
+    });
+  });
+  st.selectedId = r.newId;
+  st.selectedType = 'video';
+  svPush();
+  render();
+  svToast('Clip split — drag either handle to fine-tune');
+}
+
+function svDuplicate(){
+  const st = svState();
+  if (st.selectedType === 'overlay') return svToast('Overlays are already on the timeline');
+  const i = st.clips.findIndex(c => c.id === st.selectedId);
+  if (i < 0) return;
+  const c = st.clips[i];
+  // Media is shared by reference; only the edit window is copied, so a
+  // duplicate costs no extra memory or object URL.
+  const copy = Object.assign({}, c, { id: svId('c'), name: (c.name || 'Clip') + ' copy' });
+  svPush();
+  st.clips.splice(i + 1, 0, copy);
+  st.selectedId = copy.id;
+  render();
+  svToast('Clip duplicated');
+}
+
+function svDeleteSelected(){
+  const st = svState();
+  if (st.selectedType === 'overlay') return svDeleteOverlay(st.selectedId);
+  const i = st.clips.findIndex(c => c.id === st.selectedId);
+  if (i < 0) return;
+  const c = st.clips[i];
+  if (!window.confirm('Delete this clip from the timeline?')) return;
+  svPush();
+  svParkClip(c);
+  st.clips = smRemoveClip(st.clips, c.id);
+  st.selectedId = st.clips.length ? st.clips[Math.min(i, st.clips.length - 1)].id : null;
+  st.selectedType = st.clips.length ? 'video' : null;
+  // Captions are timed to the timeline, so they are recomputed rather than
+  // left hanging over the shortened video.
+  if (st.captions.length && st.script) st.captions = smAutoCaptions(st.script, st.clips, st.capWords || 5, 42);
+  st.playhead = svNum(st.playhead, 0, smTotalMs(st.clips));
+  render();
+  svToast('Clip deleted');
+}
+
+function svDeleteOverlay(id){
+  const st = svState();
+  const o = st.overlays.find(x => x.id === id);
+  if (!o) return;
+  svPush();
+  if (o.url) svReleaseUrl(o.url);
+  st.overlays = st.overlays.filter(x => x.id !== id);
+  if (st.selectedId === id){ st.selectedId = null; st.selectedType = null; }
+  st.editText = st.editText === id ? null : st.editText;
+  render();
+  svToast('Removed');
+}
+
+/* ── OVERLAYS: TEXT, IMAGE, VIDEO ───────────────────────────────────────── */
+
+function svAddText(){
+  const st = svState();
+  const total = smTotalMs(st.clips) || 4000;
+  const start = svNum(st.playhead, 0, Math.max(0, total - 1000));
+  const o = {
+    id: svId('o'), kind: 'text', text: 'Your text', style: 'bold', color: '#FFFFFF', size: 30,
+    scale: 1, x: 50, y: 30, startMs: Math.round(start), endMs: Math.round(Math.min(total, start + 3000)),
+  };
+  st.overlays.push(o);
+  st.selectedId = o.id; st.selectedType = 'overlay';
+  st.editText = o.id;
+  st.sheet = 'text';
+  svPush();
+  render();
+}
+
+async function svHandleImageOverlay(e){
+  const f = (e.target.files || [])[0];
+  e.target.value = '';
+  if (!f) return;
+  const st = svState();
+  const total = smTotalMs(st.clips) || 4000;
+  const url = svHoldUrl(URL.createObjectURL(f));
+  const o = {
+    id: svId('o'), kind: 'image', url, name: f.name,
+    x: 50, y: 40, scale: 1,
+    startMs: Math.round(svNum(st.playhead, 0, Math.max(0, total - 1000))),
+    endMs: Math.round(Math.min(total, st.playhead + 3000)),
+  };
+  st.overlays.push(o);
+  st.selectedId = o.id; st.selectedType = 'overlay';
+  svPush();
+  render();
+  svToast('Image added — drag it to position');
+}
+
+async function svHandleVideoOverlay(e){
+  const f = (e.target.files || [])[0];
+  e.target.value = '';
+  if (!f) return;
+  const st = svState();
+  const total = smTotalMs(st.clips) || 4000;
+  const url = svHoldUrl(URL.createObjectURL(f));
+  const o = {
+    id: svId('o'), kind: 'video', url, name: f.name,
+    x: 50, y: 40, scale: 1,
+    startMs: Math.round(svNum(st.playhead, 0, Math.max(0, total - 1000))),
+    endMs: Math.round(Math.min(total, Math.max(3000, st.playhead + 4000))),
+  };
+  st.overlays.push(o);
+  st.selectedId = o.id; st.selectedType = 'overlay';
+  svPush();
+  render();
+  svToast('Video overlay added');
+}
+
+function svFindOverlay(id){ return svState().overlays.find(o => o.id === id) || null; }
+
+function svApplyOverlayLive(){
+  const st = svState();
+  const o = svFindOverlay(st.editText);
+  if (!o) return;
+  const el = document.querySelectorAll('.sv-overlay span')[0];
+  if (el && o.kind === 'text') el.textContent = o.text || '';
+}
+
+function svApplyCapLive(){
+  const el = document.getElementById('sv-ed-cap');
+  if (el) el.setAttribute('style', svCapCss(svState()));
+}
+
+/* ── CAPTIONS ───────────────────────────────────────────────────────────── */
+
+function svAutoCaptions(){
+  const st = svState();
+  const stx = svState();
+  const words = st.capWords || 5;
+  if (!st.script || !String(st.script).trim()){
+    // No script to work from: tell the user exactly how to give it one.
+    return svToast('Record with the teleprompter script loaded, then captions build from it');
   }
-  st.captions = out;
-  CSE.lastCap = undefined;
+  if (!st.clips.length) return svToast('Add a clip first');
+  svPush();
+  st.captions = smAutoCaptions(st.script, st.clips, words, 42);
+  svRenderSheetOnly();
+  svRepaintTimeline();
+  svToast(st.captions.length + ' caption cards created');
+}
+
+/* ── AUDIO ──────────────────────────────────────────────────────────────── */
+
+async function svHandleMusic(e){
+  const f = (e.target.files || [])[0];
+  e.target.value = '';
+  if (!f) return;
+  const st = svState();
+  const url = svHoldUrl(URL.createObjectURL(f));
+  st.audioTracks.push({
+    id: svId('a'), kind: 'music', name: f.name.replace(/\.[^.]+$/, '').slice(0, 22) || 'Music',
+    url, blob: f, volume: 30, startMs: 0, lenMs: Math.max(1000, smTotalMs(st.clips)),
+  });
+  svPush();
+  render();
+  svToast('Music added at 30% volume');
+}
+
+function svAddSfx(kind){
+  const st = svState();
+  const def = SV_SFX.find(s => s.id === kind) || SV_SFX[0];
+  const blob = svSfxBlob(def.id);
+  const url = svHoldUrl(URL.createObjectURL(blob));
+  st.audioTracks.push({
+    id: svId('a'), kind: 'sfx', name: def.label, url, blob, volume: 70,
+    startMs: Math.round(st.playhead), lenMs: 1400,
+  });
+  svPush();
+  render();
+  svToast(def.label + ' effect added at the playhead');
+}
+
+/* ── LOOK: FILTERS AND ADJUST ───────────────────────────────────────────── */
+
+const SV_FILTERS = [
+  { id: 'none',    label: 'Original', css: 'none' },
+  { id: 'vivid',   label: 'Vivid',    css: 'saturate(1.45) contrast(1.1)' },
+  { id: 'warm',    label: 'Warm',     css: 'sepia(.22) saturate(1.25) brightness(1.04)' },
+  { id: 'cool',    label: 'Cool',     css: 'hue-rotate(-12deg) saturate(1.15) brightness(1.02)' },
+  { id: 'mono',    label: 'Mono',     css: 'grayscale(1) contrast(1.12)' },
+  { id: 'noir',    label: 'Noir',     css: 'grayscale(1) contrast(1.4) brightness(.9)' },
+  { id: 'fade',    label: 'Fade',     css: 'contrast(.86) brightness(1.1) saturate(.82)' },
+  { id: 'punch',   label: 'Punch',    css: 'contrast(1.3) saturate(1.3)' },
+  { id: 'retro',   label: 'Retro',    css: 'sepia(.4) saturate(1.4) contrast(.92) hue-rotate(-8deg)' },
+];
+
+function svFilterCss(id){
+  if (id === 'none') return 'none';
+  const f = SV_FILTERS.find(x => x.id === id);
+  const st = svState();
+  const a = st.adjust;
+  const parts = [];
+  if (f && f.css !== 'none') parts.push(f.css);
+  if (a.brightness !== 100) parts.push('brightness(' + (a.brightness / 100) + ')');
+  if (a.contrast !== 100) parts.push('contrast(' + (a.contrast / 100) + ')');
+  if (a.saturation !== 100) parts.push('saturate(' + (a.saturation / 100) + ')');
+  if (a.warmth > 0) parts.push('sepia(' + (a.warmth / 400) + ') saturate(' + (1 + a.warmth / 300) + ')');
+  if (a.warmth < 0) parts.push('hue-rotate(' + (a.warmth / 4) + 'deg)');
+  return parts.length ? parts.join(' ') : 'none';
+}
+
+function svApplyPreview(){
+  const stage = document.getElementById('sv-ed-stage');
+  if (!stage) return;
+  const css = svFilterCss(svState().filter);
+  stage.style.filter = css === 'none' ? '' : css;
+}
+
+function svRenderSheetOnly(){
+  const host = document.querySelector('.sv-sheet');
+  if (!host){ return render(); }
+  const wrap = document.createElement('div');
+  wrap.innerHTML = svSheet(svState());
+  const fresh = wrap.firstElementChild;
+  if (fresh) host.replaceWith(fresh);
+  svWireInputs();
+}
+
+/* ── SHEETS ─────────────────────────────────────────────────────────────── */
+
+function svOpenSheet(name){
+  const st = svState();
+  st.sheet = name;
+  svPause();
+  render();
+}
+function svCloseSheet(){
+  const st = svState();
+  st.sheet = null;
+  st.editText = null;
+  render();
+}
+
+function svSheet(st){
+  const body = {
+    quality:  svSheetQuality,
+    clips:    svSheetClips,
+    trim:     svSheetTrim,
+    captions: svSheetCaptions,
+    audio:    svSheetAudio,
+    effects:  svSheetEffects,
+    adjust:   svSheetAdjust,
+    overlays: svSheetOverlays,
+    text:     svSheetText,
+  }[st.sheet];
+  if (!body) return '';
+  const title = {
+    quality: 'Recording quality', clips: 'All clips', trim: 'Trim clip',
+    captions: 'Captions', audio: 'Music & sound effects', effects: 'Filters & effects',
+    adjust: 'Adjust', overlays: 'Overlays', text: 'Edit text',
+  }[st.sheet] || 'Options';
+  const done = st.sheet === 'text' ? 'ovDone' : 'closeSheet';
+  return `<div class="sv-sheet" id="sv-sheet">
+    <div class="sv-sheet-grip"><i></i></div>
+    <div class="sv-sheet-hd"><h4>${esc(title)}</h4>
+      <button class="done" data-act="${done}">Done</button></div>
+    <div class="sv-sheet-body">${body(st)}</div>
+  </div>`;
+}
+
+function svSheetQuality(){
+  const st = svState();
+  const opts = [
+    { id: '540p',  label: '540p',  sub: 'Smallest file' },
+    { id: '720p',  label: '720p',  sub: 'Recommended' },
+    { id: '1080p', label: '1080p', sub: 'Sharp' },
+    { id: '2160p', label: '4K',    sub: 'Heaviest' },
+  ];
+  return `<div class="sv-grid g2">
+    ${opts.map(o => `<button class="sv-cell ${(st.quality || svAutoQuality()) === o.id ? 'on' : ''}"
+      data-act="setQuality" data-arg="${o.id}">${o.label}<span class="sub">${o.sub}</span></button>`).join('')}
+  </div>
+  <div class="sv-sheet-note">Higher quality looks better but takes longer to export and uses more storage. 720p is the right choice for phone viewing.</div>`;
+}
+
+function svSheetClips(st){
+  const broken = !st.clips.length;
+  return (broken ? '<div class="sv-sheet-note">No clips yet. Record or upload one first.</div>' : '')
+    + `<div class="sv-list">
+    ${st.clips.map((c, i) => `
+      <div class="sv-item">
+        ${c.thumb ? `<img src="${c.thumb}" style="width:38px;height:50px;object-fit:cover;border-radius:7px" alt="">` : ''}
+        <span class="n">${esc(c.name || svLabel(i))}</span>
+        <span class="d">${smFormatMs(smClipMs(c))}</span>
+        <button class="x" data-act="pickClip" data-arg="${c.id}" aria-label="Edit this clip">${svIconSm('trim')}</button>
+      </div>`).join('')}
+  </div>
+  <div class="sv-sheet-note">Tap the trim icon on a clip to select it. On the timeline, drag a clip's edge handles to trim it, or use Split at the playhead.</div>`;
+}
+
+function svSheetTrim(st){
+  const c = st.selectedType === 'video' ? st.clips.find(x => x.id === st.selectedId) : null;
+  if (!c) return '<div class="sv-sheet-note">Tap a clip on the timeline first, then trim it.</div>';
+  const src = Math.max(1, (c.dur || 0) * 1000);
+  const lo = (c.inMs / src) * 100;
+  const wd = (smClipMs(c) / src) * 100;
+  return `<div class="sv-trim-bar">
+      <div class="sv-trim-sel" style="left:${lo}%;width:${wd}%"></div>
+    </div>
+    <div class="sv-trim-read" id="sv-trim-read">
+      <span>In</span>${smFormatMs(c.inMs)}
+      <span>Length</span>${smFormatMs(smClipMs(c))}
+      <span>Out</span>${smFormatMs(c.outMs)}
+    </div>
+    <div class="sv-field">
+      <label>Start</label>
+      <input class="sv-slider" type="range" min="0" max="${Math.round(src)}" step="10" value="${Math.round(c.inMs)}"
+        data-input="trimIn">
+    </div>
+    <div class="sv-field">
+      <label>End</label>
+      <input class="sv-slider" type="range" min="0" max="${Math.round(src)}" step="10" value="${Math.round(c.outMs)}"
+        data-input="trimOut">
+    </div>
+    <div class="sv-sheet-note">These sliders and the drag handles on the timeline are the same thing — whichever you use, the other follows. Close this sheet to drag with your finger.</div>`;
+}
+
+function svSheetCaptions(st){
+  const presets = ['classic', 'boxed', 'pop', 'italic', 'karaoke', 'minimal'];
+  return `<button class="sv-add" data-act="autoCaps" style="margin-bottom:16px">
+      ${svIconSm('sparkle')} ${st.captions.length ? 'Rebuild captions from script' : 'Auto-caption from script'}</button>
+    <div class="sv-field">
+      <label>Style</label>
+      <div class="sv-grid g3">
+        ${presets.map(p => `<button class="sv-cell ${st.capStyle.preset === p ? 'on' : ''}"
+          data-act="capPreset" data-arg="${p}" style="${svCapCss(Object.assign({}, st, { capStyle: Object.assign({}, st.capStyle, { preset: p }) }))};position:static;transform:none;width:auto;bottom:auto">Aa</button>`).join('')}
+      </div>
+    </div>
+    <div class="sv-field">
+      <label>Size</label>
+      <input class="sv-slider" type="range" min="18" max="60" value="${st.capStyle.size}" data-input="capSize">
+    </div>
+    <div class="sv-field">
+      <label>Height on screen</label>
+      <input class="sv-slider" type="range" min="10" max="92" value="${st.capStyle.y}" data-input="capPos">
+    </div>
+    ${st.captions.length ? `<div class="sv-field"><label>Caption lines (${st.captions.length})</label>
+      <div class="sv-list">${st.captions.slice(0, 40).map(c => `
+        <div class="sv-item"><span class="d">${smFormatMs(c.startMs)}</span>
+        <span class="n">${esc(c.text)}</span>
+        <button class="x" data-act="delCap" data-arg="${c.id}" aria-label="Remove line">${svIconSm('close')}</button></div>`).join('')}</div>
+      <div class="sv-sheet-note">Captions follow the timeline: trim or delete a clip and they re-time themselves.</div></div>`
+      : '<div class="sv-sheet-note">Captions are built from your teleprompter script, so they always match what you actually say. Load a script on the camera screen first.</div>'}`;
+}
+
+function svSheetAudio(st){
+  return `<div class="sv-row" style="margin-bottom:16px">
+      <button class="sv-add" data-act="addMusic">${svIconSm('music')} Add music</button>
+    </div>
+    <div class="sv-field">
+      <label>Sound effects</label>
+      <div class="sv-grid g2">
+        ${SV_SFX.map(s => `<button class="sv-cell" data-act="addSfx" data-arg="${s.id}">${s.label}</button>`).join('')}
+      </div>
+      <div class="sv-sheet-note">Effects are generated on your phone — no downloads, and no cost.</div>
+    </div>
+    ${st.audioTracks.length ? `<div class="sv-field"><label>On the timeline (${st.audioTracks.length})</label>
+      <div class="sv-list">${st.audioTracks.map(a => `
+        <div class="sv-item">
+          ${svIconSm(a.kind === 'sfx' ? 'spark' : 'music')}
+          <span class="n">${esc(a.name || 'Track')}</span>
+          <span class="d">${a.volume}%</span>
+          <button class="x" data-act="delAudio" data-arg="${a.id}" aria-label="Remove">${svIconSm('trash')}</button>
+        </div>`).join('')}</div></div>`
+      : '<div class="sv-sheet-note">No music or effects yet.</div>'}`;
+}
+
+function svSheetEffects(st){
+  return `<div class="sv-field"><label>Filter</label>
+      <div class="sv-grid g3">
+        ${SV_FILTERS.map(f => `<button class="sv-cell ${st.filter === f.id ? 'on' : ''}"
+          data-act="pickFilter" data-arg="${f.id}" style="padding:0;overflow:hidden">
+          <span class="sv-swatch" style="display:block;background:linear-gradient(135deg,#7C3AED,#EC4899);filter:${f.css === 'none' ? 'none' : f.css}">
+            <span>${f.label}</span></span></button>`).join('')}
+      </div>
+    </div>
+    <div class="sv-sheet-note">Filters preview live on the video behind this sheet, and are baked in on export.</div>`;
+}
+
+function svSheetAdjust(st){
+  const a = st.adjust;
+  const rows = [
+    ['brightness', 'Brightness', 50, 150],
+    ['contrast',   'Contrast',   50, 150],
+    ['saturation', 'Saturation', 0, 200],
+    ['warmth',     'Warmth',   -50, 50],
+  ];
+  return rows.map(([k, label, lo, hi]) => `<div class="sv-field">
+      <label>${label} · ${a[k]}</label>
+      <input class="sv-slider" type="range" min="${lo}" max="${hi}" value="${a[k]}" data-input="adj" data-arg="${k}">
+    </div>`).join('')
+    + `<button class="sv-add" data-act="resetAdjust">Reset everything to normal</button>`;
+}
+
+function svSheetOverlays(st){
+  return `<div class="sv-grid g2" style="margin-bottom:16px">
+      <button class="sv-cell" data-act="addText">${svIcon('text')}<span class="sub">Add text</span></button>
+      <button class="sv-cell" data-act="addImageOv">${svIcon('image')}<span class="sub">Add a photo</span></button>
+      <button class="sv-cell" data-act="addVideoOv">${svIcon('video')}<span class="sub">Add a video</span></button>
+    </div>
+    ${st.overlays.length ? `<div class="sv-sheet-note">${st.overlays.length} overlay${st.overlays.length === 1 ? '' : 's'} on the timeline. Drag them on the video to reposition, or remove them with the red button.</div>`
+      : '<div class="sv-sheet-note">An overlay sits on top of your video — a caption card, a photo, or a second video. Drag it anywhere on the preview.</div>'}`;
+}
+
+function svSheetText(st){
+  const o = svFindOverlay(st.editText);
+  if (!o) return '<div class="sv-sheet-note">Nothing selected.</div>';
+  const styles = ['bold', 'clean', 'serif', 'outline', 'shadow', 'highlight'];
+  const colors = ['#FFFFFF', '#0A0A0F', '#F5C518', '#EF4444', '#EC4899', '#7C3AED', '#3B82F6', '#4ADE80', '#F97316'];
+  const total = Math.max(1000, smTotalMs(st.clips));
+  return `<div class="sv-field">
+      <label>Text</label>
+      <input class="sv-input" value="${esc(o.text || '')}" data-input="ovText" placeholder="Type something">
+    </div>
+    <div class="sv-field">
+      <label>Style</label>
+      <div class="sv-grid g3">
+        ${styles.map(s => `<button class="sv-cell ${o.style === s ? 'on' : ''}" data-act="ovStyle" data-arg="${s}">${s}</button>`).join('')}
+      </div>
+    </div>
+    <div class="sv-field">
+      <label>Colour</label>
+      <div class="sv-colors">
+        ${colors.map(c => `<button class="sv-dot ${(o.color || '#FFFFFF') === c ? 'on' : ''}" data-act="ovColor" data-arg="${c}" style="background:${c}" aria-label="${c}"></button>`).join('')}
+      </div>
+    </div>
+    <div class="sv-field">
+      <label>Size · ${o.size || 30}</label>
+      <input class="sv-slider" type="range" min="14" max="60" value="${o.size || 30}" data-input="ovSize">
+    </div>
+    <div class="sv-field">
+      <label>Shows for · ${Math.round((o.endMs - o.startMs) / 1000)}s</label>
+      <input class="sv-slider" type="range" min="1" max="${Math.ceil(total / 1000)}" value="${Math.round((o.endMs - o.startMs) / 1000)}" data-input="ovDur">
+    </div>
+    <button class="sv-add" data-act="deleteOverlay" data-arg="${o.id}" style="color:#FB7185;border-color:#FB718566">Remove this overlay</button>`;
+}
+
+/**
+ * Opens a URL as a media file in its own element and hands back the URL. Used
+ * where a clip needs a second, independent reader (the review player) without
+ * disturbing the editor's persistent video element.
+ */
+function svMediaElement(url){
+  const v = document.createElement('video');
+  v.playsInline = true; v.preload = 'metadata';
+  v.src = url;
+  return v;
+}
+
+function svHandleInput(name, el, arg){
+  const st = svState();
+  const val = el && el.value;
+  if (name === 'promptSpeed'){ st.promptSpeed = Number(val); }
+  else if (name === 'trimIn' || name === 'trimOut'){
+    const c = st.clips.find(x => x.id === st.selectedId);
+    if (c) svApplyTrimSlider(c, name === 'trimIn' ? 'in' : 'out', Number(val));
+  }
+  else if (name === 'capSize'){ st.capStyle.size = Number(val); svApplyCapLive(); }
+  else if (name === 'capPos'){ st.capStyle.y = Number(val); svApplyCapLive(); }
+  else if (name === 'adj'){ st.adjust[arg] = Number(val); svApplyPreview(); }
+  else if (name === 'ovText'){ const o = svFindOverlay(st.editText); if (o) o.text = val; svApplyOverlayLive(); }
+  else if (name === 'ovSize'){ const o = svFindOverlay(st.editText); if (o){ o.size = Number(val); svApplyOverlayLive(); } }
+  else if (name === 'ovDur'){
+    const o = svFindOverlay(st.editText);
+    if (o) o.endMs = Math.min(smTotalMs(st.clips) || Infinity, o.startMs + Number(val) * 1000);
+  }
+  else if (name === 'musicVol'){
+    const a = st.audioTracks.find(x => x.id === arg);
+    if (a) a.volume = Number(val);
+  }
+}
+
+/* Live controls (sliders and text fields) are marked with data-input and live
+   on the same delegation as everything else — one listener for the Studio.
+   They are deliberately NOT data-act, so a stray click can never fire them. */
+document.addEventListener('input', function (e){
+  const host = e.target.closest && e.target.closest('.sv-root');
+  if (!host) return;
+  const t = e.target.closest('[data-input]');
+  if (!t) return;
+  try { svHandleInput(t.dataset.input, t, t.dataset.arg); }
+  catch (err){ console.warn('[studio] input ' + t.dataset.input, err); }
+}, false);
+
+// The sheet sliders drive the same model fields as the drag handles, so the
+// two representations can never disagree.
+function svApplyTrimSlider(clip, edge, valueMs){
+  const next = edge === 'in'
+    ? smTrim(clip, { inMs: valueMs }, 400)
+    : smTrim(clip, { outMs: valueMs }, 400);
+  clip.inMs = edge === 'in' ? next.inMs : clip.inMs;
+  clip.outMs = edge === 'out' ? next.outMs : clip.outMs;
+  const bar = document.querySelector('.sv-trim-sel');
+  const src = Math.max(1, (clip.dur || 0) * 1000);
+  if (bar){
+    bar.style.left = (clip.inMs / src) * 100 + '%';
+    bar.style.width = (smClipMs(clip) / src) * 100 + '%';
+  }
+  const read = document.getElementById('sv-trim-read');
+  if (read){
+    read.innerHTML = '<span>In</span>' + smFormatMs(clip.inMs) +
+      '<span>Length</span>' + smFormatMs(smClipMs(clip)) +
+      '<span>Out</span>' + smFormatMs(clip.outMs);
+  }
+  svTimelineWidth();
+  svRepaintTimeline();
+}
+
+/* ── PLAYBACK ENGINE ────────────────────────────────────────────────────── */
+// One ticker drives the preview, the playhead and the caption card. Nothing
+// else in the file schedules its own animation frame.
+
+const SVE = { raf: null, loading: false };
+
+function svLoadAt(ms, seek){
+  const st = svState();
+  const loc = smLocate(st.clips, ms);
+  if (!loc) return;
+  const v = svVideoSrc(loc.clip.url);
+  v.dataset.cid = loc.clip.id;
+  const target = loc.sourceMs / 1000;
+  if (seek && Math.abs((v.currentTime || 0) - target) > 0.08){
+    try { v.currentTime = target; } catch (_){}
+  }
+}
+
+/* Kept for core.js, which calls this after a render to re-sync the preview. */
+window.csLoadCurrent = function (seek){ svLoadAt(svState().playhead, seek !== false); };
+window.csActiveVideo = function (){ return svMedia(); };
+window.csApplyPreview = svApplyPreview;
+
+function svPlay(){
+  const st = svState();
+  if (!st.clips.length) return;
+  st.playing = true;
+  svLoadAt(st.playhead, true);
+  const v = svMedia();
+  v.play().catch(() => {});
+  svTick();
+  svSyncPlayBtn();
+}
+
+function svPause(){
+  const st = svState();
+  st.playing = false;
+  const v = SVMP.v;
+  if (v) { try { v.pause(); } catch (_){} }
+  cancelAnimationFrame(SVE.raf); SVE.raf = null;
+  svSyncPlayBtn();
+  // Keep a clip's elapsed time so resuming continues rather than restarts.
+  if (v && v.dataset.cid){
+    const loc = smLocate(st.clips, st.playhead);
+    if (loc && loc.clip.id === v.dataset.cid){
+      st.playhead = loc.startMs + svNum((v.currentTime || 0) * 1000 - (loc.clip.inMs || 0), 0, loc.lengthMs);
+    }
+  }
+  svPaintPlayhead();
+}
+
+function svTogglePlay(){ const st = svState(); st.playing ? svPause() : svPlay(); }
+
+function svSyncPlayBtn(){
+  const btn = document.querySelector('.sv-hud-play');
+  if (btn) btn.innerHTML = svIcon(svState().playing ? 'pause' : 'play');
+}
+
+function svTick(){
+  cancelAnimationFrame(SVE.raf);
+  const step = () => {
+    const st = S.studio;
+    if (!st || !st.playing) return;
+    const total = smTotalMs(st.clips);
+    const v = SVMP.v;
+    const loc = smLocate(st.clips, st.playhead);
+    if (loc && v){
+      // If the video element drifted to a different clip (a seek, or the end
+      // of the previous one), swap the source before reading its clock.
+      if (v.dataset.cid !== loc.clip.id){
+        svLoadAt(st.playhead, true);
+        v.play().catch(() => {});
+      } else {
+        const into = svNum((v.currentTime || 0) * 1000 - (loc.clip.inMs || 0), 0, loc.lengthMs);
+        st.playhead = loc.startMs + into;
+        // Reaching the end of this clip's kept window advances to the next one.
+        if (into >= loc.lengthMs - 40){
+          const nextStart = loc.startMs + loc.lengthMs;
+          if (nextStart >= total - 20){ st.playhead = total; st.playing = false; svSyncPlayBtn(); svPaintPlayhead(); svSyncOverlays(); return; }
+          st.playhead = nextStart;
+          svLoadAt(st.playhead, true);
+          v.play().catch(() => {});
+        }
+      }
+    }
+    svPaintPlayhead();
+    svSyncOverlays();
+    SVE.raf = requestAnimationFrame(step);
+  };
+  SVE.raf = requestAnimationFrame(step);
+}
+
+// Caption card + overlay visibility follow the playhead, so scrubbing shows
+// exactly what will be on screen at that moment.
+function svSyncOverlays(){
+  const st = svState();
+  const cap = smCaptionAt(st.captions, st.playhead);
+  const el = document.getElementById('sv-ed-cap');
+  if (el){
+    el.textContent = cap ? cap.text : '';
+    el.classList.toggle('off', !cap);
+  }
+}
+
+function svAttachMedia(){
+  const host = document.getElementById('sv-media');
+  if (!host) return;
+  const st = svState();
+  const v = svMedia();
+  if (v.parentNode !== host) host.appendChild(v);
+  const loc = smLocate(st.clips, st.playhead);
+  if (loc){
+    svVideoSrc(loc.clip.url);
+    v.dataset.cid = loc.clip.id;
+    // Seek on the next frame, once metadata is available — setting
+    // currentTime before the media is ready is silently ignored.
+    const seek = () => { try { v.currentTime = loc.sourceMs / 1000; } catch (_){} };
+    if (v.readyState >= 1) seek(); else v.addEventListener('loadedmetadata', seek, { once: true });
+  } else if (!st.clips.length){
+    host.innerHTML = '<div class="sv-empty-note">No clips on the timeline.<br>Go back and record or upload one.</div>';
+  }
+}
+
+/* ── HISTORY ────────────────────────────────────────────────────────────── */
+
+function svPush(){
+  const st = svState();
+  st.history = st.history || [];
+  st.future = [];
+  st.history.push(JSON.stringify(smSnapshot(st)));
+  if (st.history.length > 40) st.history.shift();
+}
+
+function svRestore(json){
+  const st = svState();
+  const snap = JSON.parse(json);
+  // Media (blob/url/thumb) is keyed off the live clips, since it cannot be
+  // serialised — the restored clip re-attaches to the media it still has.
+  const byId = new Map(st.clips.map(c => [c.id, c]));
+  // Parked media is a valid source too, so a clip removed by Delete can be
+  // brought back by Undo with its footage intact.
+  const restored = smRestore(snap);
+  st.clips = restored.clips.map(c => {
+    const live = byId.get(c.id) || svParkedOf(c.id) || {};
+    return Object.assign({}, c, { url: live.url, blob: live.blob, thumb: live.thumb || '' });
+  });
+  st.overlays = restored.overlays.filter(o => o.kind !== 'image' && o.kind !== 'video'
+    || st.overlays.some(x => x.id === o.id && x.url));
+  st.overlays = restored.overlays.map(o => {
+    const live = st.overlays.find(x => x.id === o.id);
+    return live ? Object.assign({}, o, { url: live.url }) : o;
+  });
+  st.captions = restored.captions;
+  st.capStyle = restored.capStyle || st.capStyle;
+  st.filter = restored.filter;
+  st.playhead = svNum(st.playhead, 0, smTotalMs(st.clips));
+  if (!st.clips.some(c => c.id === st.selectedId)){ st.selectedId = st.clips[0] ? st.clips[0].id : null; st.selectedType = st.clips.length ? 'video' : null; }
+}
+
+function svUndo(){
+  const st = svState();
+  if (!st.history.length) return;
+  const current = JSON.stringify(smSnapshot(st));
+  st.future.push(current);
+  const snap = st.history.pop();
+  svRestore(snap);
+  render();
+  svToast('Undone');
+}
+function svRedo(){
+  const st = svState();
+  if (!st.future.length) return;
+  st.history.push(JSON.stringify(smSnapshot(st)));
+  const snap = st.future.pop();
+  svRestore(snap);
+  render();
+  svToast('Redone');
+}
+
+/* ── EXPORT ─────────────────────────────────────────────────────────────── */
+// Rendered with ffmpeg.wasm, loaded on demand. The command is assembled from
+// the same model the timeline draws, so what you see is what you get:
+//   trim each clip → concat in timeline order → colour filter → overlays →
+//   burnt-in captions → audio mix → mp4.
+
+// Self-hosted, NOT a CDN. @ffmpeg/ffmpeg boots its core inside a Web Worker,
+// and a Worker can only be constructed from a SAME-ORIGIN script. unpkg serves
+// these without `Access-Control-Allow-Origin`, so loading them cross-origin
+// throws "Script at ... cannot be accessed from origin" and every export died
+// on the spot. Serving them from our own origin removes the restriction.
+// Re-vendor with: bash scripts/vendor-ffmpeg.sh
+const SVFF = {
+  core: '/vendor/ffmpeg',
+  umd:  '/vendor/ffmpeg/ffmpeg.js',
+  util: '/vendor/ffmpeg/util.js',
+  inst: null, loading: null, cancel: false,
 };
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  EXPORT — ffmpeg.wasm
-// ═══════════════════════════════════════════════════════════════════════════
-// Replaces the old canvas + MediaRecorder capture, which had to play the whole
-// timeline back in real time while painting every frame to a canvas: on a
-// mid-range Android that means an OOM tab crash on anything over ~30s.
-// ffmpeg.wasm encodes offline, so the cost is CPU time, not RAM spikes.
-const CS_FFMPEG_CORE = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
-const CS_FFMPEG_UMD  = 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js';
-const CS_FFMPEG_UTIL = 'https://unpkg.com/@ffmpeg/util@0.12.1/dist/umd/index.js';
-const CSFF = { inst:null, loading:null, cancel:false };
+// A failed or cancelled load must clear the in-flight promise. Without this,
+// SVFF.loading stayed truthy forever, so svFfmpeg() kept handing back the same
+// rejected promise and Export could never recover — the user had to reload the
+// whole page to try again.
+function svFfmpegReset(){
+  SVFF.loading = null;
+  SVFF.inst = null;
+}
 
-function csLoadScript(src){
+function svLoadScript(src){
   return new Promise((res, rej) => {
-    if([...document.scripts].some(s => s.src === src)) return res();
+    if (document.querySelector('script[data-sv="' + src + '"]')) return res();
     const s = document.createElement('script');
-    s.src = src; s.crossOrigin = 'anonymous';
-    s.onload = res; s.onerror = () => rej(new Error('Failed to load encoder'));
+    s.src = src; s.async = true; s.dataset.sv = src;
+    s.onload = () => res();
+    s.onerror = () => rej(new Error('Could not load ' + src));
     document.head.appendChild(s);
   });
 }
-async function csFFmpeg(onProgress){
-  if(CSFF.inst) { CSFF.inst.on('progress', onProgress); return CSFF.inst; }
-  if(CSFF.loading) { await CSFF.loading; CSFF.inst.on('progress', onProgress); return CSFF.inst; }
-  CSFF.loading = (async () => {
-    await csLoadScript(CS_FFMPEG_UMD);
-    await csLoadScript(CS_FFMPEG_UTIL);
-    const { FFmpeg } = window.FFmpegWASM || window.FFmpeg || {};
-    const { toBlobURL } = window.FFmpegUtil || {};
-    if(!FFmpeg || !toBlobURL) throw new Error('Encoder unavailable');
-    const ff = new FFmpeg();
-    await ff.load({
-      coreURL: await toBlobURL(`${CS_FFMPEG_CORE}/ffmpeg-core.js`, 'text/javascript'),
-      wasmURL: await toBlobURL(`${CS_FFMPEG_CORE}/ffmpeg-core.wasm`, 'application/wasm'),
-    });
-    CSFF.inst = ff;
+
+async function svFfmpeg(){
+  if (SVFF.inst) return SVFF.inst;
+  if (SVFF.loading) return SVFF.loading;
+  SVFF.loading = (async () => {
+    svExportNote('Loading the video engine…', 2);
+    try {
+      await svLoadScript(SVFF.umd);
+      await svLoadScript(SVFF.util);
+      const FF = window.FFmpegWASM && window.FFmpegWASM.FFmpeg;
+      const U = window.FFmpegUtil;
+      if (!FF || !U) throw new Error('The video engine did not load. Check your connection and try again.');
+      const inst = new FF();
+      inst.on('progress', ({ progress }) => {
+        const pct = Math.max(2, Math.min(97, Math.round((Number(progress) || 0) * 94)));
+        svExportNote('Rendering…', pct);
+      });
+      await inst.load({
+        coreURL: await U.toBlobURL(SVFF.core + '/ffmpeg-core.js', 'text/javascript'),
+        wasmURL: await U.toBlobURL(SVFF.core + '/ffmpeg-core.wasm', 'application/wasm'),
+      });
+      SVFF.inst = inst;
+      return inst;
+    } catch (err){
+      // Leave nothing behind that would poison the next attempt.
+      svFfmpegReset();
+      throw err;
+    }
   })();
-  await CSFF.loading;
-  CSFF.inst.on('progress', onProgress);
-  return CSFF.inst;
+  return SVFF.loading;
 }
 
-window.csCancelExport = () => { CSFF.cancel = true; try { CSFF.inst && CSFF.inst.terminate(); } catch(_){} CSFF.inst = null; CSFF.loading = null; S.studio.exporting = null; render(); };
-
-window.csExport = async () => {
+function svExportNote(note, pct){
   const st = S.studio;
-  if(st.exporting) return;
-  if(!st.clips.length) return toast('Nothing to export');
-  csPause();
-  CSFF.cancel = false;
-  st.exporting = { pct: 0, stage: 'Loading encoder' };
+  if (!st) return;
+  if (note) st.exportNote = note;
+  if (pct != null) st.exportPct = pct;
+  const noteEl = document.querySelector('.sv-export-note');
+  const pctEl = document.querySelector('.sv-ring span');
+  const arc = document.querySelector('.sv-ring .fg');
+  if (noteEl) noteEl.textContent = st.exportNote;
+  if (pctEl) pctEl.textContent = Math.round(st.exportPct) + '%';
+  if (arc){
+    const C = 2 * Math.PI * 16;
+    arc.setAttribute('stroke-dashoffset', (C * (1 - st.exportPct / 100)).toFixed(1));
+  }
+}
+
+function svExtOf(blob){ return (blob && blob.type && blob.type.includes('mp4')) ? 'mp4' : 'webm'; }
+
+/* Draws a caption or text card to a PNG at the export resolution, so the
+   burnt-in words match what the preview showed. Rendering to an image avoids
+   needing a font file inside the wasm build. */
+function svTextPng(text, opts, W, H){
+  const canvas = document.createElement('canvas');
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  const o = opts || {};
+  const size = Math.round((o.size || 34) * (H / 1280));
+  const font = o.serif ? 'Georgia, serif' : 'Inter, system-ui, sans-serif';
+  ctx.font = (o.weight || 800) + ' ' + size + 'px ' + font;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const maxW = W * ((o.width || 88) / 100);
+  const words = String(text || '').split(/\s+/);
+  const lines = [];
+  let line = '';
+  for (const w of words){
+    const test = line ? line + ' ' + w : w;
+    if (ctx.measureText(test).width > maxW && line){ lines.push(line); line = w; }
+    else line = test;
+  }
+  if (line) lines.push(line);
+  const lh = size * 1.28;
+  const blockH = lines.length * lh;
+  const cx = W / 2;
+  const cy = H * ((o.y || 78) / 100) - blockH / 2 + lh / 2;
+  lines.forEach((ln, i) => {
+    const y = cy + i * lh;
+    if (o.boxed){
+      const tw = ctx.measureText(ln).width;
+      ctx.fillStyle = o.bg || '#FFFFFF';
+      const pad = size * 0.3;
+      ctx.fillRect(cx - tw / 2 - pad, y - lh / 2, tw + pad * 2, lh);
+      ctx.fillStyle = o.bgText || '#0A0A0F';
+    } else {
+      if (o.stroke){ ctx.lineWidth = Math.max(2, size * 0.09); ctx.strokeStyle = '#000'; ctx.strokeText(ln, cx, y); }
+      ctx.fillStyle = o.color || '#FFFFFF';
+      if (o.shadow){ ctx.shadowColor = 'rgba(0,0,0,.85)'; ctx.shadowBlur = size * 0.3; ctx.shadowOffsetY = size * 0.08; }
+    }
+    ctx.fillText(ln, cx, y);
+    ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+  });
+  return new Promise(res => canvas.toBlob(b => res(b), 'image/png'));
+}
+
+function svCapPngOpts(st){
+  const p = st.capStyle.preset;
+  const base = { size: st.capStyle.size || 34, y: st.capStyle.y || 78, width: st.capStyle.width || 88 };
+  if (p === 'boxed') return Object.assign(base, { boxed: true, bg: '#FFFFFF', bgText: '#0A0A0F', weight: 800 });
+  if (p === 'pop') return Object.assign(base, { color: '#F5C518', stroke: true, weight: 800 });
+  if (p === 'italic') return Object.assign(base, { serif: true, weight: 600, shadow: true });
+  if (p === 'karaoke') return Object.assign(base, { boxed: true, bg: 'rgba(124,58,237,.85)', bgText: '#FFFFFF', weight: 800 });
+  if (p === 'minimal') return Object.assign(base, { color: 'rgba(255,255,255,.92)', weight: 500, size: (st.capStyle.size || 34) * 0.9 });
+  return Object.assign(base, { shadow: true, weight: 700 });
+}
+
+function svDownload(blob, name){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { try { URL.revokeObjectURL(url); a.remove(); } catch (_){} }, 4000);
+}
+
+window.svCancelExport = function (){
+  SVFF.cancel = true;
+  try { if (SVFF.inst) SVFF.inst.terminate(); } catch (_){}
+  svFfmpegReset();
+  const st = S.studio;
+  if (st){ st.exporting = false; st.exportNote = ''; }
+  render();
+};
+
+window.svExport = async function (){
+  const st = svState();
+  if (!st.clips.length) return svToast('Add a clip first');
+  SVFF.cancel = false;
+  st.exporting = true; st.exportPct = 0; st.exportNote = 'Preparing…';
+  svPause();
   render();
 
-  const setStage = (stage, pct) => {
-    if(!st.exporting) return;
-    st.exporting.stage = stage;
-    if(pct != null) st.exporting.pct = Math.max(st.exporting.pct, Math.round(pct));
-    const bar = document.querySelector('.cs-export-bar > i');
-    const lbl = document.querySelector('[data-export-stage]');
-    const pc  = document.querySelector('[data-export-pct]');
-    if(bar) bar.style.width = st.exporting.pct + '%';
-    if(lbl) lbl.textContent = stage;
-    if(pc)  pc.textContent = st.exporting.pct + '%';
-  };
-
   try {
-    const ff = await csFFmpeg(({ progress }) => setStage(st.exporting?.stage || 'Encoding', 10 + Math.min(88, progress*88)));
-    const p  = CS_DEVICE.encode;
-    const written = [];
-    const write = async (name, data) => { await ff.writeFile(name, data); written.push(name); };
-    const fetchU8 = async (blobOrUrl) => {
-      const b = blobOrUrl instanceof Blob ? blobOrUrl : await (await fetch(blobOrUrl)).blob();
-      return new Uint8Array(await b.arrayBuffer());
-    };
-
-    // 1 ── segment every clip with its trim applied, normalised to one format
-    setStage('Preparing clips', 4);
-    const segs = [];
-    for(let i=0; i<st.clips.length; i++){
-      if(CSFF.cancel) return;
-      const c = st.clips[i];
-      await write(`in${i}`, await fetchU8(c.blob || c.url));
-      const out = `seg${i}.mp4`;
-      await ff.exec([
-        '-ss', (c.inMs/1000).toFixed(3), '-to', (c.outMs/1000).toFixed(3), '-i', `in${i}`,
-        '-vf', `scale=${p.width}:${p.height}:force_original_aspect_ratio=increase,crop=${p.width}:${p.height},fps=${p.fps},setsar=1`,
-        '-c:v','libx264','-preset', p.preset, '-crf', String(p.crf), '-pix_fmt','yuv420p',
-        '-c:a','aac','-ar','44100','-ac','2', '-shortest', out,
-      ]);
-      written.push(out);
-      segs.push(out);
-      setStage('Preparing clips', 4 + (i+1)/st.clips.length*6);
-    }
-
-    // 2 ── concat
-    setStage('Joining clips', 12);
-    let base = segs[0];
-    if(segs.length > 1){
-      await write('list.txt', new TextEncoder().encode(segs.map(s=>`file '${s}'`).join('\n')));
-      await ff.exec(['-f','concat','-safe','0','-i','list.txt','-c','copy','joined.mp4']);
-      written.push('joined.mp4');
-      base = 'joined.mp4';
-    }
-
-    // 3 ── burn in filter/adjust + overlays + captions
-    const filterParts = [];
-    const fd = csFilterDef(st.filter);
-    if(fd && fd.ff) filterParts.push(fd.ff);
-    const a = st.adjust || {};
-    if(a.brightness!==100 || a.contrast!==100 || a.saturation!==100){
-      filterParts.push(`eq=brightness=${((a.brightness-100)/200).toFixed(3)}:contrast=${(a.contrast/100).toFixed(3)}:saturation=${(a.saturation/100).toFixed(3)}`);
-    }
-    if(a.warmth) filterParts.push(`colortemperature=temperature=${Math.round(6500 - a.warmth*25)}`);
-
-    const inputs = ['-i', base];
-    const chain = [];
-    let vlabel = '0:v';
-    if(filterParts.length){ chain.push(`[${vlabel}]${filterParts.join(',')}[vf]`); vlabel = 'vf'; }
-
-    // image overlays
-    const imgs = st.overlays.filter(o => o.type === 'image');
-    for(let i=0; i<imgs.length; i++){
-      const o = imgs[i];
-      const name = `ov${i}.png`;
-      await write(name, await fetchU8(o.blob || o.url));
-      inputs.push('-i', name);
-      const idx = i + 1;
-      const w = Math.round(p.width * o.w/100);
-      const alpha = (o.alpha==null?100:o.alpha)/100;
-      chain.push(`[${idx}:v]scale=${w}:-1,format=rgba,colorchannelmixer=aa=${alpha}[img${i}]`);
-      const nl = `vo${i}`;
-      chain.push(`[${vlabel}][img${i}]overlay=x=(W*${(o.x/100).toFixed(4)}-w/2):y=(H*${(o.y/100).toFixed(4)}-h/2):enable='between(t,${(o.startMs/1000).toFixed(2)},${(o.endMs/1000).toFixed(2)})'[${nl}]`);
-      vlabel = nl;
-    }
-
-    // text overlays + word-by-word captions via ASS (libass keeps the exact
-    // styling and needs no per-frame JS)
-    const ass = csBuildAss(p);
-    if(ass){
-      await write('subs.ass', new TextEncoder().encode(ass));
-      chain.push(`[${vlabel}]subtitles=subs.ass:fontsdir=/[vsub]`);
-      vlabel = 'vsub';
-    }
-
-    // 4 ── audio mix
-    const tracks = st.audioTracks || [];
-    const cv = (st.clipVolume==null?100:st.clipVolume)/100;
-    const mv = (st.volume==null?100:st.volume)/100;
-    let alabel = null;
-    const aChain = [];
-    const aIn = [`[0:a]volume=${cv.toFixed(2)}[a0]`];
-    const mixLabels = ['a0'];
-    for(let i=0; i<tracks.length; i++){
-      const t = tracks[i];
-      const name = `aud${i}`;
-      await write(name, await fetchU8(t.blob || t.url));
-      inputs.push('-i', name);
-      const idx = imgs.length + 1 + i;
-      const delay = Math.max(0, Math.round(t.startMs||0));
-      aIn.push(`[${idx}:a]volume=${(t.kind==='voice'?1:mv).toFixed(2)},adelay=${delay}|${delay}[m${i}]`);
-      mixLabels.push('m'+i);
-    }
-    if(mixLabels.length > 1){
-      aChain.push(...aIn, `[${mixLabels.map(l=>l).join('][')}]amix=inputs=${mixLabels.length}:duration=first:dropout_transition=0,dynaudnorm[aout]`);
-      alabel = 'aout';
-    } else if(cv !== 1){
-      aChain.push(aIn[0]); alabel = 'a0';
-    }
-
-    setStage('Encoding', 14);
-    const args = [...inputs];
-    const allChain = [...chain, ...aChain];
-    if(allChain.length) args.push('-filter_complex', allChain.join(';'));
-    args.push('-map', chain.length ? `[${vlabel}]` : '0:v');
-    args.push('-map', alabel ? `[${alabel}]` : '0:a?');
-    args.push('-c:v','libx264','-preset', p.preset, '-crf', String(p.crf), '-pix_fmt','yuv420p',
-              '-c:a','aac','-b:a','128k','-movflags','+faststart','out.mp4');
-    await ff.exec(args);
-    if(CSFF.cancel) return;
-
-    setStage('Finishing', 98);
-    const data = await ff.readFile('out.mp4');
-    const blob = new Blob([data.buffer], { type:'video/mp4' });
-
-    // free the virtual FS immediately — otherwise a second export OOMs
-    for(const f of written.concat(['out.mp4','subs.ass','list.txt'])) { try { await ff.deleteFile(f); } catch(_){} }
-
-    st.exporting = null;
-    st.exportUrl && csDropUrl(st.exportUrl);
-    st.exportUrl = csMakeUrl(blob);
-    st.exportSize = blob.size;
-    st.sheet = null;
-    render();
-    csDownload(st.exportUrl, (st.projectName||'video').replace(/\s+/g,'-').toLowerCase() + '.mp4');
-    toast('Export ready');
-  } catch(err){
-    console.warn('[studio] export', err);
-    st.exporting = null;
-    render();
-    toast(err.message === 'called FFmpeg.terminate()' ? 'Export cancelled' : 'Export failed — try trimming the video shorter');
-  }
-};
-function csDownload(url, name){
-  const a = document.createElement('a');
-  a.href = url; a.download = name; a.rel = 'noopener';
-  document.body.appendChild(a); a.click(); a.remove();
-}
-
-// ── ASS subtitle builder: text overlays + word-by-word captions ─────────────
-function csAssTime(s){
-  const h = Math.floor(s/3600), m = Math.floor(s%3600/60), sec = (s%60);
-  return `${h}:${String(m).padStart(2,'0')}:${sec.toFixed(2).padStart(5,'0')}`;
-}
-function csAssColor(hex, alpha){
-  const h = (hex||'#FFFFFF').replace('#','');
-  const r = h.slice(0,2), g = h.slice(2,4), b = h.slice(4,6);
-  return `&H${alpha||'00'}${b}${g}${r}`.toUpperCase();
-}
-function csBuildAss(p){
-  const st = S.studio;
-  const texts = st.overlays.filter(o => o.type === 'text' && (o.text||'').trim());
-  const caps  = st.captions || [];
-  if(!texts.length && !caps.length) return null;
-  const scale = p.height / 1280;                    // preview px → export px
-  const styles = [], events = [];
-
-  texts.forEach((o, i) => {
-    const f = csFontById(o.font);
-    const outline = o.style === 'outline' ? 3 : (o.style === 'shadow' ? 0 : 1);
-    const border  = o.style === 'box' ? 3 : 1;      // 3 = opaque box
-    styles.push(`Style: T${i},${f.ass},${Math.round(o.size*scale*1.6)},${csAssColor(o.color)},${csAssColor(o.color)},${csAssColor('#000000')},${csAssColor(o.bg||'#000000','40')},${f.weight>=700?-1:0},0,0,0,100,100,0,0,${border},${outline},${o.style==='shadow'?3:0},5,0,0,0,1`);
-    const px = Math.round(p.width * o.x/100), py = Math.round(p.height * o.y/100);
-    const line = String(o.text).replace(/\n/g,'\\N').replace(/[{}]/g,'');
-    events.push(`Dialogue: 0,${csAssTime(o.startMs/1000)},${csAssTime(o.endMs/1000)},T${i},,0,0,0,,{\\pos(${px},${py})}${line}`);
-  });
-
-  if(caps.length){
-    const cs = csCapStyle();
-    const f = csFontById(cs.font);
-    styles.push(`Style: CAP,${f.ass},${Math.round(cs.size*scale*1.6)},${csAssColor(cs.color)},${csAssColor(cs.color)},${csAssColor(cs.stroke||'#000000')},${csAssColor(cs.bg||'#000000', cs.bg?'20':'80')},-1,0,0,0,100,100,0,0,${cs.bg?3:1},${cs.stroke?3:1.5},${cs.shadow?2:0},5,0,0,0,1`);
-    const cx = Math.round(p.width * ((cs.x==null?50:cs.x)/100));
-    const cy = Math.round(p.height * ((cs.y==null?82:cs.y)/100));
-    caps.forEach(c => {
-      const t = (cs.upper ? c.text.toUpperCase() : c.text).replace(/[{}]/g,'');
-      // tiny pop-in scale gives the CapCut "beat" feel
-      events.push(`Dialogue: 1,${csAssTime(c.start)},${csAssTime(c.end)},CAP,,0,0,0,,{\\pos(${cx},${cy})\\fscx90\\fscy90\\t(0,90,\\fscx100\\fscy100)}${t}`);
+    const q = svQualityFor(st);
+    const res = smExportRes(st.quality || svAutoQuality(), {
+      '540p':  { width: 540,  height: 960,  fps: 24 },
+      '720p':  { width: 720,  height: 1280, fps: 30 },
+      '1080p': { width: 1080, height: 1920, fps: 30 },
+      '2160p': { width: 2160, height: 3840, fps: 30 },
     });
+    const ff = await svFfmpeg();
+    const plan = smExportPlan(st);
+
+    const inputArgs = [];
+    const filterParts = [];
+    const vLabels = [];
+    const aLabels = [];
+    let idx = 0;
+    const written = [];
+
+    // 1. Each clip: write it, trim its kept window, normalise its size.
+    for (let i = 0; i < st.clips.length; i++){
+      const c = st.clips[i];
+      const name = 'c' + i + '.' + svExtOf(c.blob);
+      const buf = new Uint8Array(await c.blob.arrayBuffer());
+      await ff.writeFile(name, buf);
+      written.push(name);
+      inputArgs.push('-i', name);
+      const inS = ((c.inMs || 0) / 1000).toFixed(3);
+      const outS = ((c.outMs || 0) / 1000).toFixed(3);
+      filterParts.push(
+        '[' + idx + ':v]trim=start=' + inS + ':end=' + outS + ',setpts=PTS-STARTPTS,' +
+        'scale=' + res.width + ':' + res.height + ':force_original_aspect_ratio=decrease,' +
+        'pad=' + res.width + ':' + res.height + ':(ow-iw)/2:(oh-ih)/2,setsar=1,fps=' + res.fps + '[v' + i + ']'
+      );
+      vLabels.push('[v' + i + ']');
+      // Audio is optional: a silent upload has no audio stream at all, and
+      // referencing one would fail the whole command.
+      filterParts.push('[' + idx + ':a]atrim=start=' + inS + ':end=' + outS + ',asetpts=PTS-STARTPTS[a' + i + ']');
+      aLabels.push('[a' + i + ']');
+      idx++;
+    }
+
+    // 2. Stitch them into one continuous track, in timeline order.
+    filterParts.push(vLabels.join('') + 'concat=n=' + st.clips.length + ':v=1:a=0[vcat]');
+    let vCur = '[vcat]';
+    const hasClipAudio = st.clips.every(c => c.blob && /webm|mp4|quicktime/.test(c.blob.type || ''));
+    if (hasClipAudio){
+      filterParts.push(aLabels.join('') + 'concat=n=' + st.clips.length + ':v=0:a=1[acat]');
+    }
+
+    // 3. Colour: filter preset plus the manual adjustments.
+    const adj = st.adjust;
+    const eq = 'eq=brightness=' + ((adj.brightness - 100) / 200).toFixed(3)
+             + ':contrast=' + (adj.contrast / 100).toFixed(3)
+             + ':saturation=' + (adj.saturation / 100).toFixed(3);
+    const presetEq = {
+      vivid: ',eq=saturation=1.35:contrast=1.08', warm: ',colorbalance=rs=.08:bs=-.06',
+      cool: ',colorbalance=bs=.08:rs=-.05', mono: ',hue=s=0,eq=contrast=1.1',
+      noir: ',hue=s=0,eq=contrast=1.35:brightness=-.06', fade: ',eq=contrast=.88:brightness=.06:saturation=.85',
+      punch: ',eq=contrast=1.25:saturation=1.25', retro: ',hue=s=.7,eq=contrast=.94',
+    }[st.filter] || '';
+    filterParts.push(vCur + eq + presetEq + '[vlook]');
+    vCur = '[vlook]';
+
+    // 4. Overlays and captions, burnt in at their own time windows.
+    const burn = [];
+    for (const o of st.overlays){
+      let png = null;
+      if (o.kind === 'text'){
+        png = await svTextPng(o.text, {
+          size: o.size || 30, serif: o.style === 'serif', shadow: o.style === 'shadow',
+          stroke: o.style === 'outline', weight: o.style === 'bold' || o.style === 'outline' ? 800 : 700,
+          color: o.color || '#FFFFFF', y: o.y, width: 90,
+        }, res.width, res.height);
+      } else if (o.kind === 'image'){
+        png = o.blob || null;
+      }
+      if (!png) continue;   // video overlays are handled as extra inputs below
+      const nm = 'ov' + burn.length + '.png';
+      await ff.writeFile(nm, new Uint8Array(await png.arrayBuffer()));
+      written.push(nm);
+      inputArgs.push('-i', nm);
+      burn.push({ label: 'ov' + burn.length, idx: idx, x: o.x, y: o.y, startMs: o.startMs, endMs: o.endMs, w: o.kind === 'image' ? 0.35 : 1 });
+      idx++;
+    }
+    // Caption cards, one image per line.
+    for (let i = 0; i < st.captions.length; i++){
+      const cap = st.captions[i];
+      const png = await svTextPng(cap.text, svCapPngOpts(st), res.width, res.height);
+      if (!png) continue;
+      const nm = 'cap' + i + '.png';
+      await ff.writeFile(nm, new Uint8Array(await png.arrayBuffer()));
+      written.push(nm);
+      inputArgs.push('-i', nm);
+      burn.push({ label: 'cap' + i, idx: idx, x: 50, y: 50, startMs: cap.startMs, endMs: cap.endMs, w: 1, full: true });
+      idx++;
+    }
+
+    burn.forEach((b, n) => {
+      const out = '[ovl' + n + ']';
+      const xExpr = b.full ? '0' : 'W*' + (b.x / 100).toFixed(4) + '-w/2';
+      const yExpr = b.full ? '0' : 'H*' + (b.y / 100).toFixed(4) + '-h/2';
+      const scale = b.w && b.w < 1 ? 'scale=iw*' + b.w + ':ih*' + b.w + ',' : '';
+      filterParts.push('[' + b.idx + ':v]' + scale + 'format=rgba[o' + n + 's]');
+      filterParts.push(vCur + '[o' + n + 's]overlay=' + xExpr + ':' + yExpr +
+        ':enable=\'between(t,' + (b.startMs / 1000).toFixed(3) + ',' + (b.endMs / 1000).toFixed(3) + ')\'[ovl' + n + ']');
+      vCur = out;
+    });
+
+    // 5. Audio: the clips' own sound, plus music and effects on top.
+    let audioMap = null;
+    const aInputs = [];
+    if (hasClipAudio) aInputs.push({ label: '[acat]', vol: 1 });
+    for (const a of st.audioTracks){
+      if (!a.blob) continue;
+      const nm = 'a' + aInputs.length + '.' + (a.blob.type.includes('wav') ? 'wav' : 'mp3');
+      await ff.writeFile(nm, new Uint8Array(await a.blob.arrayBuffer()));
+      written.push(nm);
+      inputArgs.push('-i', nm);
+      filterParts.push('[' + idx + ':a]adelay=' + Math.round(a.startMs || 0) + '|' + Math.round(a.startMs || 0) +
+        ',volume=' + ((a.volume || 40) / 100) + '[au' + aInputs.length + ']');
+      aInputs.push({ label: '[au' + aInputs.length + ']', vol: 1 });
+      idx++;
+    }
+    if (aInputs.length === 1){
+      // Keep the brackets. `-map` must name a filtergraph output as [label];
+      // passing the bare name makes ffmpeg read it as an *input stream
+      // specifier* (“Invalid stream specifier: acat” → “Stream map 'acat'
+      // matches no streams” → Aborted). This was stripping them, which failed
+      // every render.
+      audioMap = aInputs[0].label;
+    } else if (aInputs.length > 1){
+      filterParts.push(aInputs.map(a => a.label).join('') + 'amix=inputs=' + aInputs.length + ':duration=first:dropout_transition=0[aout]');
+      audioMap = '[aout]';
+    }
+    // A video with music but no recorded sound still needs a silent base, or
+    // the mixed track would be shorter than the picture.
+    if (!hasClipAudio && aInputs.length){
+      filterParts.push('anullsrc=channel_layout=stereo:sample_rate=44100,atrim=0:' +
+        (plan.totalMs / 1000).toFixed(3) + '[silent]');
+      // aInputs is never empty here, so the mix branch above always produced
+      // [aout]; append the silent bed to it rather than leaving it unmapped.
+      filterParts.push('[aout][silent]amix=inputs=2:duration=first:dropout_transition=0[amixed]');
+      audioMap = '[amixed]';
+    }
+
+    const outName = 'creatorpulse.mp4';
+    const args = [
+      ...inputArgs,
+      '-filter_complex', filterParts.join(';'),
+      // vCur already carries its brackets — pass it through untouched.
+      '-map', vCur,
+    ];
+    if (audioMap) args.push('-map', audioMap);
+    else if (hasClipAudio) args.push('-map', '[acat]');
+    args.push(
+      '-c:v', 'libx264', '-preset', q.preset, '-crf', String(q.crf),
+      '-pix_fmt', 'yuv420p', '-movflags', '+faststart',
+    );
+    if (audioMap || hasClipAudio) args.push('-c:a', 'aac', '-b:a', '128k');
+    args.push('-y', outName);
+
+    svExportNote('Rendering ' + res.width + '×' + res.height + '…', 6);
+    let code = await ff.exec(args);
+
+    // If the clip audio concat failed (a source with no sound), retry silent
+    // so the user still gets their video rather than an error.
+    if (code !== 0 && hasClipAudio){
+      svExportNote('Retrying without original audio…', 20);
+      const retry = args.filter(a => a !== 'acat' && a !== 'acat]');
+      const fixed = [];
+      for (let i = 0; i < retry.length; i++){
+        if (retry[i] === '-map' && retry[i + 1] === '[acat]'){ i++; continue; }
+        fixed.push(retry[i]);
+      }
+      const vIdx = fixed.indexOf('-c:v');
+      if (vIdx > -1) fixed.splice(vIdx, 0, '-an');
+      code = await ff.exec(fixed);
+    }
+
+    if (SVFF.cancel){ st.exporting = false; render(); return; }
+    if (code !== 0) throw new Error('The renderer reported an error. Try a shorter video or a lower quality setting.');
+
+    svExportNote('Saving to your phone…', 98);
+    const data = await ff.readFile(outName);
+    const blob = new Blob([data.buffer || data], { type: 'video/mp4' });
+    svDownload(blob, (st.projectName || 'creatorpulse').replace(/[^\w-]+/g, '-').toLowerCase() + '.mp4');
+
+    // Clean the working files out of the wasm filesystem so a second export
+    // does not collide with the first.
+    for (const f of written.concat([outName])){
+      try { await ff.deleteFile(f); } catch (_){}
+    }
+
+    st.exporting = false; st.exportPct = 100;
+    render();
+    svToast('Exported — check your downloads');
+  } catch (err){
+    console.warn('[studio] export', err);
+    // Clear the failed engine first, then report on a fresh tick so the user
+    // sees WHY it failed instead of a veil frozen at its last percentage. The
+    // render happens before the toast so the toast is not swallowed by it.
+    svFfmpegReset();
+    setTimeout(() => {
+      const st2 = svState();
+      st2.exporting = false;
+      render();
+      const msg = String((err && err.message) || err);
+      svToast(/engine|network|fetch|connection|load|worker|origin/i.test(msg)
+        ? 'Could not load the video engine — check your internet connection and try again'
+        : msg.slice(0, 140));
+    }, 0);
   }
+};
 
-  return `[Script Info]
-ScriptType: v4.00+
-PlayResX: ${p.width}
-PlayResY: ${p.height}
-WrapStyle: 2
-ScaledBorderAndShadow: yes
+/* ── OPEN THE STUDIO WITH A SCRIPT ──────────────────────────────────────── */
+// Called from the news side of the app. One tap carries the script across
+// instead of making the user copy and paste it into the teleprompter.
 
-[V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-${styles.join('\n')}
+window.svOpenWithScript = function (text, projectName){
+  const st = svState();
+  st.script = String(text || '').slice(0, 20000);
+  st.showPrompter = !!st.script.trim();
+  st.showScriptEditor = false;
+  st.projectName = projectName ? String(projectName).slice(0, 40) : 'New project';
+  // A fresh shoot each time: stale clips from an abandoned project would be
+  // silently mixed into the new one.
+  st.clips.forEach(c => svReleaseUrl(c.url));
+  svClearParked();
+  st.clips = []; st.overlays = []; st.captions = []; st.audioTracks = [];
+  st.history = []; st.future = [];
+  st.reviewId = null; st.sheet = null; st.editText = null;
+  st.running = false; st.paused = false; st.playhead = 0;
+  st.mode = 'camera';
+  S.tab = 'create';
+  render();
+  setTimeout(() => svOpenCamera(), 80);
+  svToast('Script loaded — the teleprompter is ready');
+};
 
-[Events]
-Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-${events.join('\n')}`;
+/* ── FIRST-RUN / IDLE SCREEN ────────────────────────────────────────────── */
+// A deliberate front door, so entering Create always starts a clean project
+// rather than dropping straight into a camera with someone else's state.
+
+function svStartView(st){
+  const has = st.clips.length;
+  return `<div class="sv-root" id="sv-root" style="padding:0">
+    <div class="sv-bar">
+      <div class="sv-bar-title">Create Studio</div>
+      <div class="sv-bar-r"><button class="sv-icon-btn" data-act="exitCamera" aria-label="Back">${svIcon('close')}</button></div>
+    </div>
+    <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:14px;padding:0 20px 40px">
+      <div style="font-family:var(--serif,Georgia,serif);font-size:30px;font-weight:600;letter-spacing:-.02em;line-height:1.15">
+        Record it, edit it,<br>post it.
+      </div>
+      <div style="color:var(--mu);font-size:13.5px;line-height:1.6;margin-bottom:8px">
+        Talk to camera with your script on screen, then trim, caption and export — all without leaving CreatorPulse.
+      </div>
+      <button class="sv-btn-wide primary" data-act="newProject">${svIconSm('video')} Start recording</button>
+      <button class="sv-btn-wide ghost" data-act="upload2">${svIconSm('upload')} Upload a video instead</button>
+      ${has ? `<button class="sv-btn-wide ghost" data-act="toEditor">${svIconSm('layers')} Continue editing (${st.clips.length})</button>` : ''}
+      <input type="file" id="sv-upload" accept="video/*" multiple hidden>
+    </div>
+  </div>`;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-//  TEARDOWN — called by core.js when the studio page unmounts
-// ═══════════════════════════════════════════════════════════════════════════
-window.studioTeardown = function(){
-  csCloseCamera();
-  csStopEngine();
-  csReleaseMedia();
-};
-window.addEventListener('pagehide', () => { try { window.studioTeardown(); } catch(_){} });
-document.addEventListener('visibilitychange', () => { if(document.hidden && S.studio && S.studio.playing) csPause(); });
+/* ── SMALL HELPERS ──────────────────────────────────────────────────────── */
+
+function svToast(msg){
+  if (typeof toast === 'function') return toast(msg);
+  const el = document.createElement('div');
+  el.className = 'sv-toast';
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => { try { el.remove(); } catch (_){} }, 2600);
+}
+
+/* ── BACK-BUTTON + FIRST PAINT ──────────────────────────────────────────── */
+// The app's router calls pageCreate() during render; the delegated listeners
+// above are registered once at load.
+
+function svNewProject(){
+  const st = svState();
+  st.mode = 'camera';
+  render();
+  setTimeout(() => svOpenCamera(), 60);
+}
+
+// Wire file inputs whenever the Create tab renders.
+const __svObserve = setInterval(() => {
+  if (S.studio && S.tab === 'create') svWireInputs();
+}, 500);
+setTimeout(() => clearInterval(__svObserve), 10 * 60 * 1000);
+
+/* ── COMPATIBILITY ALIASES ──────────────────────────────────────────────── */
+// core.js and app.js still reference these names in a few places. They map
+// onto the new implementation so nothing outside this file has to change.
+
+window.csOpenSheet       = svOpenSheet;
+window.csCloseSheet      = svCloseSheet;
+window.csExitCamera      = svExitCamera;
+window.csGoToEditor      = svGoToEditor;
+window.csConfirmExitEditor = svConfirmExitEditor;
+window.csTogglePlay      = svTogglePlay;
+window.csSplit           = svSplit;
+window.csDuplicate       = svDuplicate;
+window.csDeleteSelected  = svDeleteSelected;
+window.csAddText         = svAddText;
+window.csAddImageClick   = () => { const el = document.getElementById('sv-add-image'); if (el) el.click(); };
+window.csReplaceClick    = () => { const el = document.getElementById('sv-replace-clip'); if (el) el.click(); };
+window.csAddClipClick    = () => { const el = document.getElementById('sv-add-clip'); if (el) el.click(); };
+window.csOpenUpload      = () => { const el = document.getElementById('sv-upload'); if (el) el.click(); };
+window.csPushHistory     = svPush;
+window.csApplyZoom       = svApplyHardwareZoom;
+window.csDeleteOverlay   = svDeleteOverlay;
+window.csSetZoom         = window.svSetZoom;
+window.csCancelExport    = window.svCancelExport;
+window.__svExport        = window.svExport;
