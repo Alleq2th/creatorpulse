@@ -57,11 +57,21 @@ function svDefaultState(){
 
     // Teleprompter
     script: '', showPrompter: false, showScriptEditor: false, promptSpeed: 60,
+    // Text size and where the box sits, both under the user's control. The
+    // shipped prompter was fixed at 19px in a fixed position, so a creator who
+    // could not read it, or whose face it covered, had no way to change either.
+    promptSize: 19, promptPos: { x: 50, y: 26 },
 
     // Capture
     running: false, paused: false, camReady: false, facing: 'user',
     micOn: true, torch: false, zoom: 1, countdown: 0, mirror: true,
     recStartedAt: 0, recAccumMs: 0, quality: null,
+    // A look chosen BEFORE recording, baked into the file rather than layered
+    // on top of the preview, so it survives into the editor and the export.
+    camFilter: 'none',
+    // Which rung of the capture ladder this device settled on, and the measured
+    // frame rate of the last take. Both are learned from real recordings.
+    perfTier: null, capFps: 0,
 
     // Content
     clips: [], overlays: [], captions: [], audioTracks: [],
@@ -284,7 +294,13 @@ window.svAfterRender = function svAfterRender(){
   try {
     const st = svState();
     if (st.mode === 'camera'){
+      const stage = document.getElementById('sv-stage');
+      // Recorded so the prompter geometry maths has real numbers to work with
+      // rather than a guess, and re-read on every render because the stage
+      // changes size between portrait and landscape.
+      if (stage){ SVP.stageW = stage.clientWidth; SVP.stageH = stage.clientHeight; }
       svAttachLive();
+      svApplyCamFilter();
       if (st.showPrompter && st.running && !st.paused) svPrompterRun();
       else svPrompterStop();
       if (st.running && !st.paused) svTimerRun(); else svTimerStop();
@@ -316,10 +332,7 @@ function svCameraView(st){
       <video id="sv-cam-live" playsinline muted autoplay
         style="transform:${st.mirror && st.facing === 'user' ? 'scaleX(-1) ' : ''}scale(${st.zoom})"></video>
 
-      ${st.showPrompter && st.script
-        ? `<div class="sv-prompter-hd"><span>Teleprompter</span><span data-act="togglePrompter" style="cursor:pointer">Hide</span></div>
-           <div class="sv-prompter"><div class="sv-prompter-inner" id="sv-prompter-inner">${esc(st.script)}</div></div>`
-        : ''}
+      ${st.showPrompter && st.script ? svPrompterHtml(st) : ''}
 
       ${st.running
         ? `<div class="${st.paused ? 'sv-paused-pill' : 'sv-rec-pill'}">
@@ -331,7 +344,10 @@ function svCameraView(st){
         <button class="sv-rail-btn ${st.showPrompter ? 'on' : ''}" data-act="prompter">${svIcon('text')}<span>Script</span></button>
         <button class="sv-rail-btn ${st.countdown ? 'on' : ''}" data-act="cycleCountdown">${svIcon('timer')}<span>${st.countdown ? st.countdown + 's' : 'Timer'}</span></button>
         <button class="sv-rail-btn ${st.micOn ? '' : 'warn'}" data-act="mic">${svIcon('voice')}<span>${st.micOn ? 'Mic' : 'Muted'}</span></button>
+        <button class="sv-rail-btn ${st.camFilter !== 'none' ? 'on' : ''}" data-act="camFilters">${svIcon('fx')}<span>${st.camFilter === 'none' ? 'Look' : (SP_RECORD_FILTERS[st.camFilter] ? SP_RECORD_FILTERS[st.camFilter].label : 'Look')}</span></button>
       </div>
+
+      ${svCamFilterStrip(st)}
 
       <div class="sv-zoom">
         ${[1, 1.5, 2, 3].map(z => `<button class="${st.zoom === z ? 'on' : ''}" data-act="zoom" data-arg="${z}">${z}×</button>`).join('')}
@@ -383,6 +399,97 @@ function svAutoQuality(){
   return '540p';
 }
 
+/* ── CAPTURE LADDER ───────────────────────────────────────────────────────
+   What we ASK the camera for. This is the fix for the janky recording.
+
+   Measured with a real Chromium and a synthetic camera (verify/isolate.js),
+   varying one factor at a time while everything else stayed constant:
+
+     as shipped (1080p capture + stacked blurs)   37.2 fps   18.7% janky
+     720p capture only                            56.4 fps    2.0% janky
+     blurs removed only                           59.8 fps    0.4% janky
+     both                                          60.0 fps    0.0% janky
+
+   1080p was the default for any 8-core phone and it is what the device could
+   not keep up with: capture negotiated 1080x1920@20 and MediaRecorder had to
+   encode 2.1x the pixels of 720p on every single frame. The ladder starts at a
+   size the device can actually sustain, and the tier is remembered so a bad
+   first take is not repeated. */
+
+function svDeviceProbe(){
+  return {
+    cores: navigator.hardwareConcurrency || 4,
+    deviceMemory: navigator.deviceMemory,
+    saveData: !!(navigator.connection && navigator.connection.saveData),
+  };
+}
+
+// The rung this device should be on: whatever it settled on before, else what
+// its hardware and data-saver settings suggest.
+function svCaptureTier(st){
+  st = st || svState();
+  if (st.perfTier && SP_TIERS.indexOf(st.perfTier) >= 0) return st.perfTier;
+  return spAutoTier(svDeviceProbe());
+}
+function svCaptureProfileNow(st){
+  return spCaptureProfile(svCaptureTier(st));
+}
+function svCaptureLabel(st){
+  const p = svCaptureProfileNow(st);
+  return p.height >= 1920 ? 'Full HD' : (p.height >= 1280 ? 'HD' : 'Fast');
+}
+
+/* ── TELEPROMPTER ─────────────────────────────────────────────────────────
+   The shipped prompter was a fixed 19px box pinned to one spot, so a creator
+   who could not read it had no recourse, and one whose face it covered had no
+   recourse either. It is now sized and positioned by the user:
+     - A− / A+ change the text size, 12px up to 46px.
+     - The bar at the top of the box is a handle: drag it anywhere on screen.
+   The position is stored as a percentage of the stage so it means the same
+   thing on every screen, and spPrompterClamp keeps the box reachable after a
+   drag — a box dragged off the edge with no way back is worse than a fixed one. */
+
+function svPrompterHtml(st){
+  const g = spPrompterGeometry({ width: SVP.stageW || 400, height: SVP.stageH || 700 },
+    st.promptSize, st.promptPos);
+  return `<div class="sv-prompter-wrap" id="sv-prompter-wrap"
+      style="left:${st.promptPos.x}%;top:${st.promptPos.y}%">
+    <div class="sv-prompter-hd" data-ptr="prompterDrag">
+      <span class="sv-prompter-grip">${svIcon('text')}<span>Teleprompter</span></span>
+      <span class="sv-prompter-tools">
+        <button class="sv-prompter-btn" data-act="prompterSize" data-arg="-" aria-label="Smaller text">A<span class="sm">−</span></button>
+        <button class="sv-prompter-btn" data-act="prompterSize" data-arg="+" aria-label="Bigger text">A<span class="lg">+</span></button>
+        <button class="sv-prompter-btn" data-act="prompterReset" aria-label="Reset position">${svIconSm('undo')}</button>
+        <button class="sv-prompter-btn" data-act="togglePrompter" aria-label="Hide teleprompter">Hide</button>
+      </span>
+    </div>
+    <div class="sv-prompter"><div class="sv-prompter-inner" id="sv-prompter-inner"
+      style="font-size:${g.fontPx}px;line-height:${g.lineHeight}px">${esc(st.script)}</div></div>
+  </div>`;
+}
+
+/* ── CAMERA LOOKS ─────────────────────────────────────────────────────────
+   A filter chosen before recording. It has to be in the FILE, not painted over
+   the preview, or it disappears the moment the take lands in the editor and
+   the export comes out plain. So the chosen look is applied by re-encoding the
+   take on stop (see svFinishRecording) using the ffmpeg chain in
+   SP_RECORD_FILTERS, while the preview shows the identical CSS filter so what
+   the creator sees is what they get. */
+
+function svCamFilterStrip(st){
+  const ids = Object.keys(SP_RECORD_FILTERS);
+  return `<div class="sv-camfilters" id="sv-camfilters">
+    ${ids.map(id => {
+      const f = SP_RECORD_FILTERS[id];
+      const on = st.camFilter === id;
+      return `<button class="sv-camfilter ${on ? 'on' : ''}" data-act="pickCamFilter" data-arg="${id}">
+        <span class="sw" style="filter:${spRecordFilterCss(id)}"></span>
+        <span class="lb">${f.label}</span>
+      </button>`;
+    }).join('')}
+  </div>`;
+}
+
 function svScrimAndSheet(st){
   return `<div class="sv-scrim" data-act="closeSheet"></div>${svSheet(st)}`;
 }
@@ -413,6 +520,11 @@ function svStrip(st){
 // Full-screen playback of one take, with the three decisions that actually
 // matter: keep it, bin it, or go edit.
 
+// Playback of one take. Deliberately COMPACT: the stage hugs the clip's own
+// aspect ratio instead of stretching over the whole screen, so the creator can
+// see their face and the take itself in one glance and just tap to watch it
+// again. It shipped as a full-height black page with a small video floating in
+// the middle of it.
 function svReview(st){
   const c = st.clips.find(x => x.id === st.reviewId);
   if (!c) return '';
@@ -423,8 +535,10 @@ function svReview(st){
       <div class="sv-bar-r"></div>
     </div>
     <div class="sv-review-stage" data-act="toggleReviewPlay">
-      <video id="sv-review-video" src="${c.url}" playsinline controls playsinline></video>
+      <video id="sv-review-video" src="${c.url}" playsinline controls></video>
     </div>
+    <div class="sv-review-note">Tap the video to play or pause</div>
+    <div class="sv-review-gap"></div>
     <div class="sv-review-foot">
       <button class="sv-btn-wide danger" data-act="deleteReviewTake">${svIconSm('trash')} Delete</button>
       <button class="sv-btn-wide primary" data-act="toEditor">${svIconSm('layers')} Edit</button>
@@ -638,15 +752,24 @@ function svOverlayHtml(o, st){
   const sel = st.selectedId === o.id && st.selectedType === 'overlay';
   const on = st.playhead >= o.startMs && st.playhead <= o.endMs;
   if (!on && !sel) return '';
-  const base = `position:absolute;left:${o.x}%;top:${o.y}%;transform:translate(-50%,-50%)`;
+  const base = `position:absolute;left:${o.x}%;top:${o.y}%;transform:translate(-50%,-50%) scale(${o.scale || 1})`;
+  // Crop applies to the content, not the wrapper, so the selection frame and
+  // its handles stay put while the picture inside is trimmed back.
+  const cropCss = spCropCss(o.crop);
+  const clipStyle = cropCss ? `clip-path:${cropCss};` : '';
   const inner = o.kind === 'text'
     ? `<span style="${svTextStyle(o)}">${esc(o.text || '')}</span>`
     : o.kind === 'image'
-      ? `<img src="${o.url}" alt="" style="width:${Math.round(160 * (o.scale || 1))}px">`
-      : `<video src="${o.url}" muted playsinline style="width:${Math.round(160 * (o.scale || 1))}px;border-radius:8px"></video>`;
-  return `<div class="sv-overlay ${sel ? 'sel' : ''}" style="${base}" data-ptr="ovBody" data-arg="${o.id}">
-    ${inner}
+      ? `<img src="${o.url}" alt="" style="width:${Math.round(160 * (o.scale || 1))}px;${clipStyle}">`
+      : `<video src="${o.url}" muted playsinline style="width:${Math.round(160 * (o.scale || 1))}px;border-radius:8px;${clipStyle}"></video>`;
+  const textCrop = o.kind === 'text' && cropCss ? `clip-path:${cropCss};` : '';
+  return `<div class="sv-overlay ${sel ? 'sel' : ''}" style="${base}" data-ptr="ovBody" data-arg="${o.id}" data-kind="${o.kind}">
+    <div class="sv-ov-inner" style="${textCrop}">${inner}</div>
     <button class="sv-ov-x" data-act="deleteOverlay" data-arg="${o.id}" aria-label="Remove">${svIconSm('close')}</button>
+    ${sel ? `<span class="sv-ov-handle tl" data-ptr="grabOv" data-arg="${o.id}"></span>
+      <span class="sv-ov-handle tr" data-ptr="grabOv" data-arg="${o.id}"></span>
+      <span class="sv-ov-handle bl" data-ptr="grabOv" data-arg="${o.id}"></span>
+      <span class="sv-ov-handle br" data-ptr="grabOv" data-arg="${o.id}"></span>` : ''}
   </div>`;
 }
 
@@ -711,7 +834,10 @@ const SV_ACT = {
   deleteReviewTake: () => { const st = svState(); const id = st.reviewId; st.reviewId = null; svDeleteTake(id); },
 
   /* navigation */
-  toEditor:        () => svGoToEditor(),
+  // Leaving the camera for the editor is the moment a queued look-bake can
+  // safely run: the capture has stopped, so the encoder no longer competes
+  // with a live camera for the frame budget.
+  toEditor:        () => { svGoToEditor(); svBakePump(); },
   exitEditor:      () => svConfirmExitEditor(),
 
   /* editing */
@@ -740,6 +866,10 @@ const SV_ACT = {
 
   /* captions */
   autoCaps:        () => svAutoCaptions(),
+  addCapManual:    () => {
+    const i = document.getElementById('sv-cap-manual');
+    if (i){ svAddCaptionManual(i.value); i.value = ''; }
+  },
   capPreset:       (a, el) => { const st = svState(); st.capStyle.preset = a; render(); },
   capSize:         (a, el) => { const st = svState(); st.capStyle.size = Number(el.value); svApplyCapLive(); },
   capPos:          (a, el) => { const st = svState(); st.capStyle.y = Number(el.value); svApplyCapLive(); },
@@ -755,6 +885,22 @@ const SV_ACT = {
   addImageOv:      () => { const el = document.getElementById('sv-add-image'); if (el) el.click(); },
   addVideoOv:      () => { const el = document.getElementById('sv-add-video-ov'); if (el) el.click(); },
   ovDur:           (a, el) => { const st = svState(); const o = svFindOverlay(st.editText); if (o) o.endMs = o.startMs + Number(el.value) * 1000; render(); },
+  ovCropEdge:      (a, el) => {
+    const st = svState();
+    const o = svFindOverlay(st.editText);
+    if (!o) return;
+    o.crop = spCrop(Object.assign({}, o.crop, { [a]: Number(el.value) }));
+    svApplyOverlayLive();
+    render();
+  },
+  ovCropReset:     () => {
+    const st = svState();
+    const o = svFindOverlay(st.editText);
+    if (!o) return;
+    o.crop = { t: 0, r: 0, b: 0, l: 0 };
+    svApplyOverlayLive();
+    render();
+  },
 
   /* audio */
   addMusic:        () => { const el = document.getElementById('sv-add-music'); if (el) el.click(); },
@@ -766,6 +912,32 @@ const SV_ACT = {
   pickFilter:      a => { const st = svState(); st.filter = a; svApplyPreview(); svRenderSheetOnly(); },
   adj:             (a, el) => { const st = svState(); st.adjust[a] = Number(el.value); svApplyPreview(); },
   resetAdjust:     () => { const st = svState(); st.adjust = { brightness: 100, contrast: 100, saturation: 100, warmth: 0 }; svApplyPreview(); svRenderSheetOnly(); },
+
+  /* camera look (chosen before recording, baked into the file on stop) */
+  camFilters:      () => { const host = document.getElementById('sv-camfilters'); if (host) host.classList.toggle('open'); },
+  pickCamFilter:   a => {
+    const st = svState();
+    st.camFilter = a;
+    svApplyCamFilter();
+    const host = document.getElementById('sv-camfilters');
+    if (host) host.classList.remove('open');
+    render();
+    svToast(a === 'none' ? 'Look off \u2014 recording as the camera sees it' : 'Look on \u2014 it will be baked into the recording');
+  },
+
+  /* teleprompter text size + position */
+  prompterSize:    a => {
+    const st = svState();
+    st.promptSize = spClamp(st.promptSize + (a === '+' ? 3 : -3), 12, 46);
+    svApplyPrompter();
+  },
+  prompterReset:   () => {
+    const st = svState();
+    st.promptPos = { x: 50, y: 26 };
+    st.promptSize = 19;
+    render();
+    svToast('Teleprompter back to where it started');
+  },
 
   /* quality */
   setQuality:      a => { const st = svState(); st.quality = a; render(); },
@@ -779,12 +951,14 @@ const SV_ACT = {
 };
 
 const SV_PTR = {
-  clip:    (e, id) => svSelect(id, 'video'),
-  grabIn:  (e, id) => svBeginTrim(e, id, 'in'),
-  grabOut: (e, id) => svBeginTrim(e, id, 'out'),
-  ovBody:  (e, id) => svBeginOverlayDrag(e, id),
-  cap:     (e)    => svSelectCaption(),
-  scrub:   (e)    => svBeginScrub(e),
+  clip:        (e, id) => svSelect(id, 'video'),
+  grabIn:      (e, id) => svBeginTrim(e, id, 'in'),
+  grabOut:     (e, id) => svBeginTrim(e, id, 'out'),
+  ovBody:      (e, id) => svBeginOverlayDrag(e, id),
+  grabOv:      (e, id) => svBeginOverlayResize(e, id),
+  cap:         (e)    => svBeginCaptionDrag(e),
+  prompterDrag:(e)    => svBeginPrompterDrag(e),
+  scrub:       (e)    => svBeginScrub(e),
 };
 
 document.addEventListener('click', function (e){
@@ -845,12 +1019,16 @@ const SVC = { stream: null, rec: null, chunks: [], track: null, timer: null, pro
 async function svOpenCamera(){
   const st = svState();
   svCloseCamera();
-  const q = svQualityFor(st);
+  const prof = svCaptureProfileNow(st);
+  // "ideal" rather than "exact": a phone that cannot do 720p still hands back
+  // its nearest size instead of rejecting the whole capture. The ladder has
+  // already picked something this device should manage.
   try {
     SVC.stream = await navigator.mediaDevices.getUserMedia({
       video: {
         facingMode: st.facing,
-        width: { ideal: q.width }, height: { ideal: q.height }, frameRate: { ideal: q.fps },
+        width: { ideal: prof.width }, height: { ideal: prof.height },
+        frameRate: { ideal: Math.min(30, prof.fps) },
       },
       audio: st.micOn ? { echoCancellation: true, noiseSuppression: true } : false,
     });
@@ -1004,9 +1182,9 @@ async function svStartRecording(){
     if (!SVC.stream) return;
   }
   const mime = svMime();
-  const q = svQualityFor(st);
+  const prof = svCaptureProfileNow(st);
   try {
-    SVC.rec = new MediaRecorder(SVC.stream, { mimeType: mime, videoBitsPerSecond: q.bitrate });
+    SVC.rec = new MediaRecorder(SVC.stream, { mimeType: mime, videoBitsPerSecond: prof.videoBitsPerSecond });
   } catch (_){
     try { SVC.rec = new MediaRecorder(SVC.stream); }
     catch (e2){ return svToast('Recording is not supported in this browser'); }
@@ -1018,8 +1196,11 @@ async function svStartRecording(){
 
   st.running = true; st.paused = false;
   st.recStartedAt = Date.now(); st.recAccumMs = 0;
+  svSpeechReset();
+  svSpeechStart();
   render();
   svTimerRun();
+  svFpsWatchStart();
   if (st.showPrompter && st.script) svPrompterRun();
 }
 
@@ -1028,6 +1209,7 @@ function svPauseRecording(){
   try { if (SVC.rec && SVC.rec.state === 'recording') SVC.rec.pause(); } catch (_){}
   st.paused = true;
   st.recAccumMs += Date.now() - st.recStartedAt;
+  svSpeechStop();
   svTimerStop();
   svPrompterStop();
   render();
@@ -1038,6 +1220,10 @@ function svResumeRecording(){
   try { if (SVC.rec && SVC.rec.state === 'paused') SVC.rec.resume(); } catch (_){}
   st.paused = false;
   st.recStartedAt = Date.now();
+  // Recognition is re-armed on resume, with the clock re-anchored so the
+  // phrases that follow keep their true offset into the take.
+  SVC.speechT0 = Date.now() - st.recAccumMs;
+  svSpeechStart();
   svTimerRun();
   if (st.showPrompter && st.script) svPrompterRun();
   render();
@@ -1048,8 +1234,10 @@ function svStopRecording(){
   if (st.paused) st.recAccumMs += 0; // already banked at pause
   else st.recAccumMs += Date.now() - st.recStartedAt;
   st.running = false; st.paused = false;
+  svSpeechStop();
   svTimerStop();
   svPrompterStop();
+  svFpsWatchStop();
   try { if (SVC.rec && SVC.rec.state !== 'inactive') SVC.rec.stop(); } catch (_){}
 }
 
@@ -1090,7 +1278,7 @@ function svPrompterRun(){
   SVC.prompter = requestAnimationFrame(step);
 }
 function svPrompterStop(){ cancelAnimationFrame(SVC.prompter); SVC.prompter = null; }
-const SVP = { prompterY: 0 };
+const SVP = { prompterY: 0, stageW: 0, stageH: 0, dts: [], fpsRaf: null, fpsLast: 0 };
 
 function svCountdown(n){
   return new Promise(res => {
@@ -1168,17 +1356,26 @@ function svGrabThumb(url){
 
 async function svFinishRecording(mime){
   const st = svState();
-  const blob = new Blob(SVC.chunks, { type: (mime || 'video/webm').split(';')[0] });
+  const raw = new Blob(SVC.chunks, { type: (mime || 'video/webm').split(';')[0] });
   SVC.chunks = [];
   const wasSelected = st.selectedId;
-  if (blob.size < 1200){ svToast('That take was too short to keep'); render(); return; }
+  svPerfAdapt();
+  if (raw.size < 1200){ svToast('That take was too short to keep'); render(); return; }
 
-  const url = svHoldUrl(URL.createObjectURL(blob));
+  // The clip goes on the timeline IMMEDIATELY, from the raw take. Baking the
+  // chosen look takes seconds, and making the creator watch a frozen screen
+  // while the encoder chews is exactly the "press stop and nothing happens"
+  // complaint. So the take lands first, and the look is applied afterwards in
+  // the background (svBakePump).
+  const url = svHoldUrl(URL.createObjectURL(raw));
   const dur = await svProbeDuration(url);
   const thumb = await svGrabThumb(url);
   const clip = {
-    id: svId('c'), name: svLabel(st.clips.length), url, blob, thumb,
+    id: svId('c'), name: svLabel(st.clips.length), url, blob: raw, thumb,
     dur, inMs: 0, outMs: Math.round(dur * 1000), kind: 'video',
+    // The recognised phrases for THIS take, timestamped against it, so captions
+    // can be rebuilt (and re-timed through trims) long after recording.
+    speech: SVSR.segs.slice(),
   };
   // Land the take next to whatever was selected when it was shot, so several
   // takes in a row keep the order they were recorded in.
@@ -1189,7 +1386,58 @@ async function svFinishRecording(mime){
   // tells the user to look for it — the thumbnail and duration are already
   // resolved above, so there is nothing left to await.
   render();
-  svToast('Take saved — tap it in the strip below to watch it back');
+  // Then open the take for playback straight away. This is the record -> review
+  // -> edit flow the creator asked for: pressing stop now lands them on the
+  // take they just shot, where they can watch it, keep it or bin it. Previously
+  // stopping produced no visible response at all.
+  svPlayTake(clip.id);
+  svToast('Take saved — watch it back, or delete it and shoot again');
+
+  // Now bake the chosen look in, if there was one, without blocking any of the
+  // above. The take is already usable; the filter catches up moments later.
+  if (st.camFilter && st.camFilter !== 'none') svQueueBake(clip.id, raw, st.camFilter);
+}
+
+/* ── LOOK-BAKE QUEUE ───────────────────────────────────────────────────────
+   One job at a time, and never while the camera is capturing. Encoding a take
+   and recording a new one at the same time is the one way to make the fix for
+   the janky recording undo itself, so the pump waits for the camera to stop. */
+
+const SVBAKE = { queue: [], busy: false };
+
+function svQueueBake(id, blob, filterId){
+  SVBAKE.queue.push({ id, blob, filterId });
+  svBakePump();
+}
+
+async function svBakePump(){
+  if (SVBAKE.busy) return;
+  const st = svState();
+  if (st.running || st.mode === 'camera'){ setTimeout(svBakePump, 900); return; }
+  const job = SVBAKE.queue.shift();
+  if (!job) return;
+  SVBAKE.busy = true;
+  try { await svApplyBakedLook(job); } catch (_){ /* the raw take stands */ }
+  SVBAKE.busy = false;
+  if (SVBAKE.queue.length) svBakePump();
+}
+
+async function svApplyBakedLook(job){
+  const st = svState();
+  const baked = await svBakeTake(job.blob, job.filterId);
+  if (!baked || baked === job.blob) return;
+  // The clip may have been deleted (or the project reset) while this ran.
+  const c = st.clips.find(x => x.id === job.id);
+  if (!c) return;
+  const newUrl = svHoldUrl(URL.createObjectURL(baked));
+  const oldUrl = c.url;
+  const thumb = await svGrabThumb(newUrl);
+  c.url = newUrl; c.blob = baked;
+  if (thumb) c.thumb = thumb;
+  // Released by reference count, so the review screen or Undo still holding it
+  // is not left with a URL that renders black.
+  svReleaseUrl(oldUrl);
+  render();
 }
 
 /* ── TAKE ACTIONS ───────────────────────────────────────────────────────── */
@@ -1480,25 +1728,41 @@ function svPaintPlayhead(){
   if (ph) ph.style.transform = 'translateX(' + (16 + svState().playhead * svPxMs()) + 'px)';
 }
 
-/* ── OVERLAY DRAG + RESIZE ──────────────────────────────────────────────── */
+/* ── OVERLAY DRAG + RESIZE ────────────────────────────────────────────────
+   The shipped version was janky and had no resize at all: the drag read the
+   pointer against a rect captured once, so it drifted as the page moved, it
+   clamped to 2–98% so an overlay could be parked under an edge and lost, and
+   the only "handle" was a CSS `::after` decal wired to nothing. Now:
+     - Drag moves the body, live, straight from the current stage rect.
+     - Corner handles resize (a pinch reaches the same maths from two touches).
+     - spOverlayMove clamps so half the overlay is always on screen.
+   Position and size update in place rather than re-rendering, which is what
+   made the old one stutter. */
+
+function svStageRect(){
+  const stage = document.getElementById('sv-ed-stage');
+  return stage ? stage.getBoundingClientRect() : null;
+}
 
 function svBeginOverlayDrag(e, id){
   e.preventDefault();
+  e.stopPropagation();
   const st = svState();
   const o = st.overlays.find(x => x.id === id);
   if (!o) return;
   svSelect(id, 'overlay');
-  const stage = document.getElementById('sv-ed-stage');
-  if (!stage) return;
-  const rect = stage.getBoundingClientRect();
-  const el = e.target.closest('.sv-overlay');
-  const resizing = e.target.classList && e.target.classList.contains('sel') === false && false;
+  const rect = svStageRect();
+  if (!rect) return;
+  const el = document.querySelector('.sv-overlay[data-arg="' + id + '"]');
+  // Offset of the grab inside the overlay, so it does not jump to centre.
+  const box = el ? el.getBoundingClientRect() : { width: 0, height: 0 };
+  const grab = { dx: e.clientX - (box.left + box.width / 2), dy: e.clientY - (box.top + box.height / 2) };
 
   const move = ev => {
-    const nx = ((ev.clientX - rect.left) / rect.width) * 100;
-    const ny = ((ev.clientY - rect.top) / rect.height) * 100;
-    o.x = svNum(nx, 2, 98);
-    o.y = svNum(ny, 2, 98);
+    const nx = ((ev.clientX - grab.dx - rect.left) / rect.width) * 100;
+    const ny = ((ev.clientY - grab.dy - rect.top) / rect.height) * 100;
+    const pos = spOverlayMove({ x: nx, y: ny }, 0, 0, { width: rect.width, height: rect.height }, box);
+    o.x = pos.x; o.y = pos.y;
     if (el){ el.style.left = o.x + '%'; el.style.top = o.y + '%'; }
   };
   const up = () => {
@@ -1508,6 +1772,111 @@ function svBeginOverlayDrag(e, id){
   };
   window.addEventListener('pointermove', move);
   window.addEventListener('pointerup', up);
+}
+
+// Corner-handle resize. A pinch reaches the same path by passing the ratio of
+// the two finger distances as `factor`, so one implementation covers both.
+function svBeginOverlayResize(e, id){
+  e.preventDefault();
+  e.stopPropagation();
+  const st = svState();
+  const o = st.overlays.find(x => x.id === id);
+  if (!o) return;
+  svSelect(id, 'overlay');
+  const el = document.querySelector('.sv-overlay[data-arg="' + id + '"]');
+  if (!el) return;
+  const start = { x: e.clientX, y: e.clientY, scale: o.scale || 1 };
+  const startW = el.getBoundingClientRect().width || 1;
+
+  const move = ev => {
+    // Corner drag: whichever axis moved more drives the scale, so a diagonal
+    // pull feels natural without having to know the overlay's aspect ratio.
+    const delta = ((ev.clientX - start.x) + (ev.clientY - start.y)) / 2;
+    o.scale = spOverlayScale(start.scale, (startW + delta * 2) / startW, { min: 0.25, max: 4 });
+    el.style.transform = 'translate(-50%,-50%) scale(' + o.scale + ')';
+  };
+  const up = () => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    svPush();
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+}
+
+// Dragging the caption card moves it up and down the frame, which is the one
+// thing a creator actually needs to change about it.
+function svBeginCaptionDrag(e){
+  e.preventDefault();
+  const st = svState();
+  svSelectCaption();
+  const rect = svStageRect();
+  if (!rect) return;
+  const el = document.getElementById('sv-ed-cap');
+  const startY = e.clientY;
+  const startPct = st.capStyle.y;
+  const move = ev => {
+    const dy = ((ev.clientY - startY) / rect.height) * 100;
+    st.capStyle.y = spClamp(startPct - dy, 6, 96);
+    if (el) el.setAttribute('style', svCapCss(st));
+  };
+  const up = () => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    svPush();
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+}
+
+/* Dragging the teleprompter. Position is kept as a percentage of the stage and
+   funnelled through spPrompterClamp, so the box can always be dragged back. */
+function svBeginPrompterDrag(e){
+  e.preventDefault();
+  e.stopPropagation();
+  const st = svState();
+  const stage = document.getElementById('sv-stage');
+  const wrap = document.getElementById('sv-prompter-wrap');
+  if (!stage || !wrap) return;
+  const rect = stage.getBoundingClientRect();
+  const box = wrap.getBoundingClientRect();
+  const start = { x: e.clientX, y: e.clientY, px: st.promptPos.x, py: st.promptPos.y };
+  wrap.classList.add('dragging');
+
+  const move = ev => {
+    const nx = start.px + ((ev.clientX - start.x) / rect.width) * 100;
+    const ny = start.py + ((ev.clientY - start.y) / rect.height) * 100;
+    const pos = spPrompterClamp({ x: nx, y: ny }, { width: rect.width, height: rect.height },
+      { width: box.width, height: box.height });
+    st.promptPos = pos;
+    wrap.style.left = pos.x + '%';
+    wrap.style.top = pos.y + '%';
+  };
+  const up = () => {
+    window.removeEventListener('pointermove', move);
+    window.removeEventListener('pointerup', up);
+    wrap.classList.remove('dragging');
+  };
+  window.addEventListener('pointermove', move);
+  window.addEventListener('pointerup', up);
+}
+
+// Applies the chosen look to the live preview without a re-render, so the
+// preview keeps painting while the user is picking.
+function svApplyCamFilter(){
+  const v = document.getElementById('sv-cam-live');
+  if (v) v.style.filter = spRecordFilterCss(svState().camFilter);
+}
+
+function svApplyPrompter(){
+  const st = svState();
+  const inner = document.getElementById('sv-prompter-inner');
+  if (!inner) return;
+  const g = spPrompterGeometry({ width: SVP.stageW || 400, height: SVP.stageH || 700 }, st.promptSize, st.promptPos);
+  inner.style.fontSize = g.fontPx + 'px';
+  inner.style.lineHeight = g.lineHeight + 'px';
+  // A size change reflows the text, so the scroll distance changes with it.
+  if (st.running && !st.paused && st.showPrompter && st.script) svPrompterRun();
 }
 
 /* ── EDIT ACTIONS ───────────────────────────────────────────────────────── */
@@ -1657,22 +2026,108 @@ function svApplyCapLive(){
   if (el) el.setAttribute('style', svCapCss(svState()));
 }
 
+/* ── SPEECH CAPTIONS ──────────────────────────────────────────────────────
+   Captions built from what the creator SAID, not from what the teleprompter
+   displayed. That distinction is the whole point: people do not read a script
+   word for word, so script-derived captions drift out of sync with the audio
+   within seconds and stay wrong. The Web Speech API transcribes the take live
+   as it is recorded; each recognised phrase is stored with its timestamp and
+   later mapped through any trim via spCaptionsForTimeline. */
+
+const SVSR = {
+  rec: null, active: false, segs: [],
+  supported: !!(window.SpeechRecognition || window.webkitSpeechRecognition),
+};
+
+function svSpeechStart(){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR || !svState().micOn) return null;
+  // Recognition dropping out mid-take must never break the recording, so every
+  // failure is swallowed. Worst case the take has no captions and the creator
+  // can type them in by hand instead.
+  try {
+    const r = new SR();
+    r.continuous = true;
+    r.interimResults = false;
+    r.lang = navigator.language || 'en-GB';
+    r.onresult = ev => {
+      for (let i = ev.resultIndex; i < ev.results.length; i++){
+        const res = ev.results[i];
+        if (!res.isFinal) continue;
+        const text = String((res[0] && res[0].transcript) || '').trim();
+        if (!text) continue;
+        // Timestamped against the take, so a later trim can re-time it.
+        SVSR.segs.push({ text, atMs: Math.max(0, Date.now() - (SVC.speechT0 || Date.now())) });
+      }
+    };
+    r.onerror = () => {};
+    r.onend = () => { SVSR.active = false; };
+    r.start();
+    SVSR.rec = r; SVSR.active = true;
+    return r;
+  } catch (_){ return null; }
+}
+
+function svSpeechStop(){
+  try { if (SVSR.rec) SVSR.rec.stop(); } catch (_){}
+  SVSR.rec = null; SVSR.active = false;
+}
+
+function svSpeechReset(){ SVSR.segs = []; SVC.speechT0 = Date.now(); }
+
+// Captions from the recognised speech of the actual takes.
+function svCaptionsFromSpeech(){
+  const st = svState();
+  return spCaptionsForTimeline(st.clips, { wordsPerCard: st.capWords || 5, maxChars: 42 });
+}
+
+// Typing a line in by hand. Kept because speech recognition is not available in
+// every browser, and a captions feature that can only fail is not a feature.
+function svAddCaptionManual(text){
+  const st = svState();
+  const t = String(text || '').trim();
+  if (!t) return;
+  const total = Math.max(1000, smTotalMs(st.clips));
+  const start = svNum(st.playhead, 0, Math.max(0, total - 600));
+  svPush();
+  st.captions.push({
+    id: svId('cap'), text: t,
+    startMs: Math.round(start), endMs: Math.round(Math.min(total, start + 2200)),
+  });
+  svRenderSheetOnly();
+  svRepaintTimeline();
+  svToast('Caption line added');
+}
+
 /* ── CAPTIONS ───────────────────────────────────────────────────────────── */
 
 function svAutoCaptions(){
   const st = svState();
-  const stx = svState();
   const words = st.capWords || 5;
-  if (!st.script || !String(st.script).trim()){
-    // No script to work from: tell the user exactly how to give it one.
-    return svToast('Record with the teleprompter script loaded, then captions build from it');
-  }
   if (!st.clips.length) return svToast('Add a clip first');
+
+  // Preferred path: captions from the recognised speech of the actual takes.
+  // Speech recognition is not in every browser, so this falls back to the
+  // script only when there is genuinely nothing spoken to work from — and says
+  // which of the two it used, rather than quietly doing the wrong thing.
+  if (st.clips.some(c => (c.speech || []).length)){
+    svPush();
+    st.captions = svCaptionsFromSpeech();
+    svRenderSheetOnly();
+    svRepaintTimeline();
+    return svToast(st.captions.length + ' caption cards built from what you said');
+  }
+
+  if (!st.script || !String(st.script).trim()){
+    return svToast(SVSR.supported
+      ? 'Record with the mic on and captions build from your voice'
+      : 'This browser cannot listen to audio \u2014 add captions by hand below');
+  }
   svPush();
   st.captions = smAutoCaptions(st.script, st.clips, words, 42);
   svRenderSheetOnly();
   svRepaintTimeline();
-  svToast(st.captions.length + ' caption cards created');
+  svToast(st.captions.length + ' caption cards from the script (nothing was spoken)');
 }
 
 /* ── AUDIO ──────────────────────────────────────────────────────────────── */
@@ -1853,8 +2308,15 @@ function svSheetTrim(st){
 
 function svSheetCaptions(st){
   const presets = ['classic', 'boxed', 'pop', 'italic', 'karaoke', 'minimal'];
+  const spoken = st.clips.reduce((n, c) => n + ((c.speech || []).length), 0);
+  const src = spoken
+    ? `<div class="sv-sheet-note ok">${spoken} phrases recognised from your recording \u2014 captions come from what you actually said.</div>`
+    : `<div class="sv-sheet-note">${SVSR.supported
+        ? 'Record with the mic on and captions are built from your voice, not the script. Read naturally in your own words \u2014 that is the point.'
+        : 'This browser cannot listen to audio, so captions cannot be generated here. Type them in below \u2014 they work exactly the same.'}</div>`;
   return `<button class="sv-add" data-act="autoCaps" style="margin-bottom:16px">
-      ${svIconSm('sparkle')} ${st.captions.length ? 'Rebuild captions from script' : 'Auto-caption from script'}</button>
+      ${svIconSm('sparkle')} ${st.captions.length ? 'Rebuild captions' : 'Build captions from my voice'}</button>
+    ${src}
     <div class="sv-field">
       <label>Style</label>
       <div class="sv-grid g3">
@@ -1869,14 +2331,22 @@ function svSheetCaptions(st){
     <div class="sv-field">
       <label>Height on screen</label>
       <input class="sv-slider" type="range" min="10" max="92" value="${st.capStyle.y}" data-input="capPos">
+      <div class="sv-sheet-note">You can also drag the caption on the video to move it.</div>
+    </div>
+    <div class="sv-field">
+      <label>Add a line by hand</label>
+      <div class="sv-row">
+        <input class="sv-input" id="sv-cap-manual" placeholder="Type a caption line">
+        <button class="sv-add" data-act="addCapManual" style="margin:0;flex:none">Add</button>
+      </div>
     </div>
     ${st.captions.length ? `<div class="sv-field"><label>Caption lines (${st.captions.length})</label>
-      <div class="sv-list">${st.captions.slice(0, 40).map(c => `
+      <div class="sv-list">${st.captions.slice(0, 60).map(c => `
         <div class="sv-item"><span class="d">${smFormatMs(c.startMs)}</span>
         <span class="n">${esc(c.text)}</span>
         <button class="x" data-act="delCap" data-arg="${c.id}" aria-label="Remove line">${svIconSm('close')}</button></div>`).join('')}</div>
       <div class="sv-sheet-note">Captions follow the timeline: trim or delete a clip and they re-time themselves.</div></div>`
-      : '<div class="sv-sheet-note">Captions are built from your teleprompter script, so they always match what you actually say. Load a script on the camera screen first.</div>'}`;
+      : ''}`;
 }
 
 function svSheetAudio(st){
@@ -1967,6 +2437,15 @@ function svSheetText(st){
     <div class="sv-field">
       <label>Shows for · ${Math.round((o.endMs - o.startMs) / 1000)}s</label>
       <input class="sv-slider" type="range" min="1" max="${Math.ceil(total / 1000)}" value="${Math.round((o.endMs - o.startMs) / 1000)}" data-input="ovDur">
+    </div>
+    <div class="sv-field">
+      <label>Crop · trim the edges of this overlay</label>
+      ${[['t', 'Top'], ['r', 'Right'], ['b', 'Bottom'], ['l', 'Left']].map(([k, label]) => `
+        <div class="sv-row" style="align-items:center;gap:10px;margin-bottom:8px">
+          <span style="width:56px;font-size:12px;color:var(--sv-mu)">${label}</span>
+          <input class="sv-slider" type="range" min="0" max="45" value="${(o.crop && o.crop[k]) || 0}" data-input="ovCropEdge" data-arg="${k}">
+        </div>`).join('')}
+      <button class="sv-add" data-act="ovCropReset" style="margin:0">Reset crop</button>
     </div>
     <button class="sv-add" data-act="deleteOverlay" data-arg="${o.id}" style="color:#FB7185;border-color:#FB718566">Remove this overlay</button>`;
 }
@@ -2276,9 +2755,22 @@ async function svFfmpeg(){
         const pct = Math.max(2, Math.min(97, Math.round((Number(progress) || 0) * 94)));
         svExportNote('Rendering…', pct);
       });
+      // SAME-ORIGIN URLs, deliberately — not blob: wrappers.
+      //
+      // ffmpeg.wasm boots its core inside a Web Worker. Handing it blob: URLs
+      // (the usual workaround for loading the engine off a CDN) makes the
+      // worker call `importScripts(blob:…)`, which the app's own Content
+      // Security Policy refuses — the loader then falls back to a dynamic
+      // `import()` of the same blob URL and dies with "failed to fetch
+      // dynamically imported module: blob:…". The only ways out are to weaken
+      // script-src to allow blob scripts, or to stop using blobs at all.
+      //
+      // The engine is vendored under /vendor/ffmpeg, so it is already the same
+      // origin. Plain paths are allowed by script-src 'self' and keep the CSP
+      // tight — no blob: scripts anywhere.
       await inst.load({
-        coreURL: await U.toBlobURL(SVFF.core + '/ffmpeg-core.js', 'text/javascript'),
-        wasmURL: await U.toBlobURL(SVFF.core + '/ffmpeg-core.wasm', 'application/wasm'),
+        coreURL: SVFF.core + '/ffmpeg-core.js',
+        wasmURL: SVFF.core + '/ffmpeg-core.wasm',
       });
       SVFF.inst = inst;
       return inst;
@@ -2308,6 +2800,86 @@ function svExportNote(note, pct){
 }
 
 function svExtOf(blob){ return (blob && blob.type && blob.type.includes('mp4')) ? 'mp4' : 'webm'; }
+
+/* ── FRAME-PACING WATCHDOG ────────────────────────────────────────────────
+   The capture ladder picks a sensible starting size, but it is a guess from
+   core count. This measures what actually happened during a take and steps the
+   device down a rung if it still could not keep up, so a struggling phone
+   improves on the second take instead of ruining every take the same way.
+   The decision itself (spAutoFps / spLighterTier) is pure and unit-tested. */
+
+function svFpsWatchStart(){
+  SVP.dts = [];
+  SVP.fpsLast = performance.now();
+  const loop = t => {
+    const st = S.studio;
+    if (SVP.fpsLast) SVP.dts.push(t - SVP.fpsLast);
+    SVP.fpsLast = t;
+    if (st && st.running){
+      // Cap the sample so a long take cannot grow the array without bound.
+      if (SVP.dts.length > 1800) SVP.dts.splice(0, 600);
+      SVP.fpsRaf = requestAnimationFrame(loop);
+    }
+  };
+  SVP.fpsRaf = requestAnimationFrame(loop);
+}
+
+function svFpsWatchStop(){
+  cancelAnimationFrame(SVP.fpsRaf);
+  SVP.fpsRaf = null;
+  SVP.fpsLast = 0;
+}
+
+function svPerfAdapt(){
+  svFpsWatchStop();
+  const st = svState();
+  const s = spFrameStats(SVP.dts, 33.4);
+  SVP.dts = [];
+  if (s.frames < 20) return;
+  st.capFps = s.fps;
+  const cur = svCaptureProfileNow(st).fps;
+  const next = spAutoFps(s, cur, { floor: 15, ceiling: 30, step: 5 });
+  if (next < cur){
+    const lighter = spLighterTier(svCaptureTier(st));
+    if (lighter){
+      st.perfTier = lighter;
+      svToast('Recording was choppy \u2014 switched to ' + svCaptureLabel(st) + ' so the next take is smooth');
+    }
+  }
+}
+
+/* Re-encodes a finished take with the chosen look burnt in, and at the size the
+   ladder settled on. Returns the original blob if anything goes wrong: losing a
+   take because a filter failed would be far worse than losing the filter. */
+async function svBakeTake(blob, filterId){
+  const plan = spRecordBakePlan(filterId, svCaptureProfileNow(svState()));
+  if (!plan.needsBake || !plan.filter) return blob;
+  try {
+    const ff = await svFfmpeg();
+    const U = window.FFmpegUtil;
+    if (!U) return blob;
+    const ext = svExtOf(blob);
+    const inName = 'take-in.' + ext;
+    const outName = 'take-out.mp4';
+    await ff.writeFile(inName, new Uint8Array(await blob.arrayBuffer()));
+    await ff.exec([
+      '-i', inName,
+      '-vf', plan.filter,
+      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '24', '-pix_fmt', 'yuv420p',
+      '-c:a', 'aac', '-b:a', '128k',
+      '-movflags', '+faststart',
+      outName,
+    ]);
+    const data = await ff.readFile(outName);
+    const bytes = data && data.buffer ? new Uint8Array(data.buffer) : new Uint8Array(data || []);
+    const out = new Blob([bytes], { type: 'video/mp4' });
+    try { await ff.deleteFile(inName); await ff.deleteFile(outName); } catch (_){}
+    return out.size > 1200 ? out : blob;
+  } catch (err){
+    console.warn('[studio] filter bake', err);
+    return blob;
+  }
+}
 
 /* Draws a caption or text card to a PNG at the export resolution, so the
    burnt-in words match what the preview showed. Rendering to an image avoids

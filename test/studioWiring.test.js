@@ -26,6 +26,7 @@ const path = require('node:path');
 const PUBLIC = path.join(__dirname, '..', 'public');
 const STUDIO_SRC = fs.readFileSync(path.join(PUBLIC, 'studio.js'), 'utf8');
 const MODEL_SRC = fs.readFileSync(path.join(PUBLIC, 'lib', 'studioModel.js'), 'utf8');
+const PERF_SRC = fs.readFileSync(path.join(PUBLIC, 'lib', 'studioPerf.js'), 'utf8');
 const INDEX_SRC = fs.readFileSync(path.join(PUBLIC, 'index.html'), 'utf8');
 
 // Is `name` defined in this source? Covers a function declaration, a
@@ -41,23 +42,49 @@ function isDefined(name, src){
 
 function usedHelpers(src){
   const used = new Set();
-  const re = /\b(sv|sm)[A-Z][A-Za-z0-9]*/g;
+  // sv* = DOM layer, sm* = pure timeline model, sp* = pure performance /
+  // overlay / speech-caption model (lib/studioPerf.js).
+  const re = /\b(sv|sm|sp)[A-Z][A-Za-z0-9]*/g;
   let m;
   while ((m = re.exec(src)) !== null) used.add(m[0]);
   return used;
 }
 
-test('every sv*/sm* helper studio.js calls is actually defined', () => {
+test('every sv*/sm*/sp* helper studio.js calls is actually defined', () => {
   const used = usedHelpers(STUDIO_SRC);
   assert.ok(used.size > 30, 'expected to find many studio helpers, found ' + used.size);
 
-  const missing = [...used].filter(n => !isDefined(n, STUDIO_SRC) && !isDefined(n, MODEL_SRC));
+  const missing = [...used].filter(n =>
+    !isDefined(n, STUDIO_SRC) && !isDefined(n, MODEL_SRC) && !isDefined(n, PERF_SRC));
   assert.deepEqual(
     missing,
     [],
     'studio.js calls helpers that are never defined (a typo here throws only at ' +
     'render time, leaving the UI silently stale): ' + missing.join(', ')
   );
+});
+
+test('the perf helpers are loaded before studio.js, which calls them', () => {
+  // A helper module must be parsed before its caller. Loading studio.js first
+  // would leave every sp* call undefined at the moment the file runs.
+  const perfAt = INDEX_SRC.indexOf('studioPerf.js');
+  const studioAt = INDEX_SRC.indexOf('studio.js');
+  assert.ok(perfAt > -1, 'index.html must load lib/studioPerf.js');
+  assert.ok(studioAt > -1, 'index.html must load studio.js');
+  assert.ok(perfAt < studioAt, 'lib/studioPerf.js must be loaded BEFORE studio.js');
+});
+
+test('every sp* helper the studio calls is exported by the perf model', () => {
+  // The perf module is loaded as a plain script, so its functions become
+  // globals — but only the ones actually declared at top level. A name that is
+  // used and exported but never declared would be undefined at runtime.
+  const spUsed = [...usedHelpers(STUDIO_SRC)].filter(n => n.startsWith('sp'));
+  assert.ok(spUsed.length > 5, 'expected the studio to use the perf model, found ' + spUsed.length);
+  const missing = spUsed.filter(n => !isDefined(n, PERF_SRC));
+  assert.deepEqual(missing, [], 'sp* helpers must live in lib/studioPerf.js: ' + missing.join(', '));
+  const exported = PERF_SRC.slice(PERF_SRC.indexOf('module.exports') > -1 ? PERF_SRC.indexOf('module.exports') : 0);
+  const unexported = spUsed.filter(n => !exported.includes(n));
+  assert.deepEqual(unexported, [], 'sp* helpers must be listed in module.exports so tests can pin them: ' + unexported.join(', '));
 });
 
 test('the model file is the only place sm* helpers live', () => {
