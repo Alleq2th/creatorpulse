@@ -72,6 +72,10 @@ function svDefaultState(){
     // Which rung of the capture ladder this device settled on, and the measured
     // frame rate of the last take. Both are learned from real recordings.
     perfTier: null, capFps: 0,
+    // The frame rate this camera actually reported it can do, and the one we
+    // asked it for. Browsers silently cap the rate, so the only honest way to
+    // tell a creator what they are getting is to read it back afterwards.
+    fpsMax: 0, fpsWanted: 0, fpsActual: 0,
 
     // Content
     clips: [], overlays: [], captions: [], audioTracks: [],
@@ -345,6 +349,7 @@ function svCameraView(st){
         <button class="sv-rail-btn ${st.countdown ? 'on' : ''}" data-act="cycleCountdown">${svIcon('timer')}<span>${st.countdown ? st.countdown + 's' : 'Timer'}</span></button>
         <button class="sv-rail-btn ${st.micOn ? '' : 'warn'}" data-act="mic">${svIcon('voice')}<span>${st.micOn ? 'Mic' : 'Muted'}</span></button>
         <button class="sv-rail-btn ${st.camFilter !== 'none' ? 'on' : ''}" data-act="camFilters">${svIcon('fx')}<span>${st.camFilter === 'none' ? 'Look' : (SP_RECORD_FILTERS[st.camFilter] ? SP_RECORD_FILTERS[st.camFilter].label : 'Look')}</span></button>
+        <button class="sv-rail-btn ${st.fpsWanted ? 'on' : ''}" data-act="fps" aria-label="Frame rate"><span>${svFpsLabel()}</span></button>
       </div>
 
       ${svCamFilterStrip(st)}
@@ -432,7 +437,7 @@ function svCaptureTier(st){
   return spAutoTier(svDeviceProbe());
 }
 function svCaptureProfileNow(st){
-  return spCaptureProfile(svCaptureTier(st));
+  return spCaptureProfile(svCaptureTier(st), st.targetFps);
 }
 function svCaptureLabel(st){
   const p = svCaptureProfileNow(st);
@@ -872,16 +877,16 @@ const SV_ACT = {
   },
   capPreset:       (a, el) => { const st = svState(); st.capStyle.preset = a; render(); },
   capSize:         (a, el) => { const st = svState(); st.capStyle.size = Number(el.value); svApplyCapLive(); },
-  capPos:          (a, el) => { const st = svState(); st.capStyle.y = Number(el.value); svApplyCapLive(); },
-  capWord:         (a, el) => { const st = svState(); st.capWords = Number(el.value); svAutoCaptions(); },
+  capPos:          (a, el) => { const st = svState(); st.capStyle.y = Number(el.value); svApplyCapLive(); },  capWord:         (a, el) => { const st = svState(); st.capWords = Number(el.value); svAutoCaptions(); },
   delCap:          a => { const st = svState(); st.captions = st.captions.filter(c => c.id !== a); render(); },
 
   /* text overlay editor */
   ovStyle:         a => { const st = svState(); const o = svFindOverlay(st.editText); if (o) o.style = a; render(); },
   ovColor:         (a, el) => { const st = svState(); const o = svFindOverlay(st.editText); if (o) o.color = a; render(); },
-  ovSize:          (a, el) => { const st = svState(); const o = svFindOverlay(st.editText); if (o) o.size = Number(el.value); render(); },
+  ovSize:          (a, el) => { const st = svState(); const o = svFindOverlay(st.editText); if (o){ o.size = Number(el.value); svApplyOverlayLive(); } },
   ovText:          (a, el) => { const st = svState(); const o = svFindOverlay(st.editText); if (o) o.text = el.value; svApplyOverlayLive(); },
   ovDone:          () => { const st = svState(); st.editText = null; st.sheet = null; svPush(); render(); },
+  transcribeAll:   () => svTranscribeAll(),
   addImageOv:      () => { const el = document.getElementById('sv-add-image'); if (el) el.click(); },
   addVideoOv:      () => { const el = document.getElementById('sv-add-video-ov'); if (el) el.click(); },
   ovDur:           (a, el) => { const st = svState(); const o = svFindOverlay(st.editText); if (o) o.endMs = o.startMs + Number(el.value) * 1000; render(); },
@@ -915,6 +920,7 @@ const SV_ACT = {
 
   /* camera look (chosen before recording, baked into the file on stop) */
   camFilters:      () => { const host = document.getElementById('sv-camfilters'); if (host) host.classList.toggle('open'); },
+  fps:             () => svCycleFps(),
   pickCamFilter:   a => {
     const st = svState();
     st.camFilter = a;
@@ -951,15 +957,68 @@ const SV_ACT = {
 };
 
 const SV_PTR = {
-  clip:        (e, id) => svSelect(id, 'video'),
+  // Tap a clip to select it; tap the SAME clip again to split it where the
+  // playhead is. That is the Edits/CapCut gesture: no dragging a blade around,
+  // no hunting for a menu. The double-tap window is short enough that a second
+  // deliberate tap reads as intent, and long enough to forgive a slow thumb.
+  clip:        (e, id) => svTapClip(id),
   grabIn:      (e, id) => svBeginTrim(e, id, 'in'),
   grabOut:     (e, id) => svBeginTrim(e, id, 'out'),
-  ovBody:      (e, id) => svBeginOverlayDrag(e, id),
-  grabOv:      (e, id) => svBeginOverlayResize(e, id),
+  ovBody:      (e, id) => svBeginOverlayGesture(e, id),
+  grabOv:      (e, id) => svBeginOverlayGesture(e, id),
   cap:         (e)    => svBeginCaptionDrag(e),
   prompterDrag:(e)    => svBeginPrompterDrag(e),
   scrub:       (e)    => svBeginScrub(e),
 };
+
+/* Tap-to-split. A first tap selects the clip; a second tap on the clip that is
+   ALREADY selected cuts it at the playhead, straight away. */
+const SVTAP = { id: null, at: 0 };
+
+function svTapClip(id){
+  const st = svState();
+  const now = Date.now();
+  const again = SVTAP.id === id && (now - SVTAP.at) < 420;
+  SVTAP.id = id; SVTAP.at = now;
+  if (again && st.selectedId === id && st.selectedType === 'video'){
+    svSplitAtPlayhead();
+    return;
+  }
+  svSelect(id, 'video');
+}
+
+/* Split the selected clip at the playhead. If the playhead happens to sit on
+   another clip, that one is split instead — tapping a clip should always cut
+   the clip being tapped, not whichever one the playhead was left on. */
+function svSplitAtPlayhead(){
+  const st = svState();
+  if (!st.clips.length) return;
+  const id = st.selectedId;
+  const clip = st.clips.find(c => c.id === id);
+  if (!clip) return;
+  // Work in this clip's own timeline: the playhead is the cut point when it
+  // falls inside the clip, otherwise cut the clip in half.
+  const start = smClipStart(st.clips, id);
+  const len = smClipMs(clip);
+  let cut = st.playhead - start;
+  if (cut < 400 || cut > len - 400) cut = Math.round(len / 2);
+  const at = start + cut;
+  const r = smSplitAt(st.clips, at, () => svId('c'), 400);
+  if (!r || !r.newId) return svToast('This clip is too short to split');
+  st.clips = r.clips.map(c => {
+    const orig = clip;
+    return Object.assign({}, c, {
+      url: c.url || orig.url, blob: c.blob || orig.blob,
+      thumb: c.thumb || orig.thumb || '', speech: c.speech || orig.speech || [],
+    });
+  });
+  st.selectedId = r.newId;
+  st.selectedType = 'video';
+  st.captions = svRecaptionIfSpoken(st.clips, st.captions);
+  svPush();
+  render();
+  svToast('Split — drag the new edge to fine-tune');
+}
 
 document.addEventListener('click', function (e){
   const host = e.target.closest && e.target.closest('.sv-root');
@@ -1028,7 +1087,10 @@ async function svOpenCamera(){
       video: {
         facingMode: st.facing,
         width: { ideal: prof.width }, height: { ideal: prof.height },
-        frameRate: { ideal: Math.min(30, prof.fps) },
+        // Ask for the frame rate the device itself reported it can sustain,
+        // never a number invented by the app. Asking for more is not an error:
+        // the browser just clamps it and says nothing.
+        frameRate: { ideal: prof.fps },
       },
       audio: st.micOn ? { echoCancellation: true, noiseSuppression: true } : false,
     });
@@ -1041,8 +1103,61 @@ async function svOpenCamera(){
   }
   SVC.track = SVC.stream.getVideoTracks()[0] || null;
   st.camReady = true;
+  svReadFpsCeiling(prof);
   svAttachLive();
   svApplyHardwareZoom();
+}
+
+/* Ask the camera what frame rates it really supports, then choose the best one
+   inside that range. MediaTrackCapabilities is the camera's own spec sheet;
+   not every browser exposes it, and when it is missing we keep the tier
+   default rather than pretending to know. */
+function svReadFpsCeiling(prof){
+  const st = svState();
+  const t = SVC.track;
+  let caps = null;
+  try { if (t && typeof t.getCapabilities === 'function') caps = t.getCapabilities() || null; } catch (_){ caps = null; }
+  st.fpsMax = caps && isFinite(Number(caps.frameRateMax)) ? Math.round(Number(caps.frameRateMax)) : 0;
+  const wanted = st.fpsWanted > 0 ? st.fpsWanted : Math.max(prof.fps, 60);
+  st.targetFps = spPickFps(wanted, caps || {});
+}
+
+/* What the camera actually negotiated, read back from the live track after it
+   starts. This is the number to trust \u2014 it is what the lens is delivering,
+   not what the app hoped for. */
+function svReadActualFps(){
+  const st = svState();
+  const t = SVC.track;
+  let s = null;
+  try { if (t && typeof t.getSettings === 'function') s = t.getSettings() || null; } catch (_){ s = null; }
+  const f = s && isFinite(Number(s.frameRate)) ? Math.round(Number(s.frameRate)) : 0;
+  if (f) st.fpsActual = f;
+  return f;
+}
+
+/* The frame-rate button on the camera rail. Cycles the wish list and clamps it
+   to what this device can do, so the label never promises the impossible. */
+function svCycleFps(){
+  const st = svState();
+  const caps = { frameRateMax: st.fpsMax || 0 };
+  const ladder = [30, 60, 120];
+  const now = st.fpsWanted || 0;
+  const i = ladder.indexOf(now);
+  let next = ladder[(i + 1) % ladder.length];
+  if (st.fpsMax && next > st.fpsMax) next = ladder[0];
+  st.fpsWanted = next;
+  st.targetFps = spPickFps(next, caps);
+  svToast(svFpsLabel());
+  render();
+}
+
+// Plain-words label for the rail button and the toast.
+function svFpsLabel(){
+  const st = svState();
+  const want = st.fpsWanted || 0;
+  if (!want) return 'Auto';
+  if (st.fpsMax && want > st.fpsMax) return want + 'fps (max ' + st.fpsMax + ')';
+  return want + 'fps';
 }
 
 function svAttachLive(){
@@ -1196,6 +1311,10 @@ async function svStartRecording(){
 
   st.running = true; st.paused = false;
   st.recStartedAt = Date.now(); st.recAccumMs = 0;
+  // Read back what the camera actually delivered, so the fps shown to the user
+  // is measured fact rather than the number we asked for.
+  const fpsNow = svReadActualFps();
+  if (fpsNow) svToast(spFpsNote(st.targetFps || st.fpsWanted, fpsNow, { frameRateMax: st.fpsMax }));
   svSpeechReset();
   svSpeechStart();
   render();
@@ -1391,11 +1510,24 @@ async function svFinishRecording(mime){
   // take they just shot, where they can watch it, keep it or bin it. Previously
   // stopping produced no visible response at all.
   svPlayTake(clip.id);
-  svToast('Take saved — watch it back, or delete it and shoot again');
+  svToast('Take saved \u2014 watch it back, or delete it and shoot again');
+
+  // Then transcribe the take on the server. This is what makes captions come
+  // from the creator's own words even in browsers with no live speech
+  // recognition at all (iOS Safari), and it replaces the live guesses with a
+  // properly timestamped transcript once it lands.
+  if (st.micOn && raw.size > 20000) svTranscribeTake(clip.id, raw).catch(() => {});
 
   // Now bake the chosen look in, if there was one, without blocking any of the
   // above. The take is already usable; the filter catches up moments later.
-  if (st.camFilter && st.camFilter !== 'none') svQueueBake(clip.id, raw, st.camFilter);
+  if (st.camFilter && st.camFilter !== 'none'){
+    // Carry the look into the EDITOR too. The bake only rewrites the recorded
+    // file; without this the editor's own filter stayed 'none', so a creator who
+    // picked a look before recording watched it vanish the moment they left the
+    // camera. Both now name the same look, so preview and export agree.
+    st.filter = st.camFilter;
+    svQueueBake(clip.id, raw, st.camFilter);
+  }
 }
 
 /* ── LOOK-BAKE QUEUE ───────────────────────────────────────────────────────
@@ -1729,80 +1861,132 @@ function svPaintPlayhead(){
 }
 
 /* ── OVERLAY DRAG + RESIZE ────────────────────────────────────────────────
-   The shipped version was janky and had no resize at all: the drag read the
-   pointer against a rect captured once, so it drifted as the page moved, it
-   clamped to 2–98% so an overlay could be parked under an edge and lost, and
-   the only "handle" was a CSS `::after` decal wired to nothing. Now:
-     - Drag moves the body, live, straight from the current stage rect.
-     - Corner handles resize (a pinch reaches the same maths from two touches).
-     - spOverlayMove clamps so half the overlay is always on screen.
-   Position and size update in place rather than re-rendering, which is what
-   made the old one stutter. */
+   ONE gesture handler for every overlay kind: text, caption, image and video.
+   Tap-and-drag moves it anywhere; two fingers pinch it bigger or smaller.
 
+   The shipped version had no resize at all, its drag read the pointer against
+   a rect captured once (so it drifted), and it re-rendered the whole screen on
+   every move — which is exactly why dragging felt janky. Now:
+     - `setPointerCapture`, so a gesture survives the finger leaving the box
+       instead of silently dropping half-way through a drag.
+     - style writes are throttled to one per animation frame and nothing calls
+       render() during the gesture, so there is no re-render storm.
+     - a pinch and the corner handles reach the SAME code, so they cannot
+       disagree about how big the overlay is. */
+
+// The stage's live rectangle, read fresh at the start of every gesture. The
+// shipped drag captured this once and drifted as the page moved.
 function svStageRect(){
   const stage = document.getElementById('sv-ed-stage');
   return stage ? stage.getBoundingClientRect() : null;
 }
 
-function svBeginOverlayDrag(e, id){
+function svOverlayTransform(o){
+  return 'translate(-50%,-50%) scale(' + (o.scale || 1) + ')';
+}
+
+/* One gesture at a time, shared by every finger on that overlay.
+
+   The first cut of this created the pointer set INSIDE the pointerdown handler,
+   so each finger got its own private set of one — a two-finger pinch was read as
+   two separate drags and the overlay never scaled. The state has to belong to
+   the GESTURE, not to the finger that started it. */
+let SVGEST = null;
+
+const svGestSpread = v => (v.length < 2 ? 0 : Math.hypot(v[0].x - v[1].x, v[0].y - v[1].y));
+
+function svGestPlace(g, clientX, clientY, useGrab){
+  const nx = ((clientX - (useGrab ? g.grab.dx : 0) - g.rect.left) / g.rect.width) * 100;
+  const ny = ((clientY - (useGrab ? g.grab.dy : 0) - g.rect.top) / g.rect.height) * 100;
+  const pos = spOverlayMove({ x: nx, y: ny }, 0, 0, { width: g.rect.width, height: g.rect.height }, g.box);
+  g.o.x = pos.x; g.o.y = pos.y;
+}
+
+// Coalesce every pointer move in a frame into ONE style write. Nothing here
+// calls render(), which is what kept the drag from fighting the layout.
+function svGestSchedule(g){
+  if (g.raf) return;
+  g.raf = requestAnimationFrame(() => {
+    g.raf = 0;
+    g.el.style.left = g.o.x + '%';
+    g.el.style.top = g.o.y + '%';
+    g.el.style.transform = svOverlayTransform(g.o);
+  });
+}
+
+function svGestMove(ev, g){
+  if (!g.pts.has(ev.pointerId)) return;
+  g.pts.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+  const v = Array.from(g.pts.values());
+  if (v.length >= 2){
+    // Pinch: the ratio of finger separation drives the scale.
+    if (!g.start.dist){ g.start.dist = svGestSpread(v) || 1; g.start.scale = g.o.scale || 1; }
+    g.o.scale = spOverlayScale(g.start.scale, (svGestSpread(v) || g.start.dist) / g.start.dist, { min: 0.25, max: 4 });
+    svGestPlace(g, (v[0].x + v[1].x) / 2, (v[0].y + v[1].y) / 2, false);
+  } else {
+    svGestPlace(g, ev.clientX, ev.clientY, true);
+  }
+  svGestSchedule(g);
+}
+
+function svGestEnd(ev, g){
+  g.pts.delete(ev.pointerId);
+  try { g.el.releasePointerCapture(ev.pointerId); } catch (_){}
+  if (g.pts.size === 0){
+    g.el.removeEventListener('pointermove', g.move);
+    g.el.removeEventListener('pointerup', g.end);
+    g.el.removeEventListener('pointercancel', g.end);
+    if (g.raf) cancelAnimationFrame(g.raf);
+    SVGEST = null;
+    svPush();
+  } else if (g.pts.size === 1){
+    // Lifting one finger must not make the overlay jump: re-baseline so the
+    // remaining finger carries on as a plain drag.
+    g.start.dist = 0;
+    g.start.scale = g.o.scale || 1;
+  }
+}
+
+function svBeginOverlayGesture(e, id){
   e.preventDefault();
   e.stopPropagation();
   const st = svState();
-  const o = st.overlays.find(x => x.id === id);
+  const o = svFindOverlay(id);
   if (!o) return;
-  svSelect(id, 'overlay');
-  const rect = svStageRect();
-  if (!rect) return;
-  const el = document.querySelector('.sv-overlay[data-arg="' + id + '"]');
-  // Offset of the grab inside the overlay, so it does not jump to centre.
-  const box = el ? el.getBoundingClientRect() : { width: 0, height: 0 };
-  const grab = { dx: e.clientX - (box.left + box.width / 2), dy: e.clientY - (box.top + box.height / 2) };
 
-  const move = ev => {
-    const nx = ((ev.clientX - grab.dx - rect.left) / rect.width) * 100;
-    const ny = ((ev.clientY - grab.dy - rect.top) / rect.height) * 100;
-    const pos = spOverlayMove({ x: nx, y: ny }, 0, 0, { width: rect.width, height: rect.height }, box);
-    o.x = pos.x; o.y = pos.y;
-    if (el){ el.style.left = o.x + '%'; el.style.top = o.y + '%'; }
-  };
-  const up = () => {
-    window.removeEventListener('pointermove', move);
-    window.removeEventListener('pointerup', up);
-    svPush();
-  };
-  window.addEventListener('pointermove', move);
-  window.addEventListener('pointerup', up);
+  let g = SVGEST && SVGEST.id === id ? SVGEST : null;
+  if (!g){
+    // Select first, THEN look the node up: svSelect re-renders, and the node
+    // that existed before the render is not the one still on screen.
+    if (!(st.selectedId === id && st.selectedType === 'overlay')) svSelect(id, 'overlay');
+    const el = document.querySelector('.sv-overlay[data-arg="' + id + '"]');
+    if (!el) return;
+    const rect = svStageRect();
+    if (!rect) return;
+    const box = el.getBoundingClientRect();
+    g = {
+      id, o, el, rect, box,
+      pts: new Map(),
+      grab: { dx: e.clientX - (box.left + box.width / 2), dy: e.clientY - (box.top + box.height / 2) },
+      start: { scale: o.scale || 1, dist: 0 },
+      raf: 0,
+    };
+    g.move = ev => svGestMove(ev, g);
+    g.end = ev => svGestEnd(ev, g);
+    el.addEventListener('pointermove', g.move);
+    el.addEventListener('pointerup', g.end);
+    el.addEventListener('pointercancel', g.end);
+    SVGEST = g;
+  }
+  g.pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (g.pts.size === 2) g.start.dist = 0;   // a second finger begins a pinch
+  try { g.el.setPointerCapture(e.pointerId); } catch (_){}
 }
 
-// Corner-handle resize. A pinch reaches the same path by passing the ratio of
-// the two finger distances as `factor`, so one implementation covers both.
-function svBeginOverlayResize(e, id){
-  e.preventDefault();
-  e.stopPropagation();
-  const st = svState();
-  const o = st.overlays.find(x => x.id === id);
-  if (!o) return;
-  svSelect(id, 'overlay');
-  const el = document.querySelector('.sv-overlay[data-arg="' + id + '"]');
-  if (!el) return;
-  const start = { x: e.clientX, y: e.clientY, scale: o.scale || 1 };
-  const startW = el.getBoundingClientRect().width || 1;
-
-  const move = ev => {
-    // Corner drag: whichever axis moved more drives the scale, so a diagonal
-    // pull feels natural without having to know the overlay's aspect ratio.
-    const delta = ((ev.clientX - start.x) + (ev.clientY - start.y)) / 2;
-    o.scale = spOverlayScale(start.scale, (startW + delta * 2) / startW, { min: 0.25, max: 4 });
-    el.style.transform = 'translate(-50%,-50%) scale(' + o.scale + ')';
-  };
-  const up = () => {
-    window.removeEventListener('pointermove', move);
-    window.removeEventListener('pointerup', up);
-    svPush();
-  };
-  window.addEventListener('pointermove', move);
-  window.addEventListener('pointerup', up);
-}
+// The corner handles are a second way into the SAME gesture, so a handle drag
+// and a pinch can never diverge.
+function svBeginOverlayResize(e, id){ svBeginOverlayGesture(e, id); }
+function svBeginOverlayDrag(e, id){ svBeginOverlayGesture(e, id); }
 
 // Dragging the caption card moves it up and down the frame, which is the one
 // thing a creator actually needs to change about it.
@@ -1934,7 +2118,7 @@ function svDeleteSelected(){
   st.selectedType = st.clips.length ? 'video' : null;
   // Captions are timed to the timeline, so they are recomputed rather than
   // left hanging over the shortened video.
-  if (st.captions.length && st.script) st.captions = smAutoCaptions(st.script, st.clips, st.capWords || 5, 42);
+  st.captions = svRecaptionIfSpoken(st.clips, st.captions);
   st.playhead = svNum(st.playhead, 0, smTotalMs(st.clips));
   render();
   svToast('Clip deleted');
@@ -2075,6 +2259,105 @@ function svSpeechStop(){
 
 function svSpeechReset(){ SVSR.segs = []; SVC.speechT0 = Date.now(); }
 
+/* ── SERVER-SIDE TRANSCRIPTION (Groq Whisper) ────────────────────────────────
+   The live Web Speech API above is a nice-to-have, not the source of truth: it
+   is missing entirely in some browsers (notably iOS Safari) and it drops words
+   when the tab loses focus. So the recording is transcribed properly on the
+   server after the fact, through the /api/transcribe endpoint the backend
+   already provides (Groq whisper-large-v3, which returns timestamps).
+
+   The recognised segments replace the live guesses once they arrive, so the
+   captions come from what was actually said, with real timings. */
+
+// Decode the take's own audio to 16kHz mono WAV. WAV rather than the recorded
+// webm because the encoder is not guaranteed to produce a container every
+// decoder can read, and 16kHz mono is what Whisper wants anyway.
+async function svExtractAudioWav(blob){
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return null;
+  let ctx = null;
+  try {
+    const buf = await blob.arrayBuffer();
+    ctx = new AC();
+    const decoded = await ctx.decodeAudioData(buf.slice(0));
+    const rate = 16000;
+    const len = Math.max(1, Math.ceil(decoded.duration * rate));
+    const off = new OfflineAudioContext(1, len, rate);
+    const src = off.createBufferSource();
+    src.buffer = decoded;
+    src.connect(off.destination);
+    src.start(0);
+    const rendered = await off.startRendering();
+    const pcm = rendered.getChannelData(0);
+    return svWavBlob(pcm, rate);
+  } catch (_){
+    return null;
+  } finally {
+    // A leaked AudioContext keeps a hardware audio session alive for the life
+    // of the page, which is exactly the kind of thing that makes a phone hot.
+    try { if (ctx && ctx.close) ctx.close(); } catch (_){}
+  }
+}
+
+// Minimal 16-bit PCM WAV writer.
+function svWavBlob(samples, rate){
+  const n = samples.length;
+  const buf = new ArrayBuffer(44 + n * 2);
+  const v = new DataView(buf);
+  const str = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  str(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); str(8, 'WAVE');
+  str(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true);
+  v.setUint16(34, 16, true);
+  str(36, 'data'); v.setUint32(40, n * 2, true);
+  for (let i = 0; i < n; i++){
+    const s = Math.max(-1, Math.min(1, samples[i] || 0));
+    v.setInt16(44 + i * 2, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+  }
+  return new Blob([buf], { type: 'audio/wav' });
+}
+
+/* Transcribe one take on the server and fold the result into its clip.
+   Every failure is swallowed and reported as a toast: captions are a
+   nice-to-have, and losing a whole take to a transcription hiccup would be
+   far worse than having no captions. */
+async function svTranscribeTake(clipId, blob){
+  const st = svState();
+  if (!blob || blob.size < 1200) return false;
+  const wav = await svExtractAudioWav(blob);
+  if (!wav) return false;
+  try {
+    const fd = new FormData();
+    fd.append('file', wav, 'take.wav');
+    fd.append('granularity', 'segment');
+    const r = await fetch('/api/transcribe', { method: 'POST', body: fd });
+    if (!r.ok){
+      // 503 means the server has no GROQ_API_KEY. Say so once, plainly, rather
+      // than failing silently every single take.
+      if (r.status === 503) svToast('Auto-captions need GROQ_API_KEY on the server');
+      return false;
+    }
+    const data = await r.json();
+    const segs = (Array.isArray(data.segments) ? data.segments : [])
+      .map(s => ({ text: String(s.text || '').trim(), atMs: Math.round((Number(s.start) || 0) * 1000) }))
+      .filter(s => s.text);
+    const c = st.clips.find(x => x.id === clipId);
+    if (!c) return false;
+    if (segs.length){
+      // Server transcript is the source of truth; drop the live guesses.
+      c.speech = segs;
+      const spoken = st.clips.reduce((n, x) => n + ((x.speech || []).length), 0);
+      if (spoken) st.captions = svCaptionsFromSpeech();
+      render();
+      svToast(segs.length + ' phrases transcribed from your recording');
+      return true;
+    }
+    return false;
+  } catch (_){
+    return false;
+  }
+}
+
 // Captions from the recognised speech of the actual takes.
 function svCaptionsFromSpeech(){
   const st = svState();
@@ -2103,14 +2386,16 @@ function svAddCaptionManual(text){
 
 function svAutoCaptions(){
   const st = svState();
-  const words = st.capWords || 5;
   if (!st.clips.length) return svToast('Add a clip first');
 
-  // Preferred path: captions from the recognised speech of the actual takes.
-  // Speech recognition is not in every browser, so this falls back to the
-  // script only when there is genuinely nothing spoken to work from — and says
-  // which of the two it used, rather than quietly doing the wrong thing.
-  if (st.clips.some(c => (c.speech || []).length)){
+  // Captions come from what the creator SAID. There is deliberately no
+  // script-text fallback any more: the script is what the teleprompter showed,
+  // and people do not read it word for word, so script-derived cards drifted
+  // out of sync within seconds and read as a bug. When there is nothing
+  // recognised to work from, the app says so plainly and offers the manual
+  // editor, rather than quietly captioning the wrong words.
+  const spoken = st.clips.reduce((n, c) => n + ((c.speech || []).length), 0);
+  if (spoken){
     svPush();
     st.captions = svCaptionsFromSpeech();
     svRenderSheetOnly();
@@ -2118,16 +2403,22 @@ function svAutoCaptions(){
     return svToast(st.captions.length + ' caption cards built from what you said');
   }
 
-  if (!st.script || !String(st.script).trim()){
-    return svToast(SVSR.supported
-      ? 'Record with the mic on and captions build from your voice'
-      : 'This browser cannot listen to audio \u2014 add captions by hand below');
-  }
-  svPush();
-  st.captions = smAutoCaptions(st.script, st.clips, words, 42);
-  svRenderSheetOnly();
-  svRepaintTimeline();
-  svToast(st.captions.length + ' caption cards from the script (nothing was spoken)');
+  return svToast(SVSR.supported
+    ? 'Nothing recognised yet \u2014 record with the mic on and captions build from your voice'
+    : 'This browser cannot listen to audio \u2014 add captions by hand below');
+}
+
+/* Re-time existing caption cards after the timeline changed.
+
+   Only speech-derived cards are rebuilt, because only they can be re-derived
+   honestly. Hand-typed lines are the creator's own words and stay exactly where
+   they were put. Feeding the script back in here is what used to replace a
+   creator's real captions with the teleprompter text the moment they deleted a
+   clip. */
+function svRecaptionIfSpoken(clips, captions){
+  const spoken = (clips || []).reduce((n, c) => n + ((c.speech || []).length), 0);
+  if (!spoken || !(captions || []).length) return captions;
+  return svCaptionsFromSpeech();
 }
 
 /* ── AUDIO ──────────────────────────────────────────────────────────────── */
@@ -2309,12 +2600,18 @@ function svSheetTrim(st){
 function svSheetCaptions(st){
   const presets = ['classic', 'boxed', 'pop', 'italic', 'karaoke', 'minimal'];
   const spoken = st.clips.reduce((n, c) => n + ((c.speech || []).length), 0);
+  // Offer the server transcript whenever there is a take that has not been
+  // transcribed yet \u2014 that is the reliable path, and it works in every browser.
+  const pending = st.clips.filter(c => c.blob && !(c.speech || []).length).length;
   const src = spoken
     ? `<div class="sv-sheet-note ok">${spoken} phrases recognised from your recording \u2014 captions come from what you actually said.</div>`
     : `<div class="sv-sheet-note">${SVSR.supported
         ? 'Record with the mic on and captions are built from your voice, not the script. Read naturally in your own words \u2014 that is the point.'
-        : 'This browser cannot listen to audio, so captions cannot be generated here. Type them in below \u2014 they work exactly the same.'}</div>`;
-  return `<button class="sv-add" data-act="autoCaps" style="margin-bottom:16px">
+        : 'Captions come from your recording, not the script. Type lines in by hand below \u2014 they work exactly the same.'}</div>`;
+  const transcribe = pending
+    ? `<button class="sv-add" data-act="transcribeAll" style="margin-bottom:10px">
+      ${svIconSm('sparkle')} Transcribe my recording (${pending} clip${pending === 1 ? '' : 's'})</button>` : '';
+  return `${transcribe}<button class="sv-add" data-act="autoCaps" style="margin-bottom:16px">
       ${svIconSm('sparkle')} ${st.captions.length ? 'Rebuild captions' : 'Build captions from my voice'}</button>
     ${src}
     <div class="sv-field">
@@ -2475,6 +2772,12 @@ function svHandleInput(name, el, arg){
   else if (name === 'adj'){ st.adjust[arg] = Number(val); svApplyPreview(); }
   else if (name === 'ovText'){ const o = svFindOverlay(st.editText); if (o) o.text = val; svApplyOverlayLive(); }
   else if (name === 'ovSize'){ const o = svFindOverlay(st.editText); if (o){ o.size = Number(val); svApplyOverlayLive(); } }
+  // Crop edges are stored on the overlay; without this branch the crop sliders
+  // moved but nothing was ever written, which is why cropping "did not exist".
+  else if (name === 'ovCropEdge'){
+    const o = svFindOverlay(st.editText);
+    if (o){ o.crop = spCrop({ [arg]: Number(val) }, o.crop); svApplyOverlayLive(); }
+  }
   else if (name === 'ovDur'){
     const o = svFindOverlay(st.editText);
     if (o) o.endMs = Math.min(smTotalMs(st.clips) || Infinity, o.startMs + Number(val) * 1000);
@@ -3061,14 +3364,43 @@ window.svExport = async function (){
       idx++;
     }
 
+    // Video overlays are real video streams, so they go in as their own inputs
+    // with their own time window. The shipped version left them out entirely,
+    // which meant a video overlay showed in the preview and then simply was not
+    // in the exported file.
+    for (const o of st.overlays){
+      if (o.kind !== 'video' || !o.blob) continue;
+      const vn = 'vov' + idx + '.' + (o.blob.type.includes('mp4') ? 'mp4' : 'webm');
+      await ff.writeFile(vn, new Uint8Array(await o.blob.arrayBuffer()));
+      written.push(vn);
+      inputArgs.push('-i', vn);
+      const nm = 'vov' + burn.length;
+      // Scale to the overlay's own width (160px at scale 1) against the export
+      // height, so what is exported matches the size shown in the preview.
+      const w = Math.max(24, Math.round(160 * (o.scale || 1) * (res.width / 720)));
+      const crop = spCropFfmpeg(o.crop, w, Math.round(w * (res.height / res.width)));
+      const chain = [crop, 'scale=' + w + ':-2', 'format=rgba'].filter(Boolean).join(',');
+      const s0 = ((o.startMs || 0) / 1000).toFixed(3);
+      const s1 = ((o.endMs || (o.startMs || 0) + 3000) / 1000).toFixed(3);
+      filterParts.push('[' + idx + ':v]trim=start=0:end=' + s1 + ',setpts=PTS-STARTPTS+' + s0 + '/TB,' + chain + '[o' + burn.length + 's]');
+      burn.push({ label: nm, idx: -1, x: o.x, y: o.y, startMs: o.startMs, endMs: o.endMs, w: 0, pre: true });
+      idx++;
+    }
+
     burn.forEach((b, n) => {
       const out = '[ovl' + n + ']';
       const xExpr = b.full ? '0' : 'W*' + (b.x / 100).toFixed(4) + '-w/2';
       const yExpr = b.full ? '0' : 'H*' + (b.y / 100).toFixed(4) + '-h/2';
       const scale = b.w && b.w < 1 ? 'scale=iw*' + b.w + ':ih*' + b.w + ',' : '';
-      filterParts.push('[' + b.idx + ':v]' + scale + 'format=rgba[o' + n + 's]');
-      filterParts.push(vCur + '[o' + n + 's]overlay=' + xExpr + ':' + yExpr +
-        ':enable=\'between(t,' + (b.startMs / 1000).toFixed(3) + ',' + (b.endMs / 1000).toFixed(3) + ')\'[ovl' + n + ']');
+      if (b.pre){
+        // Already trimmed and scaled to rgba in its own chain.
+        filterParts.push(vCur + '[o' + n + 's]overlay=' + xExpr + ':' + yExpr +
+          ':enable=\'between(t,' + (b.startMs / 1000).toFixed(3) + ',' + (b.endMs / 1000).toFixed(3) + ')\'' + out);
+      } else {
+        filterParts.push('[' + b.idx + ':v]' + scale + 'format=rgba[o' + n + 's]');
+        filterParts.push(vCur + '[o' + n + 's]overlay=' + xExpr + ':' + yExpr +
+          ':enable=\'between(t,' + (b.startMs / 1000).toFixed(3) + ',' + (b.endMs / 1000).toFixed(3) + ')\'' + out);
+      }
       vCur = out;
     });
 
@@ -3281,3 +3613,19 @@ window.csDeleteOverlay   = svDeleteOverlay;
 window.csSetZoom         = window.svSetZoom;
 window.csCancelExport    = window.svCancelExport;
 window.__svExport        = window.svExport;
+
+/* Transcribe every take that has not been transcribed yet. Used both by the
+   button in the captions sheet and by anyone who recorded before the feature
+   existed. Failures are per-clip, so one bad take cannot block the rest. */
+async function svTranscribeAll(){
+  const st = svState();
+  const todo = st.clips.filter(c => c.blob && !(c.speech || []).length);
+  if (!todo.length) return svToast(st.captions.length ? 'Captions are already up to date' : 'Record a take first');
+  svToast('Transcribing ' + todo.length + ' clip' + (todo.length === 1 ? '' : 's') + '\u2026');
+  let ok = 0;
+  for (const c of todo){
+    const good = await svTranscribeTake(c.id, c.blob);
+    if (good) ok++;
+  }
+  if (!ok) svToast('Could not transcribe \u2014 add caption lines by hand below');
+}

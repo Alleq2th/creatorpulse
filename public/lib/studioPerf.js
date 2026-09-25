@@ -83,29 +83,75 @@ function spAutoFps(stats, current, opts){
 
 const SP_TIERS = ['light', 'balanced', 'high'];
 
+// Frame rates we are willing to ask a camera for, best first. The browser hands
+// back whatever it can actually do, so this is a wish list, not a promise.
+const SP_FPS_LADDER = [120, 90, 60, 50, 30, 24];
+
 const SP_PROFILES = {
-  light:    { width: 480,  height: 854,  fps: 24, videoBitsPerSecond: 1200000 },
+  light:    { width: 480,  height: 854,  fps: 30, videoBitsPerSecond: 1200000 },
   balanced: { width: 720,  height: 1280, fps: 30, videoBitsPerSecond: 2200000 },
   // 'high' tops out at 720p too, deliberately. 1080p is the size that caused
   // the janky recording: measured on a device that reported 8 cores (so it was
   // routed here), capture negotiated 1080x1920@20 and MediaRecorder had to
   // encode 2.1x the pixels of 720p on every frame — 37.2 fps against 56.4 fps.
-  // "High" therefore buys a HIGHER BITRATE at a size the device can sustain,
-  // which is what actually shows up as quality in a phone-shot vertical video,
-  // rather than more pixels it cannot keep up with.
-  high:     { width: 720,  height: 1280, fps: 30, videoBitsPerSecond: 4200000 },
+  // "High" therefore buys a HIGHER BITRATE and a SMOOTHER frame rate at a size
+  // the device can sustain — 60fps at 720p reads as "clearer" on a phone where
+  // 30fps at 1080p reads as "blurry and jerky".
+  high:     { width: 720,  height: 1280, fps: 60, videoBitsPerSecond: 6000000 },
 };
 
-function spCaptureProfile(tier){
+/* Pick the best frame rate a camera will REALLY give us.
+
+   Browsers never error when asked for more than they can deliver — they quietly
+   hand back their own ceiling. So asking for 120 on a phone capped at 30 gives
+   30 frames, a 30fps file, and no indication anything was refused. This reads
+   the camera's own reported range (MediaTrackCapabilities) and chooses the
+   best rung of SP_FPS_LADDER that fits inside it, so we ask for something that
+   exists and can tell the user honestly what they got. */
+function spPickFps(desired, caps){
+  const want = Number(desired) > 0 ? Number(desired) : 30;
+  const c = caps || {};
+  const max = Number(c.frameRateMax);
+  const min = Number(c.frameRateMin);
+  const upper = isFinite(max) && max > 0 ? max : want;
+  const target = Math.min(want, upper);
+  const rung = SP_FPS_LADDER.find(f => f <= target);
+  const chosen = rung || Math.floor(target);
+  const floor = isFinite(min) && min > 0 ? min : 1;
+  return Math.round(spClamp(chosen, floor, 240));
+}
+
+/* What to tell the user about the frame rate, in plain words. Honesty matters
+   more than optimism here: a creator who asked for 60 and got 30 deserves to
+   know that it is their browser's ceiling, not a bug in the app. */
+function spFpsNote(requested, actual, caps){
+  const want = Math.round(Number(requested) || 0);
+  const got = Math.round(Number(actual) || 0);
+  const max = Number((caps || {}).frameRateMax);
+  if (!got) return 'Frame rate is decided by your camera when recording starts.';
+  if (isFinite(max) && max > 0 && want > max){
+    return 'Your camera tops out at ' + Math.round(max) + 'fps, so it is recording at ' +
+      got + 'fps. That is the browser\u2019s limit, not a setting you can push past.';
+  }
+  if (got >= 60) return 'Recording at ' + got + 'fps \u2014 smooth and clear.';
+  return 'Recording at ' + got + 'fps.';
+}
+
+/* Capture profile, optionally at a frame rate already checked against the
+   device's real range by spPickFps. An explicit rate wins over the tier
+   default so the user's own choice is respected; the dimension decision still
+   comes from the tier, because that is what keeps recording from janking. */
+function spCaptureProfile(tier, fps){
   const t = SP_TIERS.indexOf(tier) >= 0 ? tier : 'balanced';
   const p = SP_PROFILES[t];
   // H.264 requires even dimensions; an odd width fails the whole encode.
   const even = n => Math.max(2, Math.round(Number(n) / 2) * 2);
+  const chosenFps = Number(fps) > 0 ? Math.round(Number(fps)) : Math.round(p.fps);
   return {
     tier: t,
     width: even(p.width),
     height: even(p.height),
-    fps: Math.round(p.fps),
+    fps: Math.round(spClamp(chosenFps, 1, 240)),
     videoBitsPerSecond: Math.round(p.videoBitsPerSecond),
   };
 }
@@ -478,6 +524,7 @@ if (typeof module !== 'undefined' && module.exports){
   module.exports = {
     spClamp, spFrameStats, spAutoFps,
     spCaptureProfile, spLighterTier, spHeavierTier, spAutoTier, SP_TIERS, SP_PROFILES,
+    SP_FPS_LADDER, spPickFps, spFpsNote,
     spPrompterGeometry, spPrompterClamp,
     spOverlayMove, spOverlayScale, spCrop, spCropIsIdentity, spCropCss, spCropFfmpeg,
     spShouldBreakCue, spCaptionsFromSpeech, spCaptionsForTimeline, spSpeechCoverage,
