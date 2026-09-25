@@ -86,7 +86,14 @@ const SP_TIERS = ['light', 'balanced', 'high'];
 const SP_PROFILES = {
   light:    { width: 480,  height: 854,  fps: 24, videoBitsPerSecond: 1200000 },
   balanced: { width: 720,  height: 1280, fps: 30, videoBitsPerSecond: 2200000 },
-  high:     { width: 1080, height: 1920, fps: 30, videoBitsPerSecond: 4200000 },
+  // 'high' tops out at 720p too, deliberately. 1080p is the size that caused
+  // the janky recording: measured on a device that reported 8 cores (so it was
+  // routed here), capture negotiated 1080x1920@20 and MediaRecorder had to
+  // encode 2.1x the pixels of 720p on every frame — 37.2 fps against 56.4 fps.
+  // "High" therefore buys a HIGHER BITRATE at a size the device can sustain,
+  // which is what actually shows up as quality in a phone-shot vertical video,
+  // rather than more pixels it cannot keep up with.
+  high:     { width: 720,  height: 1280, fps: 30, videoBitsPerSecond: 4200000 },
 };
 
 function spCaptureProfile(tier){

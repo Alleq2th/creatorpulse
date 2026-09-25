@@ -834,7 +834,10 @@ const SV_ACT = {
   deleteReviewTake: () => { const st = svState(); const id = st.reviewId; st.reviewId = null; svDeleteTake(id); },
 
   /* navigation */
-  toEditor:        () => svGoToEditor(),
+  // Leaving the camera for the editor is the moment a queued look-bake can
+  // safely run: the capture has stopped, so the encoder no longer competes
+  // with a live camera for the frame budget.
+  toEditor:        () => { svGoToEditor(); svBakePump(); },
   exitEditor:      () => svConfirmExitEditor(),
 
   /* editing */
@@ -1353,26 +1356,22 @@ function svGrabThumb(url){
 
 async function svFinishRecording(mime){
   const st = svState();
-  let blob = new Blob(SVC.chunks, { type: (mime || 'video/webm').split(';')[0] });
+  const raw = new Blob(SVC.chunks, { type: (mime || 'video/webm').split(';')[0] });
   SVC.chunks = [];
   const wasSelected = st.selectedId;
   svPerfAdapt();
-  if (blob.size < 1200){ svToast('That take was too short to keep'); render(); return; }
+  if (raw.size < 1200){ svToast('That take was too short to keep'); render(); return; }
 
-  // Bake the chosen look INTO the file. The preview showed it via CSS, but CSS
-  // on a preview element leaves no trace in the recording — without this step
-  // the filter would vanish the moment the take landed in the editor and the
-  // export would come out plain. A failure here keeps the original take.
-  if (st.camFilter && st.camFilter !== 'none'){
-    render();
-    try { blob = await svBakeTake(blob, st.camFilter); } catch (_){ /* keep original */ }
-  }
-
-  const url = svHoldUrl(URL.createObjectURL(blob));
+  // The clip goes on the timeline IMMEDIATELY, from the raw take. Baking the
+  // chosen look takes seconds, and making the creator watch a frozen screen
+  // while the encoder chews is exactly the "press stop and nothing happens"
+  // complaint. So the take lands first, and the look is applied afterwards in
+  // the background (svBakePump).
+  const url = svHoldUrl(URL.createObjectURL(raw));
   const dur = await svProbeDuration(url);
   const thumb = await svGrabThumb(url);
   const clip = {
-    id: svId('c'), name: svLabel(st.clips.length), url, blob, thumb,
+    id: svId('c'), name: svLabel(st.clips.length), url, blob: raw, thumb,
     dur, inMs: 0, outMs: Math.round(dur * 1000), kind: 'video',
     // The recognised phrases for THIS take, timestamped against it, so captions
     // can be rebuilt (and re-timed through trims) long after recording.
@@ -1393,6 +1392,52 @@ async function svFinishRecording(mime){
   // stopping produced no visible response at all.
   svPlayTake(clip.id);
   svToast('Take saved — watch it back, or delete it and shoot again');
+
+  // Now bake the chosen look in, if there was one, without blocking any of the
+  // above. The take is already usable; the filter catches up moments later.
+  if (st.camFilter && st.camFilter !== 'none') svQueueBake(clip.id, raw, st.camFilter);
+}
+
+/* ── LOOK-BAKE QUEUE ───────────────────────────────────────────────────────
+   One job at a time, and never while the camera is capturing. Encoding a take
+   and recording a new one at the same time is the one way to make the fix for
+   the janky recording undo itself, so the pump waits for the camera to stop. */
+
+const SVBAKE = { queue: [], busy: false };
+
+function svQueueBake(id, blob, filterId){
+  SVBAKE.queue.push({ id, blob, filterId });
+  svBakePump();
+}
+
+async function svBakePump(){
+  if (SVBAKE.busy) return;
+  const st = svState();
+  if (st.running || st.mode === 'camera'){ setTimeout(svBakePump, 900); return; }
+  const job = SVBAKE.queue.shift();
+  if (!job) return;
+  SVBAKE.busy = true;
+  try { await svApplyBakedLook(job); } catch (_){ /* the raw take stands */ }
+  SVBAKE.busy = false;
+  if (SVBAKE.queue.length) svBakePump();
+}
+
+async function svApplyBakedLook(job){
+  const st = svState();
+  const baked = await svBakeTake(job.blob, job.filterId);
+  if (!baked || baked === job.blob) return;
+  // The clip may have been deleted (or the project reset) while this ran.
+  const c = st.clips.find(x => x.id === job.id);
+  if (!c) return;
+  const newUrl = svHoldUrl(URL.createObjectURL(baked));
+  const oldUrl = c.url;
+  const thumb = await svGrabThumb(newUrl);
+  c.url = newUrl; c.blob = baked;
+  if (thumb) c.thumb = thumb;
+  // Released by reference count, so the review screen or Undo still holding it
+  // is not left with a URL that renders black.
+  svReleaseUrl(oldUrl);
+  render();
 }
 
 /* ── TAKE ACTIONS ───────────────────────────────────────────────────────── */
@@ -2710,9 +2755,22 @@ async function svFfmpeg(){
         const pct = Math.max(2, Math.min(97, Math.round((Number(progress) || 0) * 94)));
         svExportNote('Rendering…', pct);
       });
+      // SAME-ORIGIN URLs, deliberately — not blob: wrappers.
+      //
+      // ffmpeg.wasm boots its core inside a Web Worker. Handing it blob: URLs
+      // (the usual workaround for loading the engine off a CDN) makes the
+      // worker call `importScripts(blob:…)`, which the app's own Content
+      // Security Policy refuses — the loader then falls back to a dynamic
+      // `import()` of the same blob URL and dies with "failed to fetch
+      // dynamically imported module: blob:…". The only ways out are to weaken
+      // script-src to allow blob scripts, or to stop using blobs at all.
+      //
+      // The engine is vendored under /vendor/ffmpeg, so it is already the same
+      // origin. Plain paths are allowed by script-src 'self' and keep the CSP
+      // tight — no blob: scripts anywhere.
       await inst.load({
-        coreURL: await U.toBlobURL(SVFF.core + '/ffmpeg-core.js', 'text/javascript'),
-        wasmURL: await U.toBlobURL(SVFF.core + '/ffmpeg-core.wasm', 'application/wasm'),
+        coreURL: SVFF.core + '/ffmpeg-core.js',
+        wasmURL: SVFF.core + '/ffmpeg-core.wasm',
       });
       SVFF.inst = inst;
       return inst;

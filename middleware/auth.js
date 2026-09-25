@@ -13,15 +13,26 @@ const rateLimit = require("express-rate-limit");
 const compression = require("compression");
 
 // CSP tuned for the inline SPA + external image CDNs.
+//
+// worker-src / child-src matter for the Studio's export. ffmpeg.wasm boots its
+// core inside a Web Worker, and its loader constructs that worker from a blob:
+// URL. Without these the browser falls back to script-src, refuses the blob
+// worker, and the loader fails with "failed to fetch dynamically imported
+// module: blob:..." — which is exactly what the Studio export was hitting. It
+// looked like a flaky engine load, so the real cause was this header.
 const CSP_DIRECTIVES = {
   "default-src": ["'self'"],
-  "script-src": ["'self'", "'unsafe-inline'", "https://apis.google.com"],
+  "script-src": ["'self'", "'unsafe-inline'", "'wasm-unsafe-eval'", "https://apis.google.com"],
   "script-src-attr": ["'unsafe-inline'"],
   "style-src": ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
   "font-src": ["'self'", "https://fonts.gstatic.com", "data:"],
   "img-src": ["'self'", "data:", "blob:", "https:"],
   "media-src": ["'self'", "blob:", "data:", "https:"],
-  "connect-src": ["'self'", "https:"],
+  "connect-src": ["'self'", "https:", "blob:", "data:"],
+  // The media encoder. 'self' for the vendored engine, blob: for the worker
+  // and the wasm module it is handed, data: for the inlined core URL.
+  "worker-src": ["'self'", "blob:"],
+  "child-src": ["'self'", "blob:"],
   "frame-ancestors": ["'none'"],
 };
 

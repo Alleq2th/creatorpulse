@@ -98,12 +98,29 @@ test('spCaptureProfile: an unknown tier falls back to balanced, not to a crash',
   assert.equal(P.spCaptureProfile(undefined).tier, 'balanced');
 });
 
-test('spCaptureProfile: the shipped 1080p ceiling is the heaviest tier, not the default', () => {
-  // 1080p is what shipped and what the phone could not sustain. It must still
-  // be reachable, but it must not be the default any more.
-  assert.equal(P.spCaptureProfile('high').width, 1080);
+test('spCaptureProfile: no tier asks for 1080p, because the device could not sustain it', () => {
+  // 1080p was the shipped ceiling for any 8-core phone, and it is the measured
+  // cause of the janky recording: capture negotiated 1080x1920@20 and the
+  // encoder had to handle 2.1x the pixels of 720p every frame (37.2 fps vs
+  // 56.4 fps in the isolation run). No tier may reintroduce it.
+  for (const tier of ['light', 'balanced', 'high']){
+    const p = P.spCaptureProfile(tier);
+    assert.ok(p.width <= 720,
+      tier + ' must not exceed 720p wide, got ' + p.width + ' — 1080p is what caused the jank');
+    assert.ok(p.height <= 1280, tier + ' must not exceed 720p tall, got ' + p.height);
+  }
   assert.equal(P.spCaptureProfile('balanced').width, 720);
   assert.equal(P.spCaptureProfile(undefined).tier, 'balanced');
+});
+
+test('spCaptureProfile: the high tier buys bitrate, not pixels', () => {
+  // The reason to keep a third tier at all: better quality WITHOUT exceeding the
+  // size the encoder can keep up with.
+  const high = P.spCaptureProfile('high');
+  const bal = P.spCaptureProfile('balanced');
+  assert.equal(high.width, bal.width, 'high and balanced capture at the same size');
+  assert.ok(high.videoBitsPerSecond > bal.videoBitsPerSecond,
+    'high must carry more bitrate than balanced');
 });
 
 test('spLighterTier / spHeavierTier: walk the ladder and stop at the ends', () => {

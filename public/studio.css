@@ -212,7 +212,19 @@
 .sv-stage.is-rec .sv-zoom,
 .sv-stage.is-rec .sv-rec-pill,
 .sv-stage.is-rec .sv-paused-pill,
-.sv-stage.is-rec .sv-prompter-btn{
+.sv-stage.is-rec .sv-prompter-btn,
+.sv-stage.is-rec .sv-camfilters{
+  -webkit-backdrop-filter: none !important;
+          backdrop-filter: none !important;
+}
+/* Belt and braces. The rule above covers the elements, but a backdrop-filter
+   that ends up on any descendant (a pseudo-element, or a utility class added
+   later) forces the same per-frame re-blur of the live camera. This kills the
+   whole effect for everything inside the stage while recording, so no single
+   missed selector can bring the jank back. */
+.sv-stage.is-rec *,
+.sv-stage.is-rec *::before,
+.sv-stage.is-rec *::after{
   -webkit-backdrop-filter: none !important;
           backdrop-filter: none !important;
 }
