@@ -8,7 +8,7 @@
 // Run with: npm test
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { parseAuthRedirect } = require("../lib/authRedirect");
+const { parseAuthRedirect } = require("../public/lib/authRedirect");
 
 const INVALID_LINK = "This reset link is invalid or has already been used.";
 
