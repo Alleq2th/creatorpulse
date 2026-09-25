@@ -976,6 +976,12 @@ else if (kind === "terms" || kind === "privacy" || kind === "cookies" || kind ==
   function showCookieBanner(){
     if (localStorage.getItem("cp_cookie_ack") === "1") return;
     if (document.getElementById("cp-cookie-banner")) return;
+    // Never let the banner cover the Studio: it is z-index 9999 and the
+    // Studio is 9000, so on a first visit it lands right on top of the record
+    // shutter. Re-checked on the way in as well as at spawn time, because the
+    // user can open the Studio before this timer fires.
+    if(S.studio) return;
+    if(document.querySelector('.sv-root')) return;
     const b = document.createElement("div");
     b.id = "cp-cookie-banner";
     b.style.cssText = "position:fixed;left:12px;right:12px;bottom:calc(var(--tab-h) + 16px + env(safe-area-inset-bottom));z-index:9999;max-width:520px;margin:0 auto;background:#141420;color:#fff;border:1px solid #2a2a3a;border-radius:14px;padding:14px 16px;font:13px/1.5 system-ui,-apple-system,sans-serif;box-shadow:0 10px 40px rgba(0,0,0,.4)";

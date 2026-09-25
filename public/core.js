@@ -772,10 +772,10 @@ function renderOut(o, tid, idx){
     const cp = (o.slides||[]).map(s=>`SLIDE ${s.slideNumber}: ${slideText(s)}`).join("\n\n");
     const imgs = (o.slides||[]).map(s=>s.img).filter(Boolean);
     const dlAllBtn = imgs.length ? `<button class="btn bo bxs tipbtn" data-tip="Download all slide images" title="Download all slides" aria-label="Download all slides" onclick='dlAll(${JSON.stringify(imgs)})'>${I.dl} All</button>` : "";
-    return `<div class="oc"><div class="oh"><span class="ol">Carousel · ${o.slides?.length||0} slides</span><div style="display:flex;gap:6px">${dlAllBtn}<button class="btn bo bxs tipbtn" data-tip="Copy carousel text" title="Copy carousel text" aria-label="Copy carousel text" onclick="copyTxt(\`${cp.replace(/`/g,"\\`")}\`)">${I.copy}</button></div></div><div style="padding:10px">${slides}</div><div class="ofoot"><button class="btn bp bxs tipbtn" data-tip="Save to library" title="Save to library" aria-label="Save to library" onclick="saveOut('${tid}',${idx})">${I.save} Save</button></div></div>`;
+    return `<div class="oc"><div class="oh"><span class="ol">Carousel · ${o.slides?.length||0} slides</span><div style="display:flex;gap:6px">${dlAllBtn}<button class="btn bo bxs tipbtn" data-tip="Copy carousel text" title="Copy carousel text" aria-label="Copy carousel text" onclick="copyTxt(\`${cp.replace(/`/g,"\\`")}\`)">${I.copy}</button></div></div><div style="padding:10px">${slides}</div><div class="ofoot"><button class="btn bo bxs tipbtn" data-tip="Open these slides as a Studio script" title="Take to Studio" aria-label="Take to Studio" onclick="takeToStudio('${tid}',${idx})">${I.cam} Take to Studio</button><button class="btn bp bxs tipbtn" data-tip="Save to library" title="Save to library" aria-label="Save to library" onclick="saveOut('${tid}',${idx})">${I.save} Save</button></div></div>`;
   }
   const content = String(o.content||"");
-  return `<div class="oc"><div class="oh"><span class="ol">${esc(o.label||"Draft")}</span><button class="btn bo bxs tipbtn" data-tip="Copy draft" title="Copy draft" aria-label="Copy draft" onclick="copyTxt(\`${content.replace(/`/g,"\\`")}\`)">${I.copy}</button></div><div class="ob">${esc(content)}</div><div class="ofoot"><button class="btn bp bxs tipbtn" data-tip="Save to library" title="Save to library" aria-label="Save to library" onclick="saveOut('${tid}',${idx})">${I.save} Save</button></div></div>`;
+  return `<div class="oc"><div class="oh"><span class="ol">${esc(o.label||"Draft")}</span><button class="btn bo bxs tipbtn" data-tip="Copy draft" title="Copy draft" aria-label="Copy draft" onclick="copyTxt(\`${content.replace(/`/g,"\\`")}\`)">${I.copy}</button></div><div class="ob">${esc(content)}</div><div class="ofoot"><button class="btn bo bxs tipbtn" data-tip="Open this script in the Create Studio teleprompter" title="Take to Studio" aria-label="Take to Studio" onclick="takeToStudio('${tid}',${idx})">${I.cam} Take to Studio</button><button class="btn bp bxs tipbtn" data-tip="Save to library" title="Save to library" aria-label="Save to library" onclick="saveOut('${tid}',${idx})">${I.save} Save</button></div></div>`;
 }
 
 window.setSlideBackgroundImage = async (tid, idx, slideIdx, file) => {
@@ -1125,62 +1125,20 @@ function csAfterRender(){
     if(fbBtn) fbBtn.style.display = (S.tab === 'create') ? 'none' : '';
     const coachBtn = document.getElementById('fab-coach');
     if(coachBtn) coachBtn.style.display = (S.tab === 'create') ? 'none' : '';
-    if(!S.studio || S.tab !== 'create') return;
-    // ── Camera mode: reattach live stream + rebind timer/prompter loops ──
-    if(S.studio.mode === 'camera'){
-      const v = document.getElementById('cs-cam-live');
-      if(v){
-        const liveStream = (typeof CSCAM !== 'undefined' && CSCAM.stream) ? CSCAM.stream : (window._st && window._st.stream);
-        if(liveStream && v.srcObject !== liveStream){
-          v.srcObject = liveStream;
-          v.muted = true; v.playsInline = true;
-          v.play().catch(()=>{});
-        }
-      }
-      // Timer: single canonical loop keyed off S.studio.running
-      if(S.studio.running){
-        if(!window.__csTimer){
-          window.__csTimer = setInterval(() => {
-            if(!S.studio || !S.studio.running){ clearInterval(window.__csTimer); window.__csTimer=null; return; }
-            const el = document.getElementById('cs-cam-time');
-            if(el){ const s = (performance.now() - (window._st.tStart||performance.now()))/1000; el.textContent = _fmtTs(s); }
-          }, 250);
-        }
-      } else if(window.__csTimer){ clearInterval(window.__csTimer); window.__csTimer=null; }
-      // Prompter scroll
-      const p = document.getElementById('cs-cam-prompter-inner');
-      if(p && S.studio.showPrompter && S.studio.script && S.studio.running && !window.__csPromp){
-        const start = performance.now();
-        window.__csPromp = setInterval(() => {
-          if(!S.studio.running || !S.studio.showPrompter){ clearInterval(window.__csPromp); window.__csPromp=null; return; }
-          const el = document.getElementById('cs-cam-prompter-inner'); if(!el) return;
-          const dt = (performance.now()-start)/1000;
-          el.style.transform = `translateY(${-dt*(S.studio.speed||60)}px)`;
-        }, 50);
-      }
-      if((!S.studio.running || !S.studio.showPrompter) && window.__csPromp){ clearInterval(window.__csPromp); window.__csPromp=null; }
-    } else {
-      if(window.__csTimer){ clearInterval(window.__csTimer); window.__csTimer=null; }
-      if(window.__csPromp){ clearInterval(window.__csPromp); window.__csPromp=null; }
-    }
-    // ── Editor mode: restore video src + playhead ──
-    // Lovable's studio.js now owns video loading via a dual-buffer system
-    // (two <video> elements that swap IDs for smooth clip transitions).
-    // Defer to its own csLoadCurrent/csActiveVideo instead of managing
-    // #cs-ed-video directly here — doing both was fighting over the same
-    // element and resetting an already-loaded video mid-load (black screen).
-    if(S.studio.mode === 'editor'){
-      if(window.csLoadCurrent){
-        window.csLoadCurrent(true);
-      }
-      const v = (window.csActiveVideo && window.csActiveVideo()) || document.getElementById('cs-ed-video');
-      if(v){
-        const st = S.studio;
-        if(st.playing && v.paused) v.play().catch(()=>{});
-        else if(!st.playing && !v.paused) v.pause();
-      }
-    }
-    if(S.studio.mode === 'editor') csApplyPreview();
+    // The floating AI-coach button and the cookie banner are position:fixed at
+    // z-index 9999, ABOVE the Studio's full-screen surface. Left alone the
+    // banner sits straight over the record shutter, and since it only ever
+    // shows on a first visit, the button simply looks dead with nothing on
+    // screen to explain why. Hide both while the Studio is open.
+    const cookieBanner = document.getElementById('cp-cookie-banner');
+    if(cookieBanner && S.studio) cookieBanner.style.display = 'none';
+    // The Studio owns its own camera stream, playback ticker, teleprompter
+    // loop and video sourcing now. It reattaches all of that from
+    // svAfterRender() once the markup has landed, so this app-level hook has
+    // nothing left to do but hand over. The previous build duplicated the
+    // same three loops here, which fought the Studio's own for the same
+    // elements and is what left the preview black after a re-render.
+    if(window.svAfterRender) svAfterRender();
   } catch(err){ console.warn('csAfterRender', err); }
 }
 
@@ -1809,3 +1767,25 @@ async function loadCalendarEvents(){
   render();
 }
 
+// Hands a generated script straight to the Studio's teleprompter, so a creator
+// who just picked a story can start recording without copy-pasting anything.
+// Carousels are flattened into one continuous read; the slide structure is
+// carried as blank lines, which is how a script reads aloud anyway.
+window.takeToStudio = (tid, idx) => {
+  const o = S.outs[tid]?.[idx];
+  if(!o){ toast("Nothing to send \u2014 generate this story first."); return; }
+  let text = "";
+  if(o.type === "carousel"){
+    text = (o.slides||[]).map(s => [
+      s.headline,
+      s.stat ? (s.statLabel ? `${s.stat} \u2014 ${s.statLabel}` : s.stat) : "",
+      s.body, s.supportingText
+    ].filter(Boolean).join("\n")).join("\n\n");
+  } else {
+    text = String(o.content||"");
+  }
+  if(!text.trim()){ toast("Nothing to send \u2014 generate this story first."); return; }
+  if(!window.svOpenWithScript){ toast("Studio unavailable \u2014 reload and try again."); return; }
+  const t = S.trends.find(x=>x.id===tid);
+  window.svOpenWithScript(text, t?.headline || "New project");
+};

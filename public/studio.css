@@ -1,0 +1,811 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   CreatorPulse Studio — stylesheet
+   ═══════════════════════════════════════════════════════════════════════════
+   A full-screen record → review → edit → export surface.
+
+   Every colour comes from the app's own tokens (--bg, --sf, --ac, --tx, --mu,
+   --grad-av) declared in index.html, so the Studio reads as the same product
+   rather than a bolted-on tool. Only when a token is genuinely missing (very
+   dark camera chrome, sheet scrims) is a local value defined here.
+
+   Class prefix is `sv-` (Studio v4). It is used nowhere else in the app —
+   the previous `cs-` / `st-` namespaces are left untouched so nothing
+   half-replaced can collide.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.sv-root{
+  /* Local scale, derived from app tokens */
+  --sv-accent:      var(--ac, #7C3AED);
+  --sv-accent-lit:  var(--ac2, #9F67FF);
+  --sv-danger:      var(--danger, #EF4444);
+  --sv-ok:          var(--ok, #4ADE80);
+  --sv-tx:          var(--tx, #F5F5F7);
+  --sv-mu:          var(--mu, #8C8D9A);
+  --sv-sf:          var(--sf, #141420);
+  --sv-sf2:         var(--sf2, #1c1c2b);
+  --sv-line:        var(--br, rgba(255,255,255,.08));
+  --sv-line2:       var(--br2, rgba(255,255,255,.14));
+  --sv-r:           var(--r, 14px);
+  --sv-rs:          var(--rs, 10px);
+
+  --sv-pad:         16px;
+  --sv-safe-t:      env(safe-area-inset-top, 0px);
+  --sv-safe-b:      env(safe-area-inset-bottom, 0px);
+  --sv-ease:        cubic-bezier(.22,.61,.36,1);
+
+  /* Timeline geometry — the single source of truth for clip maths.
+     studio.js reads --sv-px-ms to convert milliseconds to pixels, so a clip
+     block on screen is always the same length as the clip in the model. */
+  --sv-px-ms:       0.09;
+  --sv-track-h:     54px;
+  --sv-gutter:      0px;
+
+  position: fixed; inset: 0; z-index: 9000;
+  display: flex; flex-direction: column;
+  background: var(--bg, #0A0A0F); color: var(--sv-tx);
+  font-family: var(--sans, 'Inter', system-ui, sans-serif);
+  overscroll-behavior: contain;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.sv-root *, .sv-root *::before, .sv-root *::after{ box-sizing: border-box; }
+.sv-root button{ font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+.sv-root input, .sv-root textarea, .sv-root select{ font: inherit; }
+.sv-root svg{ display: block; }
+.sv-root .sv-ico{ width: 22px; height: 22px; stroke: currentColor; fill: none;
+  stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+.sv-root .sv-ico-sm{ width: 17px; height: 17px; }
+.sv-root .sv-sr{ position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ── Shared chrome ─────────────────────────────────────────────────────────
+   The top bar sits inside the safe area so it is never tucked under the
+   browser's own address bar — on the old build the app's header rendered
+   partly underneath it, which is why the screenshots show a cramped
+   double header with the back chevron overlapping the first character. */
+.sv-bar{
+  flex: 0 0 auto; display: flex; align-items: center; gap: 10px;
+  padding: calc(var(--sv-safe-t) + 12px) var(--sv-pad) 12px;
+  position: relative; z-index: 6;
+}
+.sv-bar-title{
+  flex: 1 1 auto; min-width: 0;
+  font-size: 15px; font-weight: 600; letter-spacing: -.01em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sv-bar-r{ display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+
+.sv-icon-btn{
+  width: 42px; height: 42px; flex: none; border-radius: 12px;
+  display: grid; place-items: center;
+  background: rgba(255,255,255,.07); color: var(--sv-tx);
+  transition: background .15s var(--sv-ease), transform .12s var(--sv-ease);
+}
+.sv-icon-btn:active{ transform: scale(.93); background: rgba(255,255,255,.13); }
+
+.sv-chip{
+  height: 34px; padding: 0 13px; border-radius: 99px;
+  display: inline-flex; align-items: center; gap: 6px;
+  background: rgba(255,255,255,.09); color: var(--sv-tx);
+  font-size: 12.5px; font-weight: 600; letter-spacing: .01em;
+  transition: background .15s var(--sv-ease);
+}
+.sv-chip:active{ background: rgba(255,255,255,.16); }
+
+.sv-cta{
+  height: 42px; padding: 0 20px; border-radius: 12px;
+  background: linear-gradient(135deg, var(--sv-accent), var(--sv-accent-lit));
+  color: #fff; font-size: 14.5px; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  box-shadow: 0 6px 20px rgba(124,58,237,.36);
+  transition: transform .12s var(--sv-ease), opacity .15s;
+}
+.sv-cta:active{ transform: scale(.96); }
+.sv-cta[disabled]{ opacity: .38; box-shadow: none; }
+.sv-cta span.sp{ width: 15px; height: 15px; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   RECORD
+   ═══════════════════════════════════════════════════════════════════════════ */
+.sv-rec{ display: flex; flex-direction: column; height: 100%; background: #000; }
+
+.sv-rec .sv-bar{
+  background: linear-gradient(180deg, rgba(0,0,0,.72) 0%, rgba(0,0,0,0) 100%);
+}
+
+/* Stage holds the live camera plus everything overlaid on it. */
+.sv-stage{
+  position: relative; flex: 1 1 auto; min-height: 0;
+  overflow: hidden; background: #000;
+}
+.sv-stage video{
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; background: #000;
+}
+/* A dark vignette so white overlay controls stay legible against a bright
+   subject — the old rail sat directly on skin tones and disappeared. */
+.sv-stage::after{
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(180deg, rgba(0,0,0,.42) 0%, rgba(0,0,0,0) 22%,
+              rgba(0,0,0,0) 62%, rgba(0,0,0,.55) 100%);
+}
+.sv-stage.is-rec{ box-shadow: inset 0 0 0 3px var(--sv-danger); }
+
+/* ── Side rail ─────────────────────────────────────────────────────────────
+   Fixed-size buttons with the label underneath, so the icon never sits on an
+   unreadable background and the row is never clipped by the screen edge. */
+.sv-rail{
+  position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+  z-index: 3; display: flex; flex-direction: column; gap: 14px;
+}
+.sv-rail-btn{
+  width: 56px; padding: 8px 4px 6px; border-radius: 14px;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  background: rgba(0,0,0,.42); backdrop-filter: blur(8px);
+  color: #fff; font-size: 10px; font-weight: 600; letter-spacing: .01em;
+  transition: background .15s var(--sv-ease), transform .12s var(--sv-ease);
+}
+.sv-rail-btn:active{ transform: scale(.94); }
+.sv-rail-btn.on{ background: var(--sv-accent); }
+.sv-rail-btn.warn{ background: rgba(239,68,68,.9); }
+.sv-rail-btn .sv-ico{ width: 21px; height: 21px; }
+
+/* ── Teleprompter ──────────────────────────────────────────────────────────
+   Scrolls inside its own masked window. The fade at top and bottom means the
+   text arrives and leaves instead of being hard-cut, which is what makes it
+   readable while you are talking rather than just present on screen. */
+.sv-prompter{
+  position: absolute; left: 12px; right: 84px; top: 96px;
+  max-height: 42%;
+  z-index: 3; border-radius: var(--sv-r); overflow: hidden;
+  background: rgba(0,0,0,.55); backdrop-filter: blur(10px);
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 16%, #000 82%, transparent 100%);
+          mask-image: linear-gradient(180deg, transparent 0, #000 16%, #000 82%, transparent 100%);
+}
+.sv-prompter-inner{
+  padding: 22px 16px; will-change: transform;
+  font-size: 19px; line-height: 1.65; font-weight: 500;
+  color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.8);
+  white-space: pre-wrap;
+}
+.sv-prompter-hd{
+  position: absolute; left: 12px; right: 84px; top: 70px; z-index: 4;
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  color: rgba(255,255,255,.6);
+}
+
+/* ── Recording indicator ────────────────────────────────────────────────── */
+.sv-rec-pill{
+  position: absolute; top: calc(12px + var(--sv-safe-t)); left: 50%; transform: translateX(-50%);
+  z-index: 5; display: inline-flex; align-items: center; gap: 8px;
+  padding: 7px 15px; border-radius: 99px; background: rgba(0,0,0,.62);
+  backdrop-filter: blur(8px); font-size: 14px; font-weight: 700;
+  font-variant-numeric: tabular-nums; color: #fff;
+}
+.sv-rec-pill .dot{
+  width: 9px; height: 9px; border-radius: 50%; background: var(--sv-danger);
+  animation: sv-blink 1.15s steps(1, end) infinite;
+}
+@keyframes sv-blink{ 0%,50%{ opacity: 1 } 50.01%,100%{ opacity: .25 } }
+
+.sv-paused-pill{
+  position: absolute; top: calc(12px + var(--sv-safe-t)); left: 50%; transform: translateX(-50%);
+  z-index: 5; padding: 7px 15px; border-radius: 99px;
+  background: rgba(0,0,0,.62); backdrop-filter: blur(8px);
+  font-size: 13px; font-weight: 700; color: #fff;
+}
+
+/* Countdown numerals */
+.sv-count{
+  position: absolute; inset: 0; z-index: 8; display: grid; place-items: center;
+  pointer-events: none; background: rgba(0,0,0,.35);
+}
+.sv-count span{
+  font-size: 96px; font-weight: 800; color: #fff;
+  text-shadow: 0 4px 24px rgba(0,0,0,.7); font-variant-numeric: tabular-nums;
+}
+.sv-count span.pop{ animation: sv-pop .9s var(--sv-ease); }
+@keyframes sv-pop{ 0%{ transform: scale(1.5); opacity: 0 } 25%{ transform: scale(1); opacity: 1 } 100%{ transform: scale(.92); opacity: .5 } }
+
+/* ── Bottom control deck ─────────────────────────────────────────────────── */
+.sv-deck{
+  flex: 0 0 auto; position: relative; z-index: 6;
+  background: #000; padding: 14px var(--sv-pad) calc(10px + var(--sv-safe-b));
+}
+
+/* Zoom / speed segmented control */
+.sv-zoom{
+  display: flex; gap: 4px; justify-content: center; margin: 0 auto 14px;
+  padding: 4px; border-radius: 99px; width: max-content;
+  background: rgba(255,255,255,.1); backdrop-filter: blur(8px);
+}
+.sv-zoom button{
+  min-width: 50px; padding: 7px 12px; border-radius: 99px;
+  font-size: 12.5px; font-weight: 700; color: rgba(255,255,255,.72);
+  transition: background .15s var(--sv-ease), color .15s var(--sv-ease);
+}
+.sv-zoom button.on{ background: #fff; color: #0A0A0F; }
+
+.sv-shutter-row{
+  display: flex; align-items: center; justify-content: center;
+  gap: 34px; margin-bottom: 8px;
+}
+.sv-round{
+  width: 46px; height: 46px; border-radius: 50%; flex: none;
+  display: grid; place-items: center;
+  background: rgba(255,255,255,.1); color: #fff;
+  transition: background .15s var(--sv-ease), transform .12s var(--sv-ease);
+}
+.sv-round:active{ transform: scale(.92); }
+.sv-round.on{ background: var(--sv-accent); }
+.sv-round[disabled]{ opacity: .35; }
+
+/* The shutter doubles as the pause control while recording: two bars instead
+   of a circle, with a smaller inner square. */
+.sv-shutter{
+  width: 78px; height: 78px; border-radius: 50%; flex: none;
+  display: grid; place-items: center;
+  background: rgba(255,255,255,.16); padding: 5px;
+  transition: transform .12s var(--sv-ease), background .15s var(--sv-ease);
+}
+.sv-shutter:active{ transform: scale(.93); }
+.sv-shutter span{
+  width: 100%; height: 100%; border-radius: 50%; background: var(--sv-danger);
+  transition: border-radius .18s var(--sv-ease), width .18s var(--sv-ease), height .18s var(--sv-ease);
+}
+.sv-shutter.rec span{ border-radius: 10px; width: 44%; height: 44%; background: #fff; }
+/* Paused: the shutter shows a play glyph instead of the red dot, so the way
+   back to recording is visible rather than guessed at. */
+.sv-shutter.paused{ background: rgba(255,255,255,.28); }
+.sv-shutter .sv-ico{ width: 34px; height: 34px; color: #fff; }
+
+/* Stop sits in the flip button's slot while recording, in the danger colour so
+   it is never confused with pausing. */
+.sv-round.stop{ background: rgba(239,68,68,.92); color: #fff; }
+.sv-round.stop .sv-ico{ width: 24px; height: 24px; }
+
+.sv-deck-foot{
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding-top: 8px;
+}
+.sv-text-btn{
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 9px 13px; border-radius: 11px;
+  background: rgba(255,255,255,.09); color: #fff;
+  font-size: 12.5px; font-weight: 600;
+  transition: background .15s var(--sv-ease), transform .12s var(--sv-ease);
+}
+.sv-text-btn:active{ transform: scale(.95); }
+.sv-text-btn[disabled]{ opacity: .34; }
+.sv-deck-hint{
+  flex: 1 1 auto; text-align: center; min-width: 0;
+  font-size: 11.5px; font-weight: 600; color: rgba(255,255,255,.55);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ── Clip strip ────────────────────────────────────────────────────────────
+   The missing feedback loop. Stop recording and the take lands here as a
+   real block you can watch and delete, instead of vanishing with no
+   acknowledgement at all. */
+.sv-strip{
+  flex: 0 0 auto; background: #000; border-top: 1px solid rgba(255,255,255,.08);
+  padding: 10px var(--sv-pad) 4px;
+}
+.sv-strip-hd{
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px; font-size: 11px; font-weight: 700;
+  letter-spacing: .08em; text-transform: uppercase; color: rgba(255,255,255,.5);
+}
+.sv-strip-scroll{
+  display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px;
+  scrollbar-width: none; -webkit-overflow-scrolling: touch;
+}
+.sv-strip-scroll::-webkit-scrollbar{ display: none; }
+
+.sv-take{
+  position: relative; flex: none; width: 74px; border-radius: 11px;
+  overflow: hidden; background: var(--sv-sf2);
+  border: 2px solid transparent;
+  transition: border-color .15s var(--sv-ease), transform .12s var(--sv-ease);
+}
+.sv-take:active{ transform: scale(.95); }
+.sv-take.on{ border-color: var(--sv-accent); }
+.sv-take-thumb{
+  width: 100%; aspect-ratio: 3/4; object-fit: cover; display: block; background: #000;
+}
+.sv-take-play{
+  position: absolute; inset: 0; display: grid; place-items: center;
+  background: rgba(0,0,0,.28); color: #fff; pointer-events: none;
+}
+.sv-take-play svg{ width: 26px; height: 26px; }
+.sv-take-meta{
+  padding: 5px 0 4px; text-align: center; font-size: 10px; font-weight: 700;
+  color: rgba(255,255,255,.72); font-variant-numeric: tabular-nums;
+  background: rgba(0,0,0,.5);
+}
+.sv-take-x{
+  position: absolute; top: 3px; right: 3px; z-index: 3;
+  width: 24px; height: 24px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: rgba(0,0,0,.72); color: #fff;
+}
+.sv-take-x svg{ width: 14px; height: 14px; }
+.sv-strip-empty{
+  padding: 16px 0 20px; text-align: center;
+  font-size: 12px; color: rgba(255,255,255,.42);
+}
+
+/* Recording-paused note inside the strip so a paused take is obvious */
+.sv-take.is-live{ border-color: var(--sv-danger); }
+.sv-take.is-live .sv-take-thumb{ opacity: .6; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   REVIEW  (play back a take full-screen before committing to the editor)
+   ═══════════════════════════════════════════════════════════════════════════ */
+.sv-review{
+  position: absolute; inset: 0; z-index: 20;
+  display: flex; flex-direction: column;
+  background: rgba(0,0,0,.94); backdrop-filter: blur(6px);
+  animation: sv-fade .18s var(--sv-ease);
+}
+@keyframes sv-fade{ from{ opacity: 0 } to{ opacity: 1 } }
+.sv-review-stage{
+  flex: 1 1 auto; min-height: 0; display: grid; place-items: center; padding: 16px;
+}
+.sv-review-stage video{
+  max-width: 100%; max-height: 100%;
+  border-radius: var(--sv-r); background: #000;
+}
+.sv-review-foot{
+  flex: 0 0 auto; display: flex; gap: 10px;
+  padding: 0 var(--sv-pad) calc(18px + var(--sv-safe-b));
+}
+.sv-btn-wide{
+  flex: 1 1 0; height: 50px; border-radius: 13px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  font-size: 14.5px; font-weight: 700;
+  transition: transform .12s var(--sv-ease);
+}
+.sv-btn-wide:active{ transform: scale(.97); }
+.sv-btn-wide.ghost{ background: rgba(255,255,255,.11); color: #fff; }
+.sv-btn-wide.primary{
+  background: linear-gradient(135deg, var(--sv-accent), var(--sv-accent-lit));
+  color: #fff; box-shadow: 0 6px 20px rgba(124,58,237,.34);
+}
+.sv-btn-wide.danger{ background: rgba(239,68,68,.16); color: #FF8F8F; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   EDITOR
+   ═══════════════════════════════════════════════════════════════════════════ */
+.sv-ed{ display: flex; flex-direction: column; height: 100%; background: var(--bg); }
+.sv-ed .sv-bar{ border-bottom: 1px solid var(--sv-line); background: var(--bg); }
+
+.sv-ed-stage{
+  position: relative; flex: 1 1 auto; min-height: 0;
+  display: grid; place-items: center; overflow: hidden;
+  background: #000;
+}
+/* Both video buffers live here at all times — they are moved in and out of the
+   DOM by the media pool, never recreated, because re-acquiring a <video> per
+   render is what used to blank the preview. */
+.sv-media{ position: absolute; inset: 0; display: grid; place-items: center; }
+.sv-media video{
+  max-width: 100%; max-height: 100%; background: #000;
+}
+.sv-media .sv-empty-note{
+  color: var(--sv-mu); font-size: 13px; text-align: center; padding: 20px;
+}
+
+/* Overlay + caption layer sits above the video and shares its box, so
+   percentage positions in the model mean the same thing on every screen. */
+.sv-layer{
+  position: absolute; inset: 0; z-index: 2;
+  pointer-events: none;
+}
+.sv-layer > *{ pointer-events: auto; }
+
+.sv-overlay{
+  position: absolute; touch-action: none;
+  border: 1.5px dashed transparent; border-radius: 8px;
+  padding: 2px 4px; white-space: pre-wrap;
+}
+.sv-overlay.sel{ border-color: var(--sv-accent); background: rgba(124,58,237,.14); }
+.sv-overlay.sel::after{
+  content: ""; position: absolute; right: -7px; bottom: -7px;
+  width: 16px; height: 16px; border-radius: 5px;
+  background: var(--sv-accent); border: 2px solid #fff;
+  cursor: nwse-resize;
+}
+.sv-overlay .sv-ov-x{
+  position: absolute; left: -12px; top: -12px;
+  width: 22px; height: 22px; border-radius: 50%;
+  display: none; place-items: center;
+  background: var(--sv-danger); color: #fff;
+}
+.sv-overlay.sel .sv-ov-x{ display: grid; }
+.sv-overlay .sv-ov-x svg{ width: 12px; height: 12px; }
+.sv-overlay img{ display: block; max-width: 190px; border-radius: 6px; }
+
+.sv-cap{
+  position: absolute; left: 50%; transform: translateX(-50%);
+  width: 88%; text-align: center; cursor: grab;
+  padding: 4px 8px; border-radius: 8px;
+  border: 1.5px dashed transparent;
+}
+.sv-cap.sel{ border-color: var(--sv-accent); }
+.sv-cap.off{ opacity: 0; pointer-events: none; }
+
+/* Playback HUD */
+.sv-hud{
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 4;
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px;
+  background: linear-gradient(0deg, rgba(0,0,0,.78) 0%, rgba(0,0,0,0) 100%);
+}
+.sv-hud-play{
+  width: 40px; height: 40px; flex: none; border-radius: 50%;
+  display: grid; place-items: center; background: rgba(255,255,255,.16); color: #fff;
+}
+.sv-hud-play:active{ transform: scale(.93); }
+.sv-hud-time{
+  font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; color: #fff;
+}
+.sv-hud-time .tot{ color: rgba(255,255,255,.5); font-weight: 600; }
+.sv-hud-right{ margin-left: auto; display: flex; gap: 6px; }
+.sv-hud-btn{
+  width: 36px; height: 36px; border-radius: 10px;
+  display: grid; place-items: center; color: #fff;
+  background: rgba(255,255,255,.12);
+}
+.sv-hud-btn[disabled]{ opacity: .3; }
+.sv-hud-btn .sv-ico{ width: 18px; height: 18px; }
+
+/* ── Timeline ──────────────────────────────────────────────────────────────
+   One horizontal band. Clips are laid out left to right at --sv-px-ms, and the
+   selected clip grows a pair of grab handles — tap the clip, drag the handle.
+   That is the CapCut gesture, and it is the single biggest change from the old
+   build, whose Trim button opened a sheet of sliders that changed nothing. */
+.sv-timeline{
+  flex: 0 0 auto; position: relative;
+  border-top: 1px solid var(--sv-line); background: var(--sv-sf);
+  padding: 8px 0 6px;
+}
+.sv-tl-scroll{
+  overflow-x: auto; overflow-y: hidden; position: relative;
+  scrollbar-width: none; -webkit-overflow-scrolling: touch;
+}
+.sv-tl-scroll::-webkit-scrollbar{ display: none; }
+.sv-tl-inner{ position: relative; padding: 0 var(--sv-pad); }
+
+/* Ruler */
+.sv-ruler{
+  position: relative; height: 16px; margin-bottom: 4px;
+  font-size: 9.5px; color: var(--sv-mu2, #5E5F6B);
+  font-variant-numeric: tabular-nums;
+}
+.sv-ruler i{
+  position: absolute; bottom: 0; width: 1px; height: 6px;
+  background: rgba(255,255,255,.16);
+}
+.sv-ruler b{
+  position: absolute; bottom: 7px; transform: translateX(-50%);
+  font-weight: 600; white-space: nowrap;
+}
+
+/* Playhead */
+.sv-playhead{
+  position: absolute; top: 0; bottom: 0; width: 2px; z-index: 5;
+  background: var(--sv-accent-lit); pointer-events: none;
+  box-shadow: 0 0 8px rgba(159,103,255,.8);
+}
+.sv-playhead::before{
+  content: ""; position: absolute; top: -4px; left: 50%; transform: translateX(-50%);
+  width: 12px; height: 12px; border-radius: 50%;
+  background: var(--sv-accent-lit); border: 2px solid #fff;
+}
+
+/* Tracks */
+.sv-track{
+  position: relative; height: var(--sv-track-h); margin-bottom: 6px;
+  border-radius: 10px; background: rgba(255,255,255,.035);
+}
+.sv-track.sv-track-ov{ height: 30px; }
+.sv-track.sv-track-cap{ height: 30px; }
+.sv-track.sv-track-aud{ height: 30px; }
+.sv-track-empty{
+  position: absolute; inset: 0; display: flex; align-items: center;
+  padding-left: 12px; font-size: 11px; font-weight: 600; color: var(--sv-mu2, #5E5F6B);
+  pointer-events: none;
+}
+
+.sv-clip{
+  position: absolute; top: 3px; bottom: 3px; overflow: hidden;
+  border-radius: 9px; background: linear-gradient(135deg, #2b2540, #1a1729);
+  border: 1.5px solid transparent;
+  transition: border-color .14s var(--sv-ease);
+}
+.sv-clip img{ width: 100%; height: 100%; object-fit: cover; opacity: .78; }
+.sv-clip-name{
+  position: absolute; left: 8px; bottom: 4px; right: 8px;
+  font-size: 10px; font-weight: 700; color: #fff;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  text-shadow: 0 1px 3px rgba(0,0,0,.9); pointer-events: none;
+}
+.sv-clip-dur{
+  position: absolute; right: 7px; top: 4px;
+  font-size: 9.5px; font-weight: 700; color: #fff;
+  padding: 1px 5px; border-radius: 5px; background: rgba(0,0,0,.6);
+  font-variant-numeric: tabular-nums; pointer-events: none;
+}
+.sv-clip.sel{ border-color: var(--sv-accent-lit); }
+
+/* Trim handles — only on the selected clip. */
+.sv-grab{
+  position: absolute; top: 0; bottom: 0; width: 20px; z-index: 4;
+  display: none; align-items: center; justify-content: center;
+  touch-action: none; cursor: ew-resize;
+}
+.sv-clip.sel .sv-grab{ display: flex; }
+.sv-grab.l{ left: 0; background: linear-gradient(90deg, rgba(124,58,237,.95), rgba(124,58,237,.15)); }
+.sv-grab.r{ right: 0; background: linear-gradient(270deg, rgba(124,58,237,.95), rgba(124,58,237,.15)); }
+.sv-grab::after{
+  content: ""; width: 3px; height: 20px; border-radius: 2px; background: #fff;
+}
+/* While a handle is held, the rest of the timeline must not scroll under it. */
+.sv-tl-scroll.is-trimming{ overflow-x: hidden; }
+.sv-tl-scroll.is-trimming .sv-clip:not(.sel){ opacity: .55; }
+
+.sv-clip-ov{
+  position: absolute; top: 3px; bottom: 3px; border-radius: 7px;
+  background: rgba(159,103,255,.34); border: 1px solid rgba(159,103,255,.6);
+  display: flex; align-items: center; padding: 0 7px;
+  font-size: 10px; font-weight: 700; color: #fff;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sv-clip-cap{
+  position: absolute; top: 3px; bottom: 3px; border-radius: 7px;
+  background: rgba(249,115,22,.28); border: 1px solid rgba(249,115,22,.55);
+  display: flex; align-items: center; padding: 0 7px;
+  font-size: 10px; font-weight: 700; color: #fff;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sv-clip-aud{
+  position: absolute; top: 3px; bottom: 3px; border-radius: 7px;
+  background: rgba(74,222,128,.24); border: 1px solid rgba(74,222,128,.5);
+  display: flex; align-items: center; gap: 5px; padding: 0 7px;
+  font-size: 10px; font-weight: 700; color: #fff;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sv-clip-aud svg{ width: 12px; height: 12px; flex: none; }
+
+/* ── Toolbar ───────────────────────────────────────────────────────────────
+   Context tools appear only when something is selected, and they push the main
+   row down rather than overlaying the timeline. */
+.sv-toolbar{
+  flex: 0 0 auto; border-top: 1px solid var(--sv-line); background: var(--sv-sf);
+  padding: 8px var(--sv-pad) calc(8px + var(--sv-safe-b));
+}
+.sv-tb-row{
+  display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none;
+}
+.sv-tb-row::-webkit-scrollbar{ display: none; }
+.sv-tb-context{
+  padding-bottom: 6px; margin-bottom: 6px;
+  border-bottom: 1px solid var(--sv-line);
+}
+.sv-tb{
+  flex: 1 0 62px; min-width: 62px;
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  padding: 8px 4px; border-radius: 11px;
+  font-size: 10px; font-weight: 600; color: var(--sv-mu);
+  transition: background .14s var(--sv-ease), color .14s var(--sv-ease), transform .12s var(--sv-ease);
+}
+.sv-tb:active{ transform: scale(.94); background: rgba(255,255,255,.06); }
+.sv-tb.on{ color: var(--sv-accent-lit); background: rgba(124,58,237,.14); }
+.sv-tb.danger{ color: #F87171; }
+.sv-tb[disabled]{ opacity: .32; }
+.sv-tb .sv-ico{ width: 20px; height: 20px; }
+
+/* ── Bottom sheet ──────────────────────────────────────────────────────────
+   One sheet element, reused for every tool. It slides up from the bottom,
+   stops short of the top so the preview stays visible, and can be dragged
+   down to dismiss. */
+.sv-scrim{
+  position: absolute; inset: 0; z-index: 30;
+  background: rgba(0,0,0,.55); backdrop-filter: blur(2px);
+  animation: sv-fade .16s var(--sv-ease);
+}
+.sv-sheet{
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 31;
+  max-height: 76%; display: flex; flex-direction: column;
+  background: var(--sv-sf2); border-radius: 22px 22px 0 0;
+  border-top: 1px solid var(--sv-line2);
+  animation: sv-up .24s var(--sv-ease);
+  padding-bottom: var(--sv-safe-b);
+  touch-action: none;
+}
+@keyframes sv-up{ from{ transform: translateY(100%) } to{ transform: translateY(0) } }
+.sv-sheet-grip{
+  flex: none; padding: 10px 0 4px; display: grid; place-items: center;
+}
+.sv-sheet-grip i{ width: 40px; height: 4px; border-radius: 99px; background: rgba(255,255,255,.22); }
+.sv-sheet-hd{
+  flex: none; display: flex; align-items: center; gap: 12px;
+  padding: 4px 18px 12px; border-bottom: 1px solid var(--sv-line);
+}
+.sv-sheet-hd h4{ flex: 1 1 auto; font-size: 15.5px; font-weight: 700; letter-spacing: -.01em; }
+.sv-sheet-hd .done{
+  padding: 8px 16px; border-radius: 10px;
+  background: var(--sv-accent); color: #fff; font-size: 13px; font-weight: 700;
+}
+.sv-sheet-body{
+  flex: 1 1 auto; overflow-y: auto; padding: 16px 18px 22px;
+  touch-action: pan-y; overscroll-behavior: contain;
+}
+.sv-sheet-note{ font-size: 11.5px; color: var(--sv-mu); line-height: 1.55; margin-top: 10px; }
+
+/* ── Sheet: trim ───────────────────────────────────────────────────────────
+   Shows the kept window as a bar you drag, with the live in/out/length
+   readout underneath. Matches the timeline gesture rather than competing
+   with it — this is the coarse adjustment, the handles are the fine one. */
+.sv-trim-bar{
+  position: relative; height: 46px; border-radius: 10px; overflow: hidden;
+  background: rgba(255,255,255,.06); margin-bottom: 14px;
+}
+.sv-trim-sel{
+  position: absolute; top: 0; bottom: 0;
+  background: rgba(124,58,237,.32); border-left: 3px solid var(--sv-accent-lit);
+  border-right: 3px solid var(--sv-accent-lit);
+}
+.sv-trim-read{
+  display: flex; justify-content: space-between;
+  font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums;
+  color: var(--sv-tx); margin-bottom: 16px;
+}
+.sv-trim-read span{ color: var(--sv-mu); font-weight: 600; }
+
+.sv-field{ margin-bottom: 16px; }
+.sv-field label{
+  display: block; margin-bottom: 7px;
+  font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--sv-mu);
+}
+.sv-input{
+  width: 100%; padding: 12px 13px; border-radius: 11px;
+  background: var(--bg); border: 1px solid var(--sv-line2);
+  color: var(--sv-tx); font-size: 14px; outline: none;
+  transition: border-color .15s var(--sv-ease);
+}
+.sv-input:focus{ border-color: var(--sv-accent); }
+textarea.sv-input{ min-height: 130px; resize: vertical; line-height: 1.6; }
+
+.sv-row{ display: flex; gap: 8px; flex-wrap: wrap; }
+.sv-row > *{ flex: 1 1 auto; }
+
+/* Range sliders */
+.sv-slider{
+  -webkit-appearance: none; appearance: none;
+  width: 100%; height: 30px; background: transparent;
+}
+.sv-slider::-webkit-slider-runnable-track{
+  height: 5px; border-radius: 99px; background: rgba(255,255,255,.16);
+}
+.sv-slider::-webkit-slider-thumb{
+  -webkit-appearance: none; width: 22px; height: 22px; margin-top: -9px;
+  border-radius: 50%; background: var(--sv-accent-lit); border: 2px solid #fff;
+}
+.sv-slider::-moz-range-track{ height: 5px; border-radius: 99px; background: rgba(255,255,255,.16); }
+.sv-slider::-moz-range-thumb{
+  width: 20px; height: 20px; border: 2px solid #fff;
+  border-radius: 50%; background: var(--sv-accent-lit);
+}
+
+/* Selectable grids: filters, caption presets, text styles, audio */
+.sv-grid{ display: grid; gap: 9px; }
+.sv-grid.g2{ grid-template-columns: repeat(2, 1fr); }
+.sv-grid.g3{ grid-template-columns: repeat(3, 1fr); }
+
+.sv-cell{
+  padding: 13px 8px; border-radius: 12px; text-align: center;
+  background: var(--bg); border: 1.5px solid transparent;
+  color: var(--sv-tx); font-size: 12.5px; font-weight: 600;
+  transition: border-color .14s var(--sv-ease), background .14s var(--sv-ease), transform .12s var(--sv-ease);
+}
+.sv-cell:active{ transform: scale(.95); }
+.sv-cell.on{ border-color: var(--sv-accent); background: rgba(124,58,237,.16); }
+.sv-cell .sub{ display: block; margin-top: 3px; font-size: 10px; font-weight: 600; color: var(--sv-mu); }
+.sv-cell.spin{ font-size: 17px; font-weight: 700; }
+
+.sv-swatch{ height: 62px; border-radius: 11px; position: relative; overflow: hidden; }
+.sv-swatch span{
+  position: absolute; left: 0; right: 0; bottom: 0; padding: 4px 6px;
+  font-size: 10px; font-weight: 700; color: #fff;
+  background: linear-gradient(0deg, rgba(0,0,0,.72), rgba(0,0,0,0));
+}
+
+.sv-colors{ display: flex; flex-wrap: wrap; gap: 11px; }
+.sv-dot{
+  width: 34px; height: 34px; border-radius: 50%;
+  border: 2px solid rgba(255,255,255,.2);
+  transition: transform .14s var(--sv-ease), border-color .14s var(--sv-ease);
+}
+.sv-dot.on{ border-color: #fff; transform: scale(1.16); box-shadow: 0 0 0 3px rgba(124,58,237,.5); }
+
+/* List rows (music tracks, caption lines) */
+.sv-list{ display: flex; flex-direction: column; gap: 8px; }
+.sv-item{
+  display: flex; align-items: center; gap: 11px;
+  padding: 11px 13px; border-radius: 12px; background: var(--bg);
+}
+.sv-item .n{
+  flex: 1 1 auto; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-size: 13px; font-weight: 600;
+}
+.sv-item .d{ font-size: 11.5px; color: var(--sv-mu); font-variant-numeric: tabular-nums; }
+.sv-item .x{ padding: 5px; color: #FB7185; display: grid; place-items: center; }
+.sv-item .x svg{ width: 16px; height: 16px; }
+
+/* Inline "tap to add" affordance inside a sheet */
+.sv-add{
+  display: flex; align-items: center; justify-content: center; gap: 9px;
+  padding: 14px; border-radius: var(--sv-r);
+  border: 1.5px dashed var(--sv-line2); color: var(--sv-accent-lit);
+  font-size: 13.5px; font-weight: 600;
+  transition: background .15s var(--sv-ease);
+}
+.sv-add:active{ background: rgba(124,58,237,.12); }
+
+/* ── Export veil ─────────────────────────────────────────────────────────── */
+.sv-export{
+  position: absolute; inset: 0; z-index: 40;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 18px; background: rgba(0,0,0,.86); backdrop-filter: blur(4px);
+}
+.sv-ring{ position: relative; width: 104px; height: 104px; display: grid; place-items: center; }
+.sv-ring svg{ position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
+.sv-ring circle{ fill: none; stroke-width: 3.2; }
+.sv-ring .bg{ stroke: rgba(255,255,255,.13); }
+.sv-ring .fg{
+  stroke: var(--sv-accent-lit); stroke-linecap: round;
+  transition: stroke-dashoffset .3s linear;
+}
+.sv-ring span{
+  font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; color: #fff;
+}
+.sv-export-note{
+  font-size: 13px; color: var(--sv-mu); text-align: center;
+  padding: 0 28px; line-height: 1.6;
+}
+
+/* ── Toasts ──────────────────────────────────────────────────────────────── */
+.sv-toast{
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(84px + var(--sv-safe-b)); z-index: 9100;
+  max-width: 82vw; padding: 12px 18px; border-radius: 13px;
+  background: rgba(28,28,43,.97); border: 1px solid var(--sv-line2);
+  color: var(--sv-tx); font-size: 13px; font-weight: 600;
+  box-shadow: 0 12px 34px rgba(0,0,0,.5);
+  animation: sv-toastIn .22s var(--sv-ease);
+  pointer-events: none;
+}
+@keyframes sv-toastIn{ from{ opacity: 0; transform: translate(-50%, 12px) } to{ opacity: 1; transform: translate(-50%, 0) } }
+
+/* ── Motion / accessibility ──────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce){
+  .sv-root *, .sv-sheet, .sv-scrim, .sv-review, .sv-toast{ animation: none !important; transition: none !important; }
+}
+/* Short screens: give the preview room by tightening the timeline. */
+@media (max-height: 700px){
+  .sv-root{ --sv-track-h: 44px; }
+  .sv-shutter{ width: 66px; height: 66px; }
+  .sv-take{ width: 64px; }
+  .sv-prompter{ top: 82px; max-height: 36%; }
+}
+/* Landscape: keep the deck usable rather than squashing the preview. */
+@media (orientation: landscape) and (max-height: 520px){
+  .sv-root{ --sv-track-h: 40px; }
+  .sv-prompter{ max-height: 46%; }
+  .sv-shutter{ width: 60px; height: 60px; }
+}
