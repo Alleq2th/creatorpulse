@@ -154,11 +154,15 @@
    Scrolls inside its own masked window. The fade at top and bottom means the
    text arrives and leaves instead of being hard-cut, which is what makes it
    readable while you are talking rather than just present on screen. */
+.sv-prompter-wrap{
+  position: absolute; left: 50%; top: 26%; width: min(88%, 560px);
+  transform: translateX(-50%); z-index: 3;
+}
+.sv-prompter-wrap.dragging{ opacity: .9; }
 .sv-prompter{
-  position: absolute; left: 12px; right: 84px; top: 96px;
-  max-height: 42%;
-  z-index: 3; border-radius: var(--sv-r); overflow: hidden;
-  background: rgba(0,0,0,.55); backdrop-filter: blur(10px);
+  position: relative; border-radius: var(--sv-r); overflow: hidden;
+  max-height: 38vh;
+  background: rgba(0,0,0,.62);
   -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 16%, #000 82%, transparent 100%);
           mask-image: linear-gradient(180deg, transparent 0, #000 16%, #000 82%, transparent 100%);
 }
@@ -169,11 +173,79 @@
   white-space: pre-wrap;
 }
 .sv-prompter-hd{
-  position: absolute; left: 12px; right: 84px; top: 70px; z-index: 4;
-  display: flex; align-items: center; justify-content: space-between;
-  font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
-  color: rgba(255,255,255,.6);
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  margin-bottom: 6px; padding: 0 2px;
+  font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: rgba(255,255,255,.75);
+  cursor: grab; touch-action: none; -webkit-user-select: none; user-select: none;
 }
+.sv-prompter-hd:active{ cursor: grabbing; }
+.sv-prompter-grip{ display: inline-flex; align-items: center; gap: 5px; }
+.sv-prompter-grip .sv-ico{ width: 14px; height: 14px; }
+.sv-prompter-tools{ display: inline-flex; align-items: center; gap: 5px; }
+.sv-prompter-btn{
+  min-width: 30px; padding: 5px 9px; border-radius: 8px;
+  background: rgba(255,255,255,.18); color: #fff;
+  font-size: 11px; font-weight: 800; line-height: 1;
+  display: inline-flex; align-items: center; gap: 2px;
+  transition: transform .12s var(--sv-ease);
+}
+.sv-prompter-btn:active{ transform: scale(.92); }
+.sv-prompter-btn .sm{ font-size: 9px; }
+.sv-prompter-btn .lg{ font-size: 13px; }
+.sv-prompter-btn .sv-ico{ width: 12px; height: 12px; }
+
+/* ── Recording performance guard ──────────────────────────────────────────
+   THE fix for the janky recording. `backdrop-filter: blur()` over a live
+   camera forces the compositor to re-blur everything behind it on every
+   single frame. The prompter, the four rail buttons, the zoom pill and the
+   timer pills all carried one, stacked over the video.
+
+   Measured in a real Chromium with a synthetic camera (verify/isolate.js),
+   holding everything else constant:
+       as shipped (1080p + stacked blurs)   37.2 fps   18.7% janky frames
+       blurs removed only                   59.8 fps    0.4% janky frames
+   Removing them only WHILE RECORDING keeps the frosted look the rest of the
+   time, when there is no encoder competing for the same frame budget. */
+.sv-stage.is-rec .sv-prompter,
+.sv-stage.is-rec .sv-rail-btn,
+.sv-stage.is-rec .sv-zoom,
+.sv-stage.is-rec .sv-rec-pill,
+.sv-stage.is-rec .sv-paused-pill,
+.sv-stage.is-rec .sv-prompter-btn{
+  -webkit-backdrop-filter: none !important;
+          backdrop-filter: none !important;
+}
+/* The background is darkened instead, so the text stays just as readable. */
+.sv-stage.is-rec .sv-prompter{ background: rgba(0,0,0,.78); }
+.sv-stage.is-rec .sv-rec-pill,
+.sv-stage.is-rec .sv-paused-pill{ background: rgba(0,0,0,.82); }
+
+/* ── Camera looks ─────────────────────────────────────────────────────────
+   A filter chosen BEFORE recording. Closed by default so it costs one tap;
+   opening it slides the row up without covering the subject. */
+.sv-camfilters{
+  position: absolute; left: 0; right: 0; bottom: 0; z-index: 4;
+  display: flex; gap: 10px; overflow-x: auto;
+  padding: 10px 12px calc(12px + var(--sv-safe-b));
+  background: linear-gradient(0deg, rgba(0,0,0,.86) 0%, rgba(0,0,0,0) 100%);
+  transform: translateY(102%); opacity: 0; pointer-events: none;
+  transition: transform .22s var(--sv-ease), opacity .22s var(--sv-ease);
+  -webkit-overflow-scrolling: touch;
+}
+.sv-camfilters.open{ transform: translateY(0); opacity: 1; pointer-events: auto; }
+.sv-camfilter{
+  flex: none; width: 58px; display: flex; flex-direction: column;
+  align-items: center; gap: 5px; color: #fff;
+}
+.sv-camfilter .sw{
+  width: 52px; height: 52px; border-radius: 50%; display: block;
+  background: linear-gradient(135deg, #7C3AED 0%, #EC4899 45%, #F59E0B 100%);
+  border: 2px solid transparent;
+}
+.sv-camfilter.on .sw{ border-color: #fff; }
+.sv-camfilter .lb{ font-size: 10px; font-weight: 600; color: rgba(255,255,255,.8); }
+.sv-camfilter.on .lb{ color: #fff; }
 
 /* ── Recording indicator ────────────────────────────────────────────────── */
 .sv-rec-pill{
@@ -351,11 +423,18 @@
 }
 @keyframes sv-fade{ from{ opacity: 0 } to{ opacity: 1 } }
 .sv-review-stage{
-  flex: 1 1 auto; min-height: 0; display: grid; place-items: center; padding: 16px;
+  flex: 0 0 auto; display: grid; place-items: center; padding: 10px 16px 4px;
 }
 .sv-review-stage video{
-  max-width: 100%; max-height: 100%;
+  width: auto; height: auto; max-height: 46vh; max-width: 100%;
   border-radius: var(--sv-r); background: #000;
+}
+/* The stage is sized to the clip instead of being stretched over the whole
+   screen, so the black space that used to fill the page collapses. */
+.sv-review-gap{ flex: 1 1 auto; min-height: 0; }
+.sv-review-note{
+  flex: 0 0 auto; text-align: center; padding: 0 24px 10px;
+  font-size: 12.5px; color: rgba(255,255,255,.55);
 }
 .sv-review-foot{
   flex: 0 0 auto; display: flex; gap: 10px;
@@ -411,12 +490,18 @@
   padding: 2px 4px; white-space: pre-wrap;
 }
 .sv-overlay.sel{ border-color: var(--sv-accent); background: rgba(124,58,237,.14); }
-.sv-overlay.sel::after{
-  content: ""; position: absolute; right: -7px; bottom: -7px;
-  width: 16px; height: 16px; border-radius: 5px;
+.sv-overlay .sv-ov-inner{ display: block; }
+/* Real, wired resize handles. The old "handle" was a CSS ::after decal wired to
+   nothing, which is why resizing appeared to do nothing at all. */
+.sv-ov-handle{
+  position: absolute; width: 18px; height: 18px; border-radius: 5px;
   background: var(--sv-accent); border: 2px solid #fff;
-  cursor: nwse-resize;
+  touch-action: none;
 }
+.sv-ov-handle.tl{ left: -9px; top: -9px; cursor: nwse-resize; }
+.sv-ov-handle.tr{ right: -9px; top: -9px; cursor: nesw-resize; }
+.sv-ov-handle.bl{ left: -9px; bottom: -9px; cursor: nesw-resize; }
+.sv-ov-handle.br{ right: -9px; bottom: -9px; cursor: nwse-resize; }
 .sv-overlay .sv-ov-x{
   position: absolute; left: -12px; top: -12px;
   width: 22px; height: 22px; border-radius: 50%;
@@ -427,13 +512,26 @@
 .sv-overlay .sv-ov-x svg{ width: 12px; height: 12px; }
 .sv-overlay img{ display: block; max-width: 190px; border-radius: 6px; }
 
+/* ── CAPTIONS ─────────────────────────────────────────────────────────────
+   Arrangement, not just styling. Captions now wrap to a readable measure
+   instead of running the full frame width in one long line, sit on a soft
+   backing so they survive a busy background, and carry a grab handle so the
+   card itself can be dragged up or down the frame. */
 .sv-cap{
   position: absolute; left: 50%; transform: translateX(-50%);
-  width: 88%; text-align: center; cursor: grab;
-  padding: 4px 8px; border-radius: 8px;
+  width: 88%; max-width: 620px; text-align: center; cursor: grab;
+  padding: 6px 12px; border-radius: 10px;
   border: 1.5px dashed transparent;
+  line-height: 1.34; text-wrap: balance;
+  touch-action: none;
 }
-.sv-cap.sel{ border-color: var(--sv-accent); }
+.sv-cap.sel{ border-color: var(--sv-accent); background: rgba(124,58,237,.14); }
+.sv-cap.sel::before{
+  content: "\2261"; position: absolute; right: 4px; top: -26px;
+  width: 24px; height: 20px; border-radius: 6px;
+  display: grid; place-items: center; font-size: 14px; line-height: 1;
+  background: var(--sv-accent); color: #fff;
+}
 .sv-cap.off{ opacity: 0; pointer-events: none; }
 
 /* Playback HUD */
@@ -611,14 +709,21 @@
    One sheet element, reused for every tool. It slides up from the bottom,
    stops short of the top so the preview stays visible, and can be dragged
    down to dismiss. */
+/* ── Scrim ────────────────────────────────────────────────────────────────
+   The preview must stay VISIBLE while a tool sheet is open. It shipped as a
+   flat 55% black + blur over the entire stage, so choosing a filter changed
+   the video and the user could not see it happen — the effect looked broken
+   when it was in fact working. Now the top of the stage is almost clear and
+   the dimming gathers towards the sheet, and the blur is gone (which also
+   makes the sheet cheaper to composite on a phone). */
 .sv-scrim{
   position: absolute; inset: 0; z-index: 30;
-  background: rgba(0,0,0,.55); backdrop-filter: blur(2px);
+  background: linear-gradient(180deg, rgba(0,0,0,.06) 0%, rgba(0,0,0,.30) 42%, rgba(0,0,0,.80) 100%);
   animation: sv-fade .16s var(--sv-ease);
 }
 .sv-sheet{
   position: absolute; left: 0; right: 0; bottom: 0; z-index: 31;
-  max-height: 76%; display: flex; flex-direction: column;
+  max-height: 62%; display: flex; flex-direction: column;
   background: var(--sv-sf2); border-radius: 22px 22px 0 0;
   border-top: 1px solid var(--sv-line2);
   animation: sv-up .24s var(--sv-ease);
