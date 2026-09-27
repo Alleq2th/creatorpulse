@@ -69,14 +69,9 @@ const SYS = "You are CreatorPulse AI, a scriptwriter for social media creators. 
 // ─── STATE ──────────────────────────────────────────────────────────────────
 const S = {
   mode: "boot", // boot | auth | onboard | app
-  authTab: "login", // login | signup | forgot
+  authTab: "login", // login | signup
   authForm: { email:"", password:"", name:"" },
   authErr: "", authMsg: "", authLoading: false, token: null, refreshToken: null, user: null,
-  // Password recovery. Filled in from the Supabase recovery link that lands on
-  // the app as #access_token=…&refresh_token=…&type=recovery. Held in state
-  // rather than read from the URL at submit time, because the hash is scrubbed
-  // from the address bar as soon as it has been parsed.
-  recovery: { active:false, accessToken:"", refreshToken:"", error:"", done:false, loading:false, form:{ password:"", confirm:"" } },
   onboard: { step:0, name:"", niches:[], platforms:[], primary:"", ppd:3 },
   tab: "home",
   trends: [], notifs: [], schedule: [], saved: [], eventsCache: {},
@@ -216,11 +211,16 @@ const PLAT_EMOJI = { tiktok:"🎵", instagram:"📸", youtube:"▶️", twitter:
   const st = document.createElement("style");
   st.id = "cp-ux-styles";
   st.textContent = `
+  /* Was a hardcoded gray-and-white shimmer with no relation to the app's own
+     palette (#2a2a30 / white, unrelated to --sf2 / --tx). Now a signal-tinted
+     pulse-line sweep — the same motion language as the momentum indicators,
+     not a separate unrelated loading system. */
   @keyframes cp-shimmer { 0%{background-position:-320px 0} 100%{background-position:320px 0} }
   @keyframes cp-pulse { 0%,100%{opacity:1} 50%{opacity:.55} }
-  .sk { background:#2a2a30; background-image:linear-gradient(90deg,rgba(255,255,255,0) 0,rgba(255,255,255,.35) 50%,rgba(255,255,255,0) 100%);
+  .sk { background:var(--sf2,#211E1A); background-image:linear-gradient(90deg,rgba(255,74,46,0) 0,rgba(255,74,46,.35) 50%,rgba(255,74,46,0) 100%);
         background-repeat:no-repeat; background-size:320px 100%;
         animation:cp-shimmer 1.2s infinite linear, cp-pulse 1.6s ease-in-out infinite; border-radius:6px; }
+  @media(prefers-reduced-motion:reduce){ .sk{ animation:none; background-image:none; } }
   .sk-line { height:11px; margin:7px 0; }
   .sk-line.w90{width:90%} .sk-line.w70{width:70%} .sk-line.w50{width:50%} .sk-line.w35{width:35%}
   .sk-img { width:64px; height:64px; border-radius:8px; flex:0 0 auto; }
@@ -230,27 +230,31 @@ const PLAT_EMOJI = { tiktok:"🎵", instagram:"📸", youtube:"▶️", twitter:
   .sk-hook .sk-num { width:22px; height:22px; border-radius:50%; flex:0 0 auto; }
   .sk-row { padding:10px 0; }
   .sk-block { height:74px; border-radius:10px; margin:10px 0; }
-  .err-card { border:1px solid var(--err-br,#e6bcbc); background:var(--err-bg,#fff6f6); color:var(--err-tx,#a3423c);
+  .err-card { border:1px solid var(--err-br,rgba(224,80,58,.35)); background:var(--err-bg,var(--sf2,#211E1A)); color:var(--err-tx,var(--danger,#E0503A));
               border-radius:10px; padding:12px 14px; margin:10px 0; font-size:12.5px; line-height:1.5;
               display:flex; gap:10px; align-items:center; justify-content:space-between; }
   .err-card .err-retry { border:1px solid currentColor; background:transparent; color:inherit; border-radius:7px;
               padding:5px 10px; font-size:11px; font-weight:700; cursor:pointer; flex:0 0 auto; }
   img.brand-mark { background:none; object-fit:cover; }
   .uq-result { margin-top:12px; padding:10px 12px; border-radius:8px; font-size:12.5px; line-height:1.5; }
-  .uq-unique { background:rgba(86,117,75,.15); color:#6fa062; }
-  .uq-some_overlap { background:rgba(214,158,46,.15); color:#d69e2e; }
-  .uq-too_similar { background:rgba(220,68,68,.15); color:#e05c5c; }
+  .uq-unique { background:rgba(95,167,119,.14); color:var(--ok,#5FA777); }
+  .uq-some_overlap { background:rgba(217,162,75,.14); color:var(--or,#D9A24B); }
+  .uq-too_similar { background:rgba(224,80,58,.14); color:var(--danger,#E0503A); }
   .cal-cell.has { aspect-ratio:unset; min-height:52px; padding-bottom:4px; }
   .cal-daynum { line-height:1; }
   .cal-tag { margin-top:3px; font-size:8px; line-height:1.15; font-weight:700; padding:2px 3px; border-radius:3px;
              max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .cal-tag-event { background:rgba(168,69,44,.16); color:#c85a37; } /* niche event — brick accent */
-  .cal-tag-post { background:rgba(86,117,75,.18); color:#6fa062; } /* user-added — forest accent */
-  .cal-cell.today .cal-tag-event { background:rgba(255,255,255,.22); color:#fff; }
-  .cal-cell.today .cal-tag-post { background:rgba(255,255,255,.22); color:#fff; }
+  /* Niche opportunity vs. your own scheduled post now read as two distinct
+     weights instead of two arbitrary hues (brick/forest) — quiet for an
+     opportunity you haven't acted on yet, signal for something you've
+     actually committed to the calendar. */
+  .cal-tag-event { background:var(--sf2,rgba(255,255,255,.06)); color:var(--mu,#8A8375); } /* niche opportunity — quiet */
+  .cal-tag-post { background:rgba(255,74,46,.16); color:var(--ac,#FF4A2E); } /* your scheduled post — signal */
+  .cal-cell.today .cal-tag-event { background:rgba(255,255,255,.22); color:var(--bg,#131110); }
+  .cal-cell.today .cal-tag-post { background:rgba(255,255,255,.22); color:var(--bg,#131110); }
   .tipbtn { position:relative; }
   .tipbtn::after { content:attr(data-tip); position:absolute; bottom:calc(100% + 6px); left:50%; transform:translateX(-50%) translateY(3px);
-              background:#111; color:#fff; font-size:10.5px; font-weight:600; white-space:nowrap; padding:4px 7px; border-radius:6px;
+              background:var(--tx,#F3EEE4); color:var(--bg,#131110); font-size:10.5px; font-weight:600; white-space:nowrap; padding:4px 7px; border-radius:6px;
               opacity:0; pointer-events:none; transition:opacity .15s, transform .15s; z-index:60; }
   .tipbtn:hover::after, .tipbtn:focus-visible::after, .tipbtn.tip-hold::after { opacity:1; transform:translateX(-50%) translateY(0); }`;
   document.head.appendChild(st);
@@ -772,10 +776,10 @@ function renderOut(o, tid, idx){
     const cp = (o.slides||[]).map(s=>`SLIDE ${s.slideNumber}: ${slideText(s)}`).join("\n\n");
     const imgs = (o.slides||[]).map(s=>s.img).filter(Boolean);
     const dlAllBtn = imgs.length ? `<button class="btn bo bxs tipbtn" data-tip="Download all slide images" title="Download all slides" aria-label="Download all slides" onclick='dlAll(${JSON.stringify(imgs)})'>${I.dl} All</button>` : "";
-    return `<div class="oc"><div class="oh"><span class="ol">Carousel · ${o.slides?.length||0} slides</span><div style="display:flex;gap:6px">${dlAllBtn}<button class="btn bo bxs tipbtn" data-tip="Copy carousel text" title="Copy carousel text" aria-label="Copy carousel text" onclick="copyTxt(\`${cp.replace(/`/g,"\\`")}\`)">${I.copy}</button></div></div><div style="padding:10px">${slides}</div><div class="ofoot"><button class="btn bo bxs tipbtn" data-tip="Open these slides as a Studio script" title="Take to Studio" aria-label="Take to Studio" onclick="takeToStudio('${tid}',${idx})">${I.cam} Take to Studio</button><button class="btn bp bxs tipbtn" data-tip="Save to library" title="Save to library" aria-label="Save to library" onclick="saveOut('${tid}',${idx})">${I.save} Save</button></div></div>`;
+    return `<div class="oc"><div class="oh"><span class="ol">Carousel · ${o.slides?.length||0} slides</span><div style="display:flex;gap:6px">${dlAllBtn}<button class="btn bo bxs tipbtn" data-tip="Copy carousel text" title="Copy carousel text" aria-label="Copy carousel text" onclick="copyTxt(\`${cp.replace(/`/g,"\\`")}\`)">${I.copy}</button></div></div><div style="padding:10px">${slides}</div><div class="ofoot"><button class="btn bp bxs tipbtn" data-tip="Save to library" title="Save to library" aria-label="Save to library" onclick="saveOut('${tid}',${idx})">${I.save} Save</button></div></div>`;
   }
   const content = String(o.content||"");
-  return `<div class="oc"><div class="oh"><span class="ol">${esc(o.label||"Draft")}</span><button class="btn bo bxs tipbtn" data-tip="Copy draft" title="Copy draft" aria-label="Copy draft" onclick="copyTxt(\`${content.replace(/`/g,"\\`")}\`)">${I.copy}</button></div><div class="ob">${esc(content)}</div><div class="ofoot"><button class="btn bo bxs tipbtn" data-tip="Open this script in the Create Studio teleprompter" title="Take to Studio" aria-label="Take to Studio" onclick="takeToStudio('${tid}',${idx})">${I.cam} Take to Studio</button><button class="btn bp bxs tipbtn" data-tip="Save to library" title="Save to library" aria-label="Save to library" onclick="saveOut('${tid}',${idx})">${I.save} Save</button></div></div>`;
+  return `<div class="oc"><div class="oh"><span class="ol">${esc(o.label||"Draft")}</span><button class="btn bo bxs tipbtn" data-tip="Copy draft" title="Copy draft" aria-label="Copy draft" onclick="copyTxt(\`${content.replace(/`/g,"\\`")}\`)">${I.copy}</button></div><div class="ob">${esc(content)}</div><div class="ofoot"><button class="btn bp bxs tipbtn" data-tip="Save to library" title="Save to library" aria-label="Save to library" onclick="saveOut('${tid}',${idx})">${I.save} Save</button></div></div>`;
 }
 
 window.setSlideBackgroundImage = async (tid, idx, slideIdx, file) => {
@@ -1109,10 +1113,6 @@ function render(){
     if(ev){ window.__csKeep.edTime = ev.currentTime || window.__csKeep.edTime; window.__csKeep.edCid = ev.dataset.cid || window.__csKeep.edCid; }
   } catch(_){}
   if(S.mode === "boot"){ root.innerHTML = `<div class="auth-wrap"><div class="boot-brand"><img src="/logo-64.png" class="brand-mark boot-pulse" alt="CreatorPulse"/><div class="brand-name" style="margin-top:14px">CreatorPulse</div></div><div class="boot-spinner-wrap"><span class="sp boot-sp"></span></div><div class="boot-status">Setting things up…</div></div>`; return; }
-  // A recovery link owns the screen until the password is changed, whatever the
-  // mode — a signed-in user who clicks the link must still land on it.
-  if(S.recovery.active) { renderRecovery(); return csAfterRender(); }
-  if(S.mode === "auth" && S.authTab === "forgot") { renderForgot(); return csAfterRender(); }
   if(S.mode === "auth") { renderAuth(); return csAfterRender(); }
   if(S.mode === "onboard") { renderOnboard(); return csAfterRender(); }
   renderApp();
@@ -1125,143 +1125,101 @@ function csAfterRender(){
     if(fbBtn) fbBtn.style.display = (S.tab === 'create') ? 'none' : '';
     const coachBtn = document.getElementById('fab-coach');
     if(coachBtn) coachBtn.style.display = (S.tab === 'create') ? 'none' : '';
-    // The floating AI-coach button and the cookie banner are position:fixed at
-    // z-index 9999, ABOVE the Studio's full-screen surface. Left alone the
-    // banner sits straight over the record shutter, and since it only ever
-    // shows on a first visit, the button simply looks dead with nothing on
-    // screen to explain why. Hide both while the Studio is open.
-    const cookieBanner = document.getElementById('cp-cookie-banner');
-    if(cookieBanner && S.studio) cookieBanner.style.display = 'none';
-    // The Studio owns its own camera stream, playback ticker, teleprompter
-    // loop and video sourcing now. It reattaches all of that from
-    // svAfterRender() once the markup has landed, so this app-level hook has
-    // nothing left to do but hand over. The previous build duplicated the
-    // same three loops here, which fought the Studio's own for the same
-    // elements and is what left the preview black after a re-render.
-    if(window.svAfterRender) svAfterRender();
+    if(!S.studio || S.tab !== 'create') return;
+    // ── Camera mode: reattach live stream + rebind timer/prompter loops ──
+    if(S.studio.mode === 'camera'){
+      const v = document.getElementById('cs-cam-live');
+      if(v){
+        const liveStream = (typeof CSCAM !== 'undefined' && CSCAM.stream) ? CSCAM.stream : (window._st && window._st.stream);
+        if(liveStream && v.srcObject !== liveStream){
+          v.srcObject = liveStream;
+          v.muted = true; v.playsInline = true;
+          v.play().catch(()=>{});
+        }
+      }
+      // Timer: single canonical loop keyed off S.studio.running
+      if(S.studio.running){
+        if(!window.__csTimer){
+          window.__csTimer = setInterval(() => {
+            if(!S.studio || !S.studio.running){ clearInterval(window.__csTimer); window.__csTimer=null; return; }
+            const el = document.getElementById('cs-cam-time');
+            if(el){ const s = (performance.now() - (window._st.tStart||performance.now()))/1000; el.textContent = _fmtTs(s); }
+          }, 250);
+        }
+      } else if(window.__csTimer){ clearInterval(window.__csTimer); window.__csTimer=null; }
+      // Prompter scroll
+      const p = document.getElementById('cs-cam-prompter-inner');
+      if(p && S.studio.showPrompter && S.studio.script && S.studio.running && !window.__csPromp){
+        const start = performance.now();
+        window.__csPromp = setInterval(() => {
+          if(!S.studio.running || !S.studio.showPrompter){ clearInterval(window.__csPromp); window.__csPromp=null; return; }
+          const el = document.getElementById('cs-cam-prompter-inner'); if(!el) return;
+          const dt = (performance.now()-start)/1000;
+          el.style.transform = `translateY(${-dt*(S.studio.speed||60)}px)`;
+        }, 50);
+      }
+      if((!S.studio.running || !S.studio.showPrompter) && window.__csPromp){ clearInterval(window.__csPromp); window.__csPromp=null; }
+    } else {
+      if(window.__csTimer){ clearInterval(window.__csTimer); window.__csTimer=null; }
+      if(window.__csPromp){ clearInterval(window.__csPromp); window.__csPromp=null; }
+    }
+    // ── Editor mode: restore video src + playhead ──
+    // Lovable's studio.js now owns video loading via a dual-buffer system
+    // (two <video> elements that swap IDs for smooth clip transitions).
+    // Defer to its own csLoadCurrent/csActiveVideo instead of managing
+    // #cs-ed-video directly here — doing both was fighting over the same
+    // element and resetting an already-loaded video mid-load (black screen).
+    if(S.studio.mode === 'editor'){
+      if(window.csLoadCurrent){
+        window.csLoadCurrent(true);
+      }
+      const v = (window.csActiveVideo && window.csActiveVideo()) || document.getElementById('cs-ed-video');
+      if(v){
+        const st = S.studio;
+        if(st.playing && v.paused) v.play().catch(()=>{});
+        else if(!st.playing && !v.paused) v.pause();
+      }
+    }
+    if(S.studio.mode === 'editor') csApplyPreview();
   } catch(err){ console.warn('csAfterRender', err); }
 }
 
+function renderAuth(){
+  const tab = S.authTab;
+  const isLogin = tab === "login";
+  const head = `<div class="auth-brand"><img src="/logo-64.png" class="brand-mark" alt="CreatorPulse"/><div class="brand-name">CreatorPulse</div></div>`;
+  const errMsg = `${S.authErr?`<div class="auth-err">${esc(S.authErr)}</div>`:""}${S.authMsg?`<div class="auth-msg">${esc(S.authMsg)}</div>`:""}`;
 
-// ─── PASSWORD RECOVERY ──────────────────────────────────────────────────────
-// Backend contract, from server.js:
-//   POST /api/auth/forgot-password  { email }
-//        → always { success, message } so the endpoint can't be used to probe
-//          which addresses have accounts
-//   POST /api/auth/reset-password   { access_token, refresh_token, password }
-//        → { success, message } or 4xx { error }
-// Supabase hands the recovery session back in the URL hash
-// (#access_token=…&refresh_token=…&type=recovery); checkAuthRedirect() in
-// app.js captures it into S.recovery before scrubbing the hash.
-
-async function doForgotPassword(){
-  const email = (S.authForm.email || "").trim();
-  S.authErr = ""; S.authMsg = "";
-  if(!email){ S.authErr = "Enter your email address first."; render(); return; }
-  S.authLoading = true; render();
-  try {
-    const d = await api("/api/auth/forgot-password", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email })
-    });
-    if(d.error) S.authErr = d.error;
-    else S.authMsg = d.message || "If that email has an account, a reset link is on its way. Check your inbox and your spam folder.";
-  } catch(e){ S.authErr = e.message; }
-  S.authLoading = false; render();
-}
-
-async function doResetPassword(){
-  const r = S.recovery;
-  const pw = (r.form.password || "");
-  const confirm = (r.form.confirm || "");
-  r.error = "";
-  if(pw.length < 6){ r.error = "Password must be at least 6 characters."; render(); return; }
-  if(pw !== confirm){ r.error = "Those passwords don't match."; render(); return; }
-  r.loading = true; render();
-  try {
-    const d = await api("/api/auth/reset-password", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ access_token: r.accessToken, refresh_token: r.refreshToken, password: pw })
-    });
-    // Covers both "invalid/expired link" and a rejected password from Supabase.
-    if(d.error) r.error = d.error;
-    else { r.done = true; r.accessToken = ""; r.refreshToken = ""; r.form = { password:"", confirm:"" }; }
-  } catch(e){ r.error = e.message; }
-  r.loading = false; render();
-}
-
-window.openForgot = () => { S.mode = "auth"; S.authTab = "forgot"; S.authErr = ""; S.authMsg = ""; render(); };
-window.backToLogin = () => {
-  S.recovery = { active:false, accessToken:"", refreshToken:"", error:"", done:false, loading:false, form:{ password:"", confirm:"" } };
-  S.mode = "auth"; S.authTab = "login"; S.authErr = ""; S.authMsg = "";
-  try { window.history.replaceState({}, document.title, window.location.pathname); } catch(e){}
-  render();
-};
-
-function authShell(body){
-  return `<div class="auth-wrap"><div class="auth-inner">
-    <div class="auth-brand"><img src="/logo-64.png" class="brand-mark" alt="CreatorPulse"/><div class="brand-name">CreatorPulse</div></div>
-    ${body}
-  </div></div>`;
-}
-
-function renderForgot(){
-  document.getElementById("root").innerHTML = authShell(`
+  let body;
+  if(tab === "forgot"){
+    body = `
     <div class="auth-title">Reset your password.</div>
     <div class="auth-sub">Enter your email and we'll send you a link to set a new one.</div>
-    ${S.authErr?`<div class="auth-err">${esc(S.authErr)}</div>`:""}
-    ${S.authMsg?`<div class="auth-msg">${esc(S.authMsg)}</div>`:""}
-    <div class="field"><label>Email</label><input class="input" type="email" value="${esc(S.authForm.email)}" oninput="S.authForm.email=this.value" placeholder="you@domain.com" autocomplete="email"/></div>
+    ${errMsg}
+    <div class="field"><label>Email</label><input class="input" type="email" value="${esc(S.authForm.email)}" oninput="S.authForm.email=this.value" placeholder="you@domain.com"/></div>
     <button class="btn bp auth-cta" style="width:100%;padding:13px;margin-top:6px;justify-content:center" ${S.authLoading?"disabled":""} onclick="doForgotPassword()">${S.authLoading?'<span class="sp"></span>':"Send reset link"}</button>
-    <div class="auth-switch"><a onclick="backToLogin()">Back to sign in</a></div>`);
-}
-
-function renderRecovery(){
-  const r = S.recovery;
-  if(r.done){
-    document.getElementById("root").innerHTML = authShell(`
-      <div class="auth-title">Password updated.</div>
-      <div class="auth-msg">All set — your new password is active.</div>
-      <div class="auth-sub">Sign in with your new password to pick up where you left off.</div>
-      <button class="btn bp auth-cta" style="width:100%;padding:13px;justify-content:center" onclick="backToLogin()">Go to sign in</button>`);
-    return;
-  }
-  // No tokens means the link arrived without a usable recovery session —
-  // expired, already used, or stripped somewhere along the way. Dead end by
-  // design: the only useful action left is to request a fresh link.
-  if(!r.accessToken || !r.refreshToken){
-    document.getElementById("root").innerHTML = authShell(`
-      <div class="auth-title">Link expired.</div>
-      <div class="auth-sub">This reset link is no longer valid. They can only be used once, and they expire.</div>
-      ${r.error?`<div class="auth-err">${esc(r.error)}</div>`:""}
-      <button class="btn bp auth-cta" style="width:100%;padding:13px;margin-top:6px;justify-content:center" onclick="openForgot()">Request a new link</button>
-      <div class="auth-switch"><a onclick="backToLogin()">Back to sign in</a></div>`);
-    return;
-  }
-  document.getElementById("root").innerHTML = authShell(`
+    <div class="auth-switch">Remember it after all? <a onclick="S.authTab='login'; S.authErr=''; S.authMsg=''; render()">Sign in</a></div>`;
+  } else if(tab === "reset"){
+    body = `
     <div class="auth-title">Set a new password.</div>
-    <div class="auth-sub">Choose something you'll remember — at least 6 characters.</div>
-    ${r.error?`<div class="auth-err">${esc(r.error)}</div>`:""}
-    <div class="field"><label>New password</label><input class="input" type="password" value="${esc(r.form.password)}" oninput="S.recovery.form.password=this.value" placeholder="••••••••" autocomplete="new-password"/></div>
-    <div class="field"><label>Confirm new password</label><input class="input" type="password" value="${esc(r.form.confirm)}" oninput="S.recovery.form.confirm=this.value" placeholder="••••••••" autocomplete="new-password"/></div>
-    <button class="btn bp auth-cta" style="width:100%;padding:13px;margin-top:6px;justify-content:center" ${r.loading?"disabled":""} onclick="doResetPassword()">${r.loading?'<span class="sp"></span>':"Update password"}</button>
-    <div class="auth-switch"><a onclick="backToLogin()">Back to sign in</a></div>`);
-}
-
-function renderAuth(){
-  const isLogin = S.authTab === "login";
-  document.getElementById("root").innerHTML = `<div class="auth-wrap"><div class="auth-inner">
-    <div class="auth-brand"><img src="/logo-64.png" class="brand-mark" alt="CreatorPulse"/><div class="brand-name">CreatorPulse</div></div>
+    <div class="auth-sub">Choose a new password for your account.</div>
+    ${errMsg}
+    <div class="field"><label>New password</label><input class="input" type="password" value="${esc(S.authForm.password)}" oninput="S.authForm.password=this.value" placeholder="••••••••"/></div>
+    <button class="btn bp auth-cta" style="width:100%;padding:13px;margin-top:6px;justify-content:center" ${S.authLoading?"disabled":""} onclick="doResetPassword()">${S.authLoading?'<span class="sp"></span>':"Update password"}</button>`;
+  } else {
+    body = `
     <div class="auth-title">${isLogin?"Welcome back.":"Start creating."}</div>
     <div class="auth-sub">${isLogin?"Sign in to pick up where you left off.":"Trending stories, scripts, and a calendar that thinks with you."}</div>
-    ${S.authErr?`<div class="auth-err">${esc(S.authErr)}</div>`:""}
-    ${S.authMsg?`<div class="auth-msg">${esc(S.authMsg)}</div>`:""}
+    ${errMsg}
     ${!isLogin?`<div class="field"><label>Name</label><input class="input" value="${esc(S.authForm.name)}" oninput="S.authForm.name=this.value" placeholder="How should we call you?"/></div>`:""}
     <div class="field"><label>Email</label><input class="input" type="email" value="${esc(S.authForm.email)}" oninput="S.authForm.email=this.value" placeholder="you@domain.com"/></div>
     <div class="field"><label>Password</label><input class="input" type="password" value="${esc(S.authForm.password)}" oninput="S.authForm.password=this.value" placeholder="••••••••"/></div>
+    ${isLogin?`<div style="text-align:right;margin:-4px 0 4px"><a style="font-size:12px;color:var(--mu);cursor:pointer;text-decoration:underline;text-decoration-color:var(--mu2)" onclick="S.authTab='forgot'; S.authErr=''; S.authMsg=''; render()">Forgot password?</a></div>`:""}
     <button class="btn bp auth-cta" style="width:100%;padding:13px;margin-top:6px;justify-content:center" ${S.authLoading?"disabled":""} onclick="${isLogin?'doLogin()':'doSignup()'}">${S.authLoading?'<span class="sp"></span>':(isLogin?"Sign in":"Create account")}</button>
-    <div class="auth-switch">${isLogin?"New here?":"Already have an account?"} <a onclick="S.authTab='${isLogin?'signup':'login'}'; S.authErr=''; S.authMsg=''; render()">${isLogin?"Create one":"Sign in"}</a>${isLogin?'<div style="margin-top:10px"><a onclick="openForgot()">Forgot password?</a></div>':""}</div>
-  </div></div>`;
+    <div class="auth-switch">${isLogin?"New here?":"Already have an account?"} <a onclick="S.authTab='${isLogin?'signup':'login'}'; S.authErr=''; S.authMsg=''; render()">${isLogin?"Create one":"Sign in"}</a></div>`;
+  }
+
+  document.getElementById("root").innerHTML = `<div class="auth-wrap"><div class="auth-inner">${head}${body}</div></div>`;
 }
 
 function renderOnboard(){
@@ -1767,25 +1725,3 @@ async function loadCalendarEvents(){
   render();
 }
 
-// Hands a generated script straight to the Studio's teleprompter, so a creator
-// who just picked a story can start recording without copy-pasting anything.
-// Carousels are flattened into one continuous read; the slide structure is
-// carried as blank lines, which is how a script reads aloud anyway.
-window.takeToStudio = (tid, idx) => {
-  const o = S.outs[tid]?.[idx];
-  if(!o){ toast("Nothing to send \u2014 generate this story first."); return; }
-  let text = "";
-  if(o.type === "carousel"){
-    text = (o.slides||[]).map(s => [
-      s.headline,
-      s.stat ? (s.statLabel ? `${s.stat} \u2014 ${s.statLabel}` : s.stat) : "",
-      s.body, s.supportingText
-    ].filter(Boolean).join("\n")).join("\n\n");
-  } else {
-    text = String(o.content||"");
-  }
-  if(!text.trim()){ toast("Nothing to send \u2014 generate this story first."); return; }
-  if(!window.svOpenWithScript){ toast("Studio unavailable \u2014 reload and try again."); return; }
-  const t = S.trends.find(x=>x.id===tid);
-  window.svOpenWithScript(text, t?.headline || "New project");
-};
