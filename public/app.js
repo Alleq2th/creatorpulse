@@ -83,7 +83,7 @@ function pageProfile(){
         <div class="pf-avatar-edit">${I.image||""}</div>
         <input type="file" accept="image/*" style="display:none" onchange="uploadAvatar(event)"/>
       </label>
-      <div class="pf-name">${esc(name)}</div>
+      <div class="pf-name">${esc(name)}<button class="pf-name-edit" onclick="editName()" aria-label="Edit your name" title="Edit your name"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button></div>
       <div class="pf-email">${esc(u.email||"")}</div>
       ${primaryNiche ? `<div class="pf-tagline">${esc(primaryNiche)} creator${activePlats.length?` · ${activePlats.length} platform${activePlats.length>1?'s':''}`:''}</div>` : ""}
     </div>
@@ -95,11 +95,8 @@ function pageProfile(){
       <div class="niche-tags">${nicheTags}</div>
       <button class="pf-edit" onclick="editNiches()">Edit</button>
     </div>
-    <div class="pf-setup-row">
-      <div class="pf-setup-lbl">Platforms</div>
-      <div class="pf-plat-row" style="margin:0">${platPills}</div>
-    </div>
-    <div class="pf-grid" style="margin-top:10px">${platCells}</div>
+    <div class="pf-setup-lbl" style="margin-bottom:8px">Platforms</div>
+    <div class="pf-grid">${platCells}</div>
 
     <!-- ACTIVITY — outcomes, quietly grouped, not a floating stat widget -->
     <div class="pf-section-hd">Activity</div>
@@ -138,6 +135,13 @@ function pageProfile(){
 
     <!-- PREFERENCES — only what's actually real and functional -->
     <div class="pf-section-hd">Preferences</div>
+    <div class="pf-row" onclick="toggleTheme()">
+      <div>
+        <div class="pf-row-lbl">Dark mode</div>
+        <div class="pf-row-sub">Switch the app to a dark color scheme</div>
+      </div>
+      <div class="pf-switch ${localStorage.getItem('cp_theme')==='dark'?'on':''}"><div class="pf-switch-knob"></div></div>
+    </div>
     <div class="pf-row" onclick="togglePush()">
       <div>
         <div class="pf-row-lbl">Push notifications</div>
@@ -172,6 +176,23 @@ function pageDiscover(){
     ${renderInspirationFeed()}
   </main>`;
 }
+window.toggleTheme = () => {
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+  if(dark){ document.documentElement.removeAttribute('data-theme'); localStorage.setItem('cp_theme','light'); }
+  else{ document.documentElement.setAttribute('data-theme','dark'); localStorage.setItem('cp_theme','dark'); }
+  render();
+};
+window.editName = async () => {
+  const current = S.user?.name || "";
+  const next = prompt("What should we call you?", current);
+  if(next === null) return;
+  const name = next.trim();
+  if(!name || name === current) return;
+  S.user = S.user || {}; S.user.name = name; saveSession(); render();
+  const d = await api("/api/auth/update-profile", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token: S.token, name})});
+  if (d.error) { toast("Saved on this device, but couldn't sync to your account yet — try again when you have a better connection."); return; }
+  toast("Name updated");
+};
 window.togglePush = async () => {
   const nowOn = !!localStorage.getItem('cp_push_subscribed');
   if (nowOn) {

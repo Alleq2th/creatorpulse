@@ -748,7 +748,8 @@ function renderTrend(t){
     </div>`;
   }
   const srcTag = t.source?`<span class="tsep">·</span><span class="badge-src">${esc(t.source)}</span>`:"";
-  return `<div class="tc ${exp?'exp':''}" id="tc-${t.id}">
+  const veloCls = (()=>{ const st=trendVelocity(t).state; return st==='peaking'?'tc-peaking':st==='rising'?'tc-rising':''; })();
+  return `<div class="tc ${exp?'exp':''} ${veloCls}" id="tc-${t.id}">
     <div class="th" onclick="toggle('${t.id}')">
       ${img}
       <div class="thead">
@@ -1329,8 +1330,12 @@ function pageHome(){
 function renderDigest(){
   if(S.errors.digest && !S.digestDismissed && S.digest) { /* fall through, card rendered below */ }
   if(!S.digest || S.digestDismissed || !(S.digest.stories||[]).length) return "";
-  const rows = S.digest.stories.map(s=>`<div class="digest-row"><div class="digest-niche">${esc(s.niche)}</div>${esc(s.headline)}</div>`).join("");
-  return `<div class="digest"><div class="digest-h"><div class="digest-title">Daily Digest</div><button class="tiny-copy tipbtn" data-tip="Dismiss today's digest" title="Dismiss today's digest" aria-label="Dismiss digest" onclick="dismissDigest()">Got it</button></div>${sectionErr("digest")}${rows}</div>`;
+  // Was a single stacked list of every story  category label, full
+  // headline, thin divider, repeat  which read as one long wall of text.
+  // Now a horizontal scrollable strip of compact cards, capped at 8, so
+  // it's a quick scan instead of a vertical slog.
+  const cards = S.digest.stories.slice(0,8).map(s=>`<div class="digest-card" onclick="setTab('home')"><div class="digest-niche">${esc(s.niche)}</div><div class="hl">${esc(s.headline)}</div></div>`).join("");
+  return `<div class="digest"><div class="digest-h"><div class="digest-title">Daily Digest</div><button class="tiny-copy tipbtn" data-tip="Dismiss today's digest" title="Dismiss today's digest" aria-label="Dismiss digest" onclick="dismissDigest()">Got it</button></div>${sectionErr("digest")}<div class="digest-strip">${cards}</div></div>`;
 }
 
 // ─── HOOKS PAGE ─────────────────────────────────────────────────────────────
