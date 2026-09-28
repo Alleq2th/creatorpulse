@@ -56,14 +56,14 @@ function pageProfile(){
   }).join("") || `<span style="color:var(--mu);font-size:12px">No platforms yet</span>`;
 
   const nicheTags = (u.niches||[]).map(n => {
-    const c = NC[n] || "#7C3AED";
+    const c = NC[n] || "#6C4CF5";
     return `<span class="niche-tag" style="background:${c}22;color:${c};border:1px solid ${c}55">${esc(n)}</span>`;
   }).join("") || `<span style="color:var(--mu);font-size:12px">None yet — add some in onboarding.</span>`;
 
   const platCells = PLATS.map(p => {
     const on = activePlats.includes(p.id);
     const primary = u.primaryPlatform === p.id;
-    return `<div class="pf-plat-cell ${on?'on':''}">
+    return `<div class="pf-plat-cell ${primary?'primary':(on?'active':'')}">
       <span class="em">${PLAT_EMOJI[p.id]||"◆"}</span>
       <div style="flex:1;min-width:0">
         <div class="lbl">${esc(p.label)}</div>
@@ -241,42 +241,23 @@ function renderInspirationFeed(){
 window.editNiches = () => { S.mode = "onboard"; S.onboard = { step:0, name:S.user?.name||"", niches:[...(S.user?.niches||[])], platforms:[...(S.user?.platforms||[])], primary:S.user?.primaryPlatform||"", ppd:S.user?.postsPerDay||3 }; window.ob = S.onboard; render(); };
 window.logOut = () => { if(confirm("Sign out?")){ clearSession(); S.mode="auth"; S.authTab="login"; S.authForm={email:"",password:"",name:""}; render(); } };
 
-// ─── AUTH REDIRECT DETECTION (email confirmation / recovery / errors) ───────
-// The URL→outcome mapping itself lives in parseAuthRedirect() (lib/authRedirect.js,
-// loaded as a classic script above this file) so it can be unit-tested; this
-// function only applies that outcome to app state.
+// ─── AUTH REDIRECT DETECTION (email confirmation / errors from Supabase) ────
 function checkAuthRedirect(){
   try {
-    const r = parseAuthRedirect(window.location.hash, window.location.search);
+    const hash = window.location.hash ? window.location.hash.substring(1) : "";
+    const hashParams = new URLSearchParams(hash);
+    const searchParams = new URLSearchParams(window.location.search);
+    const type = hashParams.get("type") || searchParams.get("type");
+    const errorDesc = hashParams.get("error_description") || searchParams.get("error_description");
 
-    // Password-recovery link. Supabase returns a real session in the hash
-    // (#access_token=…&refresh_token=…&type=recovery) once the email link is
-    // followed. Parsed here and stashed in state because the hash is scrubbed
-    // below and would otherwise be gone by the time the user submits the new
-    // password. There is no dedicated route — "/" serves index.html and the
-    // SPA takes over — so the recovery screen is driven by state.
-    if(r.kind === "recovery"){
-      S.recovery.active = true;
-      S.recovery.done = false;
-      S.recovery.accessToken = r.access_token;
-      S.recovery.refreshToken = r.refresh_token;
-      // Empty tokens (or an error Supabase attached to the link) render as the
-      // "link expired" state rather than an unusable form.
-      S.recovery.error = r.error;
-      // The token travels in the URL we were opened with — `?type=recovery` is
-      // what the server appends to PASSWORD_RESET_REDIRECT when building the
-      // email. Strip the query AND hash so it never lingers in history.
-      window.history.replaceState({}, document.title, window.location.pathname);
-      return true;
-    }
-    if(r.kind === "error"){
-      S.authErr = r.error;
+    if(errorDesc){
+      S.authErr = decodeURIComponent(errorDesc.replace(/\+/g," "));
       S.authTab = "login";
       window.history.replaceState({}, document.title, window.location.pathname);
       return true;
     }
-    if(r.kind === "signup" || r.kind === "email_change"){
-      S.authMsg = r.kind === "signup" ? "Email confirmed! You can sign in now." : "Email address confirmed.";
+    if(type === "signup" || type === "email_change"){
+      S.authMsg = type === "signup" ? "Email confirmed! You can sign in now." : "Email address confirmed.";
       S.authTab = "login";
       window.history.replaceState({}, document.title, window.location.pathname);
       return true;
@@ -976,12 +957,6 @@ else if (kind === "terms" || kind === "privacy" || kind === "cookies" || kind ==
   function showCookieBanner(){
     if (localStorage.getItem("cp_cookie_ack") === "1") return;
     if (document.getElementById("cp-cookie-banner")) return;
-    // Never let the banner cover the Studio: it is z-index 9999 and the
-    // Studio is 9000, so on a first visit it lands right on top of the record
-    // shutter. Re-checked on the way in as well as at spawn time, because the
-    // user can open the Studio before this timer fires.
-    if(S.studio) return;
-    if(document.querySelector('.sv-root')) return;
     const b = document.createElement("div");
     b.id = "cp-cookie-banner";
     b.style.cssText = "position:fixed;left:12px;right:12px;bottom:calc(var(--tab-h) + 16px + env(safe-area-inset-bottom));z-index:9999;max-width:520px;margin:0 auto;background:#141420;color:#fff;border:1px solid #2a2a3a;border-radius:14px;padding:14px 16px;font:13px/1.5 system-ui,-apple-system,sans-serif;box-shadow:0 10px 40px rgba(0,0,0,.4)";
@@ -1000,3 +975,4 @@ else if (kind === "terms" || kind === "privacy" || kind === "cookies" || kind ==
 
   console.log("[CreatorPulse legal pages loaded]");
 })();
+

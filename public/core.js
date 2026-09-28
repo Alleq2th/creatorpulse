@@ -217,7 +217,7 @@ const PLAT_EMOJI = { tiktok:"🎵", instagram:"📸", youtube:"▶️", twitter:
      not a separate unrelated loading system. */
   @keyframes cp-shimmer { 0%{background-position:-320px 0} 100%{background-position:320px 0} }
   @keyframes cp-pulse { 0%,100%{opacity:1} 50%{opacity:.55} }
-  .sk { background:var(--sf2,#211E1A); background-image:linear-gradient(90deg,rgba(255,74,46,0) 0,rgba(255,74,46,.35) 50%,rgba(255,74,46,0) 100%);
+  .sk { background:var(--sf2,#F0EEF8); background-image:linear-gradient(90deg,rgba(108,76,245,0) 0,rgba(108,76,245,.28) 50%,rgba(108,76,245,0) 100%);
         background-repeat:no-repeat; background-size:320px 100%;
         animation:cp-shimmer 1.2s infinite linear, cp-pulse 1.6s ease-in-out infinite; border-radius:6px; }
   @media(prefers-reduced-motion:reduce){ .sk{ animation:none; background-image:none; } }
@@ -249,7 +249,7 @@ const PLAT_EMOJI = { tiktok:"🎵", instagram:"📸", youtube:"▶️", twitter:
      opportunity you haven't acted on yet, signal for something you've
      actually committed to the calendar. */
   .cal-tag-event { background:var(--sf2,rgba(255,255,255,.06)); color:var(--mu,#8A8375); } /* niche opportunity — quiet */
-  .cal-tag-post { background:rgba(255,74,46,.16); color:var(--ac,#FF4A2E); } /* your scheduled post — signal */
+  .cal-tag-post { background:rgba(108,76,245,.14); color:var(--ac,#6C4CF5); } /* your scheduled post — accent */
   .cal-cell.today .cal-tag-event { background:rgba(255,255,255,.22); color:var(--bg,#131110); }
   .cal-cell.today .cal-tag-post { background:rgba(255,255,255,.22); color:var(--bg,#131110); }
   .tipbtn { position:relative; }
@@ -705,6 +705,21 @@ function renderTrend(t){
     const slideCountChips = [1,2,3,4,5,6].map(n=>`<button class="chip ${slideCount===n?'active':''}" onclick="setSlideCount('${t.id}',${n})">${n}</button>`).join("");
     const showSlideCount = ct === "IG Carousel";
     const outsHTML = outs.map((o,i)=>renderOut(o,t.id,i)).join("");
+    // Accordion: only the step the person tapped is open; everything else
+    // collapses to a one-line "label — current value" summary. Picking an
+    // option (setPlat/setCT/setTone/setPalette/setSlideCount) closes the
+    // step it belongs to, so the panel never has more than one thing open.
+    const openStep = (S.openStep && S.openStep[t.id]) || null;
+    const platLabel = PLATS.find(x=>x.id===plat)?.label || plat;
+    const toneLabel = TONES.find(x=>x.id===tone)?.label || tone;
+    const paletteLabel = PALETTES.find(x=>x.id===palette)?.label || palette;
+    const step = (name,label,value,body) => `<div class="step ${openStep===name?'open':''}">
+        <div class="step-hd" onclick="toggleStep('${t.id}','${name}')">
+          <div><div class="step-l">${esc(label)}</div><div class="step-v">${esc(String(value))}</div></div>
+          <div class="step-chev">${openStep===name?'▴':'▾'}</div>
+        </div>
+        ${openStep===name?`<div class="step-body"><div class="chips">${body}</div></div>`:''}
+      </div>`;
     panel = `<div class="cp">
       <div class="countdown">
         <span class="countdown-label">Post before</span>
@@ -713,14 +728,13 @@ function renderTrend(t){
       <div class="why"><div class="why-label">Why this matters</div><div class="why-body">${esc(rec||t.summary||"This is trending in your niche right now — the earlier you post, the more upside on reach.")}</div></div>
       <div class="best-plat"><span class="em">${PLAT_EMOJI[bp]||"◆"}</span><div style="flex:1"><div class="best-plat-lbl">Best platform</div><div class="best-plat-val">${esc(bpLabel)}</div></div></div>
       <div class="opp"><div class="opp-head"><span class="opp-lbl">Opportunity</span><span class="opp-val">${opp}/100</span></div><div class="opp-bar"><div class="opp-fill" style="width:${opp}%"></div></div></div>
-      <div class="chip-label">Platform</div>
-      <div class="chips">${platChips}</div>
-      <div class="chip-label">Format</div>
-      <div class="chips">${ctChips}</div>
-      <div class="chip-label">Tone</div>
-      <div class="chips">${toneChips}</div>
-      ${showPalette ? `<div class="chip-label">Card color</div><div class="chips">${paletteChips}</div>` : ""}
-      ${showSlideCount ? `<div class="chip-label">Number of slides</div><div class="chips">${slideCountChips}</div>` : ""}
+      <div class="flow">
+        ${step('platform','Platform',platLabel,platChips)}
+        ${step('format','Format',ct,ctChips)}
+        ${step('tone','Tone',toneLabel,toneChips)}
+        ${showPalette ? step('palette','Card color',paletteLabel,paletteChips) : ""}
+        ${showSlideCount ? step('slides','Number of slides',slideCount,slideCountChips) : ""}
+      </div>
       <div class="action-row">
         <button class="action-btn primary" ${load?'disabled':''} onclick="gen('${t.id}',false)">${load?'<span class="sp"></span>':I.bolt}<span>${load?'…':'Generate'}</span></button>
         <button class="action-btn" onclick="openRemix('${t.id}')">${I.remix}<span>Remix</span></button>
@@ -835,11 +849,17 @@ function downscaleImageFile(file, maxDim, quality) {
     reader.readAsDataURL(file);
   });
 }
-window.setPlat = (tid,p) => { S.plat[tid]=p; S.ctype[tid]=PTYPES[p]?.[0]||""; render(); };
-window.setCT = (tid,c) => { S.ctype[tid]=c; render(); };
-window.setTone = (tid,t) => { S.tone[tid]=t; render(); };
-window.setPalette = (tid,p) => { S.palette[tid]=p; render(); };
-window.setSlideCount = (tid,n) => { S.slideCount[tid]=n; render(); };
+// Accordion open/close for the Platform/Format/Tone/etc. steps in the
+// story-detail panel. One step open per story at a time — opening a new
+// one implicitly closes whichever was open, since S.openStep[tid] only
+// ever holds a single step name.
+window.toggleStep = (tid,step) => { S.openStep = S.openStep || {}; S.openStep[tid] = (S.openStep[tid]===step ? null : step); render(); };
+function closeStep(tid){ S.openStep = S.openStep || {}; S.openStep[tid] = null; }
+window.setPlat = (tid,p) => { S.plat[tid]=p; S.ctype[tid]=PTYPES[p]?.[0]||""; closeStep(tid); render(); };
+window.setCT = (tid,c) => { S.ctype[tid]=c; closeStep(tid); render(); };
+window.setTone = (tid,t) => { S.tone[tid]=t; closeStep(tid); render(); };
+window.setPalette = (tid,p) => { S.palette[tid]=p; closeStep(tid); render(); };
+window.setSlideCount = (tid,n) => { S.slideCount[tid]=n; closeStep(tid); render(); };
 window.toggle = async (tid) => {
   S.expanded[tid] = !S.expanded[tid];
   if(S.expanded[tid] && !S.plat[tid]) S.plat[tid] = S.user?.primaryPlatform || "instagram";
