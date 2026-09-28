@@ -195,9 +195,9 @@ window.imgFail = function(el){ try { const ph = document.createElement('div'); p
 
 // Niche category color map — every niche picks a color from its category
 const NC_CATEGORY_COLOR = {
-  "Sports":"#F97316","Entertainment":"#EC4899","Gaming":"#8B5CF6","Lifestyle":"#10B981",
-  "Fashion & Beauty":"#F43F5E","Finance":"#22C55E","Tech":"#3B82F6","Education":"#EAB308",
-  "Commentary":"#EF4444","Trends":"#06B6D4","Creator":"#A855F7","Professional":"#0EA5E9","Culture":"#F59E0B"
+  "Sports":"#5B4A9A","Entertainment":"#5B4A9A","Gaming":"#5B4A9A","Lifestyle":"#5B4A9A",
+  "Fashion & Beauty":"#5B4A9A","Finance":"#5B4A9A","Tech":"#5B4A9A","Education":"#5B4A9A",
+  "Commentary":"#5B4A9A","Trends":"#5B4A9A","Creator":"#5B4A9A","Professional":"#5B4A9A","Culture":"#5B4A9A"
 };
 const NC = (function(){ const m = {}; Object.entries(NICHES).forEach(([cat, arr]) => arr.forEach(n => m[n] = NC_CATEGORY_COLOR[cat] || "#7C3AED")); return m; })();
 
@@ -217,7 +217,7 @@ const PLAT_EMOJI = { tiktok:"🎵", instagram:"📸", youtube:"▶️", twitter:
      not a separate unrelated loading system. */
   @keyframes cp-shimmer { 0%{background-position:-320px 0} 100%{background-position:320px 0} }
   @keyframes cp-pulse { 0%,100%{opacity:1} 50%{opacity:.55} }
-  .sk { background:var(--sf2,#F0EEF8); background-image:linear-gradient(90deg,rgba(108,76,245,0) 0,rgba(108,76,245,.28) 50%,rgba(108,76,245,0) 100%);
+  .sk { background:var(--sf2,#ECEAF0); background-image:linear-gradient(90deg,rgba(91,74,154,0) 0,rgba(91,74,154,.16) 50%,rgba(91,74,154,0) 100%);
         background-repeat:no-repeat; background-size:320px 100%;
         animation:cp-shimmer 1.2s infinite linear, cp-pulse 1.6s ease-in-out infinite; border-radius:6px; }
   @media(prefers-reduced-motion:reduce){ .sk{ animation:none; background-image:none; } }
@@ -249,7 +249,7 @@ const PLAT_EMOJI = { tiktok:"🎵", instagram:"📸", youtube:"▶️", twitter:
      opportunity you haven't acted on yet, signal for something you've
      actually committed to the calendar. */
   .cal-tag-event { background:var(--sf2,rgba(255,255,255,.06)); color:var(--mu,#8A8375); } /* niche opportunity — quiet */
-  .cal-tag-post { background:rgba(108,76,245,.14); color:var(--ac,#6C4CF5); } /* your scheduled post — accent */
+  .cal-tag-post { background:var(--tint,#EEE9F8); color:var(--tint-tx,#3C3060); } /* your scheduled post — accent */
   .cal-cell.today .cal-tag-event { background:rgba(255,255,255,.22); color:var(--bg,#131110); }
   .cal-cell.today .cal-tag-post { background:rgba(255,255,255,.22); color:var(--bg,#131110); }
   .tipbtn { position:relative; }
@@ -1312,9 +1312,17 @@ document.addEventListener("click", (e) => { if(!e.target.closest(".bell-wrap")){
 
 function pageHome(){
   const list = S.trends.length ? `<div class="tlist">${S.trends.map(renderTrend).join("")}</div>` : skTrendList(5);
+  const first = ((S.user?.name||"").trim().split(/\s+/)[0]) || "there";
+  const peaking = S.trends.filter(t=>trendVelocity(t).state==='peaking').length;
+  const chipTxt = S.trends.length ? (peaking ? `${peaking} ${peaking===1?'story':'stories'} peaking right now` : `${S.trends.length} live stories`) : "Loading your stories…";
+  const top = S.trends[0];
+  const peek = top ? `<div class="peek"><div class="k">Top story right now</div><div class="t">${esc(top.headline||top.title||"")}</div><div class="row"><span class="m">${esc(top.niche||"")} · ${trendVelocity(top).label}</span><button class="btn bp" onclick="toggle('${top.id}')">Create</button></div></div>` : "";
   return `<main class="page active">${topBar(`${S.trends.length||0} live stories`)}
+    <div class="hero"><div class="hi">Welcome back</div><div class="nm">${esc(first)}</div>
+      <button class="hero-chip" onclick="document.getElementById('feed').scrollIntoView({behavior:'smooth'})"><span class="n">${peaking||S.trends.length||0}</span><span>${chipTxt}</span><span class="go">›</span></button></div>
+    ${peek}
     ${renderDigest()}
-    <div class="sec-h"><h2>Today's edit</h2><span class="sec-meta">Ranked by relevance</span></div>
+    <div class="sec-h" id="feed"><h2>Today's edit</h2><span class="sec-meta">Ranked by relevance</span></div>
     ${list}
   </main>`;
 }

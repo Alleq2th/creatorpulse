@@ -57,7 +57,7 @@ function pageProfile(){
 
   const nicheTags = (u.niches||[]).map(n => {
     const c = NC[n] || "#6C4CF5";
-    return `<span class="niche-tag" style="background:${c}22;color:${c};border:1px solid ${c}55">${esc(n)}</span>`;
+    return `<span class="niche-tag">${esc(n)}</span>`;
   }).join("") || `<span style="color:var(--mu);font-size:12px">None yet — add some in onboarding.</span>`;
 
   const platCells = PLATS.map(p => {
