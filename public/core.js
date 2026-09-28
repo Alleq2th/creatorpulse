@@ -1272,7 +1272,8 @@ window.ob = S.onboard;
 function renderApp(){
   const pageFns = { home: pageHome, hooks: pageHooks, calendar: pageCalendar, create: pageCreate, profile: pageProfile, library: pageLibrary, discover: pageDiscover };
   const pageHtml = (pageFns[S.tab] || pageHome)();
-  document.getElementById("root").innerHTML = `<div class="app">${pageHtml}
+  const TEX = { home:"dots", hooks:"grid", calendar:"cross", create:"diag", profile:"dots", library:"grid", discover:"cross" };
+  document.getElementById("root").innerHTML = `<div class="app" data-tex="${TEX[S.tab]||'dots'}">${pageHtml}
     <nav class="tabbar">
       <button class="tab ${S.tab==='home'?'active':''}" onclick="setTab('home')">${I.home}Home</button>
       <button class="tab ${S.tab==='hooks'?'active':''}" onclick="setTab('hooks')">${I.hook}Hooks</button>
@@ -1297,10 +1298,15 @@ function loadActiveHooks(){
   if(S.hooksNiche) window.setHooksNiche(S.hooksNiche);
 }
 
-function topBar(kicker, backTo){
-  return `<div class="topbar">${backTo ? `<button class="iconbtn tipbtn" data-tip="Back" title="Back" aria-label="Back" onclick="setTab('${backTo}')" style="margin-right:8px">${I.back}</button>` : ""}<div class="brand"><img src="/logo-64.png" class="brand-mark" alt="CreatorPulse"/><div><div class="brand-name">CreatorPulse</div><div class="brand-sub">${esc(kicker)}</div></div></div>
+function topBar(kicker, backTo, showRefresh){
+  // Dropped the subtitle line under the wordmark  it only ever repeated
+  // either the page's own H1 below it or (on Home) the count the hero
+  // card already shows. Also: refresh used to appear on every page and
+  // always reloaded trends specifically, which made no sense on Profile
+  // or Discover. Now it only shows where the caller asks for it.
+  return `<div class="topbar">${backTo ? `<button class="iconbtn tipbtn" data-tip="Back" title="Back" aria-label="Back" onclick="setTab('${backTo}')" style="margin-right:8px">${I.back}</button>` : ""}<div class="brand"><img src="/logo-64.png" class="brand-mark" alt="CreatorPulse"/><div class="brand-name">CreatorPulse</div></div>
     <div class="topbar-right">
-      <button class="iconbtn tipbtn" data-tip="Refresh trends" title="Refresh trends" aria-label="Refresh trends" onclick="loadTrends();loadNotifs();toast('Refreshing')">${I.refresh}</button>
+      ${showRefresh ? `<button class="iconbtn tipbtn" data-tip="Refresh trends" title="Refresh trends" aria-label="Refresh trends" onclick="loadTrends();loadNotifs();toast('Refreshing')">${I.refresh}</button>` : ""}
       <div class="bell-wrap">
         <button class="iconbtn tipbtn" data-tip="Notifications" title="Notifications" aria-label="Notifications" onclick="toggleBell(event)">${I.bell}</button>
         <span class="bell-dot ${S.notifs.length?'show':''}"></span>
@@ -1318,7 +1324,7 @@ function pageHome(){
   const chipTxt = S.trends.length ? (peaking ? `${peaking} ${peaking===1?'story':'stories'} peaking right now` : `${S.trends.length} live stories`) : "Loading your stories…";
   const top = S.trends[0];
   const peek = top ? `<div class="peek"><div class="k">Top story right now</div><div class="t">${esc(top.headline||top.title||"")}</div><div class="row"><span class="m">${esc(top.niche||"")} · ${trendVelocity(top).label}</span><button class="btn bp" onclick="toggle('${top.id}')">Create</button></div></div>` : "";
-  return `<main class="page active">${topBar(`${S.trends.length||0} live stories`)}
+  return `<main class="page active">${topBar(`${S.trends.length||0} live stories`, null, true)}
     <div class="hero"><div class="hi">Welcome back</div><div class="nm">${esc(first)}</div>
       <button class="hero-chip" onclick="document.getElementById('feed').scrollIntoView({behavior:'smooth'})"><span class="n">${peaking||S.trends.length||0}</span><span>${chipTxt}</span><span class="go">›</span></button></div>
     ${peek}
