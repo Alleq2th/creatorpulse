@@ -1277,8 +1277,8 @@ function renderApp(){
     <nav class="tabbar">
       <button class="tab ${S.tab==='home'?'active':''}" onclick="setTab('home')">${I.home}Home</button>
       <button class="tab ${S.tab==='hooks'?'active':''}" onclick="setTab('hooks')">${I.hook}Hooks</button>
+      <button class="tab tab-create ${S.tab==='create'?'active':''}" onclick="setTab('create')"><span class="tab-fab">${I.create}</span>Create</button>
       <button class="tab ${S.tab==='calendar'?'active':''}" onclick="setTab('calendar')">${I.cal}Calendar</button>
-      <button class="tab ${S.tab==='create'?'active':''}" onclick="setTab('create')">${I.create}Create</button>
       <button class="tab ${S.tab==='profile'?'active':''}" onclick="setTab('profile')">${I.user}Profile</button>
     </nav>
     ${renderSheet()}
@@ -1566,11 +1566,18 @@ function renderAgendaItem(it){
   const dt = new Date(it.date);
   const timeStr = isPost && it.date.includes("T") ? dt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) : null;
   const payload = JSON.stringify({title:it.title, desc:it.desc, niche:it.niche, date:it.date}).replace(/'/g,"&#39;");
+  // Every item now carries an actual image-shaped tile instead of a small
+  // inline emoji floating in the text  a real photo per seeded event isn't
+  // something I can source here, but this gives every agenda row a
+  // consistent visual thumbnail to scan by, the way the request asked for.
+  const thumbIcon = isPost ? "\u270d\ufe0f" : isMajor ? "\ud83d\udd25" : it.importance === "relevant" ? "\ud83d\udccc" : "\ud83d\uddd3";
+  const thumb = `<div class="agenda-item-thumb ${cls}">${thumbIcon}</div>`;
   return `<div class="agenda-item ${cls}">
+    ${thumb}
     <div class="agenda-item-date"><div class="m">${M_SHORT[dt.getMonth()]}</div><div class="d">${dt.getDate()}</div></div>
     <div class="agenda-item-body">
-      <div class="agenda-item-title">${badge}${esc(it.title)}</div>
-      ${it.niche?`<div class="agenda-item-niche">${esc(it.niche)}${isPost?' · Scheduled'+(timeStr?' · '+timeStr:''):''}</div>`:''}
+      <div class="agenda-item-title">${esc(it.title)}</div>
+      ${it.niche?`<div class="agenda-item-niche">${esc(it.niche)}${isPost?' \u00b7 Scheduled'+(timeStr?' \u00b7 '+timeStr:''):''}</div>`:''}
       ${it.desc && !isPost ?`<div class="agenda-item-desc">${esc(it.desc)}</div>`:''}
     </div>
     ${isPost
