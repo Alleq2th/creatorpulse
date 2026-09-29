@@ -142,6 +142,11 @@ function pageProfile(){
       </div>
       <div class="pf-switch ${localStorage.getItem('cp_theme')==='dark'?'on':''}"><div class="pf-switch-knob"></div></div>
     </div>
+    <div class="pf-row" style="cursor:default;flex-direction:column;align-items:stretch">
+      <div class="pf-row-lbl">Accent color</div>
+      <div class="pf-row-sub">Backgrounds stay the same  this just recolors buttons, highlights and the header card</div>
+      <div class="accent-row">${ACCENTS.map(a=>`<button class="accent-dot ${localStorage.getItem('cp_accent')===a.hex||(!localStorage.getItem('cp_accent')&&a.hex==='#6C4CF5')?'sel':''}" style="background:${a.hex}" title="${a.name}" aria-label="${a.name}" onclick="applyAccent('${a.hex}');render()">${(localStorage.getItem('cp_accent')===a.hex||(!localStorage.getItem('cp_accent')&&a.hex==='#6C4CF5'))?'\u2713':''}</button>`).join("")}</div>
+    </div>
     <div class="pf-row" onclick="togglePush()">
       <div>
         <div class="pf-row-lbl">Push notifications</div>
@@ -176,10 +181,49 @@ function pageDiscover(){
     ${renderInspirationFeed()}
   </main>`;
 }
+const ACCENTS = [
+  {name:"Violet", hex:"#6C4CF5"}, {name:"Indigo", hex:"#4F5FE0"}, {name:"Blue", hex:"#2E7DE0"},
+  {name:"Teal", hex:"#0E9E8E"}, {name:"Green", hex:"#2FA766"}, {name:"Lime", hex:"#6FA62F"},
+  {name:"Amber", hex:"#D99A2B"}, {name:"Orange", hex:"#E0703B"}, {name:"Red", hex:"#D4503B"},
+  {name:"Pink", hex:"#D6478F"}, {name:"Slate", hex:"#5B5A63"}, {name:"Ink", hex:"#1E1C22"}
+];
+function hexToRgb(hex){ hex=hex.replace('#',''); if(hex.length===3) hex=hex.split('').map(c=>c+c).join(''); const n=parseInt(hex,16); return [(n>>16)&255,(n>>8)&255,n&255]; }
+function rgbToHex(r,g,b){ return '#'+[r,g,b].map(x=>Math.max(0,Math.min(255,Math.round(x))).toString(16).padStart(2,'0')).join(''); }
+function mixRgb(a,b,t){ return a.map((c,i)=>c+(b[i]-c)*t); }
+// Recomputes every accent-derived token (button gradient, tint chip
+// background, glow color, hero gradient) from one base hex, for both
+// themes  so picking a color is one real change, not twelve hand-tuned
+// palettes to keep in sync.
+window.applyAccent = (hex) => {
+  const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const rgb = hexToRgb(hex);
+  const white = [255,255,255], black = [16,14,20];
+  const ac2 = rgbToHex(...mixRgb(rgb, white, 0.30));
+  const pillA = rgbToHex(...mixRgb(rgb, black, 0.42));
+  const pillB = rgbToHex(...mixRgb(rgb, black, 0.82));
+  const tint = rgbToHex(...mixRgb(rgb, dark ? [34,30,42] : white, dark ? 0.76 : 0.90));
+  const tintTx = rgbToHex(...mixRgb(rgb, dark ? white : black, dark ? 0.38 : 0.32));
+  const heroA = rgbToHex(...mixRgb(rgb, black, 0.28));
+  const heroB = rgbToHex(...mixRgb(rgb, white, 0.30));
+  const heroGrad = `radial-gradient(120% 90% at 15% 0%,${heroA} 0%,transparent 60%),radial-gradient(90% 80% at 100% 35%,${ac2} 0%,transparent 62%),radial-gradient(80% 70% at 25% 105%,${heroB} 0%,transparent 66%),linear-gradient(160deg,${heroA},${ac2})`;
+  const st = document.documentElement.style;
+  st.setProperty('--ac', hex);
+  st.setProperty('--ac-rgb', rgb.join(','));
+  st.setProperty('--ac2', ac2);
+  st.setProperty('--pill', `linear-gradient(180deg,${pillA} 0%,${pillB} 100%)`);
+  st.setProperty('--tint', tint);
+  st.setProperty('--tint-tx', tintTx);
+  st.setProperty('--hero', heroGrad);
+  st.setProperty('--grad-av', heroGrad);
+  localStorage.setItem('cp_accent', hex);
+};
+(function(){ const saved = localStorage.getItem('cp_accent'); if(saved) applyAccent(saved); })();
 window.toggleTheme = () => {
   const dark = document.documentElement.getAttribute('data-theme') === 'dark';
   if(dark){ document.documentElement.removeAttribute('data-theme'); localStorage.setItem('cp_theme','light'); }
   else{ document.documentElement.setAttribute('data-theme','dark'); localStorage.setItem('cp_theme','dark'); }
+  const savedAccent = localStorage.getItem('cp_accent');
+  if(savedAccent) applyAccent(savedAccent); // re-derive tint/glow for the new theme
   render();
 };
 window.editName = async () => {
@@ -983,7 +1027,7 @@ else if (kind === "terms" || kind === "privacy" || kind === "cookies" || kind ==
     b.style.cssText = "position:fixed;left:12px;right:12px;bottom:calc(var(--tab-h) + 16px + env(safe-area-inset-bottom));z-index:9999;max-width:520px;margin:0 auto;background:#141420;color:#fff;border:1px solid #2a2a3a;border-radius:14px;padding:14px 16px;font:13px/1.5 system-ui,-apple-system,sans-serif;box-shadow:0 10px 40px rgba(0,0,0,.4)";
     b.innerHTML = '<div style="margin-bottom:10px">We use only what\'s needed to keep you signed in and remember your preferences. No ad trackers. <a href="#" onclick="cpOpen(\'cookies\');return false;" style="color:#a5b4fc">Read our cookie notice</a>.</div>' +
       '<div style="display:flex;gap:8px;justify-content:flex-end">' +
-      '<button id="cp-cookie-ok" style="background:#6366f1;color:#fff;border:0;border-radius:8px;padding:8px 16px;cursor:pointer;font:600 13px system-ui">Got it</button>' +
+      '<button id="cp-cookie-ok" style="background:#1E1C22;color:#fff;border:0;border-radius:8px;padding:8px 16px;cursor:pointer;font:600 13px system-ui">Got it</button>' +
       '</div>';
     document.body.appendChild(b);
     document.getElementById("cp-cookie-ok").onclick = () => {

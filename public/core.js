@@ -856,8 +856,13 @@ function downscaleImageFile(file, maxDim, quality) {
 // ever holds a single step name.
 window.toggleStep = (tid,step) => { S.openStep = S.openStep || {}; S.openStep[tid] = (S.openStep[tid]===step ? null : step); render(); };
 function closeStep(tid){ S.openStep = S.openStep || {}; S.openStep[tid] = null; }
-window.setPlat = (tid,p) => { S.plat[tid]=p; S.ctype[tid]=PTYPES[p]?.[0]||""; closeStep(tid); render(); };
-window.setCT = (tid,c) => { S.ctype[tid]=c; closeStep(tid); render(); };
+function openStep(tid,step){ S.openStep = S.openStep || {}; S.openStep[tid] = step; }
+// Picking an option used to just close that step and leave you to tap the
+// next one open yourself. Now it walks you forward  Platform -> Format ->
+// Tone  and only fully closes after Tone, so choosing feels like one
+// continuous flow instead of three separate taps to open each step.
+window.setPlat = (tid,p) => { S.plat[tid]=p; S.ctype[tid]=PTYPES[p]?.[0]||""; openStep(tid,'format'); render(); };
+window.setCT = (tid,c) => { S.ctype[tid]=c; openStep(tid,'tone'); render(); };
 window.setTone = (tid,t) => { S.tone[tid]=t; closeStep(tid); render(); };
 window.setPalette = (tid,p) => { S.palette[tid]=p; closeStep(tid); render(); };
 window.setSlideCount = (tid,n) => { S.slideCount[tid]=n; closeStep(tid); render(); };
@@ -1323,7 +1328,7 @@ function pageHome(){
   const peaking = S.trends.filter(t=>trendVelocity(t).state==='peaking').length;
   const chipTxt = S.trends.length ? (peaking ? `${peaking} ${peaking===1?'story':'stories'} peaking right now` : `${S.trends.length} live stories`) : "Loading your stories…";
   const top = S.trends[0];
-  const peek = top ? `<div class="peek"><div class="k">Top story right now</div><div class="t">${esc(top.headline||top.title||"")}</div><div class="row"><span class="m">${esc(top.niche||"")} · ${trendVelocity(top).label}</span><button class="btn bp" onclick="toggle('${top.id}')">Create</button></div></div>` : "";
+  const peek = top ? `<div class="peek"><div class="k">Top story right now</div><div class="t">${esc(top.headline||top.title||"")}</div><div class="row"><span class="m">${esc(top.niche||"")} · ${trendVelocity(top).label}</span><button class="btn bp" onclick="toggle('${top.id}');setTimeout(()=>document.getElementById('tc-${top.id}')?.scrollIntoView({behavior:'smooth',block:'start'}),50)">Create</button></div></div>` : "";
   return `<main class="page active">${topBar(`${S.trends.length||0} live stories`, null, true)}
     <div class="hero"><div class="hi">Welcome back</div><div class="nm">${esc(first)}</div>
       <button class="hero-chip" onclick="document.getElementById('feed').scrollIntoView({behavior:'smooth'})"><span class="n">${peaking||S.trends.length||0}</span><span>${chipTxt}</span><span class="go">›</span></button></div>
