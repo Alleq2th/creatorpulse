@@ -88,9 +88,9 @@ body{padding-bottom:var(--tab-h);letter-spacing:-0.005em}
 /* dots  Home, Profile */
 .app[data-tex="dots"]::before{background-image:radial-gradient(var(--tex) 1.3px,transparent 1.3px);background-size:22px 22px}
 /* grid  Hooks, Library */
-.app[data-tex="grid"]::before{background-image:linear-gradient(var(--tex) 1px,transparent 1px),linear-gradient(90deg,var(--tex) 1px,transparent 1px);background-size:28px 28px}
+.app[data-tex="grid"]::before{background-image:linear-gradient(color-mix(in srgb,var(--tex) 55%,transparent) 1px,transparent 1px),linear-gradient(90deg,color-mix(in srgb,var(--tex) 55%,transparent) 1px,transparent 1px);background-size:36px 36px}
 /* cross  Calendar, Discover */
-.app[data-tex="cross"]::before{background-image:radial-gradient(var(--tex) 1px,transparent 1px);background-size:16px 16px;background-position:0 0,8px 8px}
+.app[data-tex="cross"]::before{background-image:radial-gradient(var(--tex) 1px,transparent 1px),radial-gradient(var(--tex) 1px,transparent 1px);background-size:26px 26px,26px 26px;background-position:0 0,13px 13px}
 /* diagonal  Create */
 .app[data-tex="diag"]::before{background-image:repeating-linear-gradient(45deg,var(--tex) 0 1px,transparent 1px 14px)}
 @media(min-width:900px){
@@ -200,7 +200,7 @@ body{padding-bottom:var(--tab-h);letter-spacing:-0.005em}
 
 .chips{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px}
 .chip-label{font-size:11px;color:var(--mu);text-transform:none;letter-spacing:0;font-weight:500;margin-bottom:6px}
-.chip{padding:5px 11px;border-radius:99px;border:1px solid var(--br);font:500 10px/1.5 var(--sans);cursor:pointer;background:transparent;color:var(--mu);transition:all .15s}
+.chip{padding:5px 11px;border-radius:99px;border:1px solid var(--br);font:500 10px/1.5 var(--sans);cursor:pointer;background:var(--sf);color:var(--mu);transition:all .15s}
 .chip:hover{color:var(--tx);border-color:var(--br2)}
 .chip.active{background:var(--tx);color:var(--bg);border-color:var(--tx);font-weight:600}
 .chip.ac.active{background:var(--tx);color:#fff;border-color:var(--tx)}
@@ -352,7 +352,7 @@ body{padding-bottom:var(--tab-h);letter-spacing:-0.005em}
 .pf-head{display:flex;flex-direction:column;align-items:center;padding:8px 0 20px;text-align:center}
 .pf-avatar{width:96px;height:96px;border-radius:50%;background:var(--grad-av);display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:42px;font-weight:700;color:#fff;letter-spacing:-0.02em;box-shadow:0 12px 32px rgba(108,76,245,.25),0 0 0 4px rgba(108,76,245,.10)}
 .pf-avatar-wrap{position:relative;display:inline-block;cursor:pointer;margin-bottom:2px}
-.pf-avatar-img{width:96px;height:96px;border-radius:50%;object-fit:cover;box-shadow:0 12px 32px rgba(255,74,46,.25),0 0 0 4px rgba(255,74,46,.10);display:block}
+.pf-avatar-img{width:96px;height:96px;border-radius:50%;object-fit:cover;box-shadow:0 12px 32px rgba(108,76,245,.22),0 0 0 4px rgba(108,76,245,.10);display:block}
 .pf-avatar-edit{position:absolute;bottom:0;right:0;width:30px;height:30px;border-radius:50%;background:var(--ac);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,.4),0 0 0 3px var(--bg);color:var(--bg)}
 .pf-avatar-edit svg{width:14px;height:14px}
 .pf-name{font-family:var(--serif);font-size:20px;font-weight:700;margin-top:16px;letter-spacing:-0.015em;display:flex;align-items:center;gap:7px;justify-content:center}
@@ -408,7 +408,7 @@ body{padding-bottom:var(--tab-h);letter-spacing:-0.005em}
 .coach-msg{background:var(--sf2);border:1px solid var(--br);border-radius:10px;padding:14px;font-size:13px;line-height:1.7;white-space:pre-wrap;margin-top:12px}
 
 /* toast */
-.toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--tx);color:var(--bg);padding:10px 18px;border-radius:9px;font:600 12px/1 var(--sans);z-index:9999;box-shadow:0 10px 30px rgba(0,0,0,.4);animation:fade .25s}
+.toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);max-width:min(72vw,280px);text-align:center;background:var(--tx);color:var(--bg);padding:10px 16px;border-radius:12px;font:600 12px/1.4 var(--sans);z-index:9999;box-shadow:0 10px 30px rgba(0,0,0,.4);animation:fade .25s}
 
 ::-webkit-scrollbar{width:4px;height:4px}
 ::-webkit-scrollbar-track{background:transparent}
