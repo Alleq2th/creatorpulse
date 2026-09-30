@@ -414,20 +414,22 @@ window.addEventListener("pagehide", () => { if(window.saveCaches) window.saveCac
 (function betaLayer(){
   const uid = () => (window.S?.user?.id || window.S?.user?.email || "anon");
 
-  // ─── 1. OFFLINE / RETRY BANNER ────────────────────────────────────────────
-  const bar = document.createElement("div");
-  bar.id = "cp-net-bar";
-  bar.style.cssText = "position:fixed;top:0;left:0;right:0;z-index:9999;background:#c0392b;color:#fff;padding:8px 14px;font:600 12px system-ui;text-align:center;display:none;transform:translateY(-100%);transition:transform .25s";
-  document.body.appendChild(bar);
-  const showBar = (msg, color) => {
-    bar.textContent = msg;
-    bar.style.background = color || "#c0392b";
-    bar.style.display = "block";
-    requestAnimationFrame(() => bar.style.transform = "translateY(0)");
+  // OFFLINE / RETRY STATUS -- one consistent bottom pill instead of a
+  // top-of-screen colored strip with hardcoded red/brown/green.
+  let pillEl = null;
+  const showStatusPill = (msg) => {
+    if(!pillEl){
+      pillEl = document.createElement("div");
+      pillEl.className = "status-pill";
+      pillEl.innerHTML = '<span class="dot"></span><span class="msg"></span>';
+      document.body.appendChild(pillEl);
+    }
+    pillEl.querySelector(".msg").textContent = msg;
+    pillEl.classList.remove("hide");
   };
-  const hideBar = () => { bar.style.transform = "translateY(-100%)"; setTimeout(()=>bar.style.display="none", 250); };
-  window.addEventListener("offline", () => showBar("You're offline — Create Studio still works. Trends will refresh when you're back.", "#7f5539"));
-  window.addEventListener("online", () => { showBar("Back online ✓", "#2d6a4f"); setTimeout(hideBar, 1500); });
+  const hideStatusPill = () => { if(pillEl) pillEl.classList.add("hide"); };
+  window.addEventListener("offline", () => showStatusPill("You're offline. Create Studio still works -- trends will refresh when you're back."));
+  window.addEventListener("online", () => { hideStatusPill(); toast("Back online"); });
 
   // ─── 2. FETCH WRAPPER: retry, error toast, analytics on failures ──────────
   const _rawFetch = window.fetch.bind(window);

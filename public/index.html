@@ -428,6 +428,15 @@ body{padding-bottom:var(--tab-h);letter-spacing:-0.005em}
 
 /* toast */
 .toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);max-width:min(72vw,280px);text-align:center;background:var(--tx);color:var(--bg);padding:10px 16px;border-radius:12px;font:600 12px/1.4 var(--sans);z-index:9999;box-shadow:0 10px 30px rgba(0,0,0,.4);animation:fade .25s}
+/* Was a full-width colored strip pinned to the very top of the screen
+   (hardcoded red/brown/green, system-ui font, no rounding)  a completely
+   different visual language from every other status message in the app.
+   Now the same bottom pill as .toast, just persistent instead of
+   auto-dismissing, so "offline" and "saved" and "server waking up" all
+   read as one family of message instead of three. */
+.status-pill{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(0);max-width:min(80vw,320px);display:flex;align-items:center;gap:8px;text-align:left;background:var(--tx);color:var(--bg);padding:10px 14px;border-radius:12px;font:600 12px/1.4 var(--sans);z-index:9998;box-shadow:0 10px 30px rgba(0,0,0,.4);transition:transform .25s,opacity .25s}
+.status-pill.hide{transform:translateX(-50%) translateY(12px);opacity:0;pointer-events:none}
+.status-pill .dot{width:7px;height:7px;border-radius:50%;background:var(--or);flex-shrink:0;animation:tc-peak-glow 1.8s ease-in-out infinite}
 
 ::-webkit-scrollbar{width:4px;height:4px}
 ::-webkit-scrollbar-track{background:transparent}
