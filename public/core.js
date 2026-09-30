@@ -1145,7 +1145,50 @@ function render(){
   csAfterRender();
 }
 
+// Event photos: same stock-photo lookup as story cards, throttled to 3 at
+// once so a niche with 100 events doesn't fire 100 requests the moment
+// Calendar opens  only the events currently in the DOM get queued.
+const EVENT_PHOTO_MAX = 3;
+let eventPhotoInFlight = 0;
+const eventPhotoQueue = [];
+function applyEventPhoto(el, url){
+  if(!el) return;
+  el.style.backgroundImage = `url("${url}")`;
+  el.style.backgroundSize = "cover";
+  el.style.backgroundPosition = "center";
+  el.classList.add("has-photo");
+  el.textContent = "";
+}
+function pumpEventPhotoQueue(){
+  if(eventPhotoInFlight >= EVENT_PHOTO_MAX) return;
+  const job = eventPhotoQueue.shift();
+  if(!job) return;
+  eventPhotoInFlight++;
+  api(`/api/stock-photo?query=${encodeURIComponent(job.query)}&count=1`)
+    .then(sp => {
+      const url = sp?.photos?.[0]?.url || null;
+      S.eventPhoto = S.eventPhoto || {};
+      S.eventPhoto[job.key] = url;
+      if(url) applyEventPhoto(document.querySelector(`[data-ev-key="${CSS.escape(job.key)}"]`), url);
+    })
+    .catch(() => { S.eventPhoto = S.eventPhoto || {}; S.eventPhoto[job.key] = null; })
+    .finally(() => { eventPhotoInFlight--; pumpEventPhotoQueue(); });
+}
+function calAfterRender(){
+  if(S.tab !== "calendar") return;
+  S.eventPhoto = S.eventPhoto || {};
+  document.querySelectorAll("[data-ev-key]").forEach(el => {
+    const key = el.dataset.evKey;
+    if(el.classList.contains("has-photo")) return;
+    if(S.eventPhoto[key]) { applyEventPhoto(el, S.eventPhoto[key]); return; }
+    if (S.eventPhoto[key] === null) return; // already tried, keep the icon fallback
+    if (eventPhotoQueue.some(j => j.key === key)) return; // already queued
+    eventPhotoQueue.push({ key, query: el.dataset.evQuery });
+  });
+  pumpEventPhotoQueue();
+}
 function csAfterRender(){
+  calAfterRender();
   try {
     const fbBtn = document.getElementById('cp-fb-btn');
     if(fbBtn) fbBtn.style.display = (S.tab === 'create') ? 'none' : '';
@@ -1576,7 +1619,17 @@ function renderAgendaItem(it){
   // something I can source here, but this gives every agenda row a
   // consistent visual thumbnail to scan by, the way the request asked for.
   const thumbIcon = isPost ? "\u270d\ufe0f" : isMajor ? "\ud83d\udd25" : it.importance === "relevant" ? "\ud83d\udccc" : "\ud83d\uddd3";
-  const thumb = `<div class="agenda-item-thumb ${cls}">${thumbIcon}</div>`;
+  // Real photo per event via the same stock-photo lookup story cards
+  // already use  scoped to major/relevant events only (not every plain
+  // seasonal filler item, and not user posts) so this stays cheap even
+  // once the dataset grows to ~100 events/niche. Falls back to the icon
+  // tile if the fetch fails or an event just isn't worth the API call.
+  const wantsPhoto = !isPost && (isMajor || it.importance === "relevant");
+  const evKey = wantsPhoto ? `${it.niche||""}|${it.title}` : null;
+  const evQuery = wantsPhoto ? `${it.niche||""} ${it.title}`.trim() : null;
+  const cachedUrl = evKey ? (S.eventPhoto||{})[evKey] : null;
+  const thumbStyle = cachedUrl ? ` style="background-image:url('${esc(cachedUrl)}');background-size:cover;background-position:center"` : "";
+  const thumb = `<div class="agenda-item-thumb ${cls}${cachedUrl?' has-photo':''}"${wantsPhoto?` data-ev-key="${esc(evKey)}" data-ev-query="${esc(evQuery)}"`:""}${thumbStyle}>${cachedUrl?"":thumbIcon}</div>`;
   return `<div class="agenda-item ${cls}">
     ${thumb}
     <div class="agenda-item-date"><div class="m">${M_SHORT[dt.getMonth()]}</div><div class="d">${dt.getDate()}</div></div>
