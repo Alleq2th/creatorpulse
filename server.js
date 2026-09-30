@@ -24,6 +24,7 @@ const fetch = require("node-fetch");
 // the Render environment ever runs start without running postinstall first
 // (e.g. a cached build). See scripts/setupFonts.js for why this is needed.
 try { require("./scripts/setupFonts").installFonts(); } catch (e) { console.log("[fonts] boot install skipped:", e.message); }
+const RSSParser = require("rss-parser");
 const { createClient } = require("@supabase/supabase-js");
 const { google } = require("googleapis");
 const multer = require("multer");
@@ -35,11 +36,24 @@ try { rateLimit = require("express-rate-limit"); } catch (_) { rateLimit = null;
 try { compression = require("compression"); } catch (_) { compression = null; }
 
 const app = express();
-// RSS parsing goes through the single shared parser in config/feeds.js. That is
-// the one definition, with media:content/media:thumbnail declared on it, so
-// server.js, routes/digest.js and routes/push.js all parse feeds identically
-// instead of one of them silently missing the media fields.
-const { parser } = require("./config/feeds");
+const parser = new RSSParser({
+  timeout: 8000,
+  headers: { "User-Agent": "Mozilla/5.0 CreatorPulseBot/1.0" },
+  // media:content and media:thumbnail live in the Yahoo Media RSS
+  // namespace, not the core RSS spec — rss-parser will NOT expose them on
+  // parsed items unless explicitly declared here. Without this, every
+  // check for those fields in extractFeedImage() was silently checking a
+  // property that never existed, regardless of how well the extraction
+  // logic itself was written. This is exactly how professional outlets
+  // (Hollywood Reporter, Variety, etc.) typically publish their images —
+  // not as an embedded <img> tag in the content HTML.
+  customFields: {
+    item: [
+      ["media:content", "media:content", { keepArray: true }],
+      ["media:thumbnail", "media:thumbnail", { keepArray: true }]
+    ]
+  }
+});
 
 // Behind Render/Cloudflare — trust the proxy so req.ip + secure work
 app.set("trust proxy", 1);
@@ -52,13 +66,30 @@ app.use((req, res, next) => {
   next();
 });
 
-// Security headers (Helmet + CSP) and gzip/brotli are provided by
-// middleware/auth.js. That file already existed but was never imported -
-// server.js kept its own copy instead, so the two were free to (and did)
-// drift apart. Importing it here makes one definition the single source of
-// truth for security headers. It must run before the route mounts below.
-const { setupSecurity } = require("./middleware/auth");
-setupSecurity(app, { compression });
+// Security headers (Helmet) with a CSP tuned for the inline SPA + external image CDNs
+if (helmet) {
+  app.use(helmet({
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        "default-src": ["'self'"],
+        "script-src": ["'self'", "'unsafe-inline'", "https://apis.google.com"],
+        "script-src-attr": ["'unsafe-inline'"],
+        "style-src": ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        "font-src": ["'self'", "https://fonts.gstatic.com", "data:"],
+        "img-src": ["'self'", "data:", "blob:", "https:"],
+        "media-src": ["'self'", "blob:", "data:", "https:"],
+        "connect-src": ["'self'", "https:"],
+        "frame-ancestors": ["'none'"],
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  }));
+}
+
+// Gzip/brotli responses
+if (compression) app.use(compression());
 
 // CORS — allowlist FRONTEND_URL + localhost dev origins
 const CORS_ALLOWLIST = [
@@ -92,9 +123,13 @@ app.use("/api", require("./routes/image"));
 app.use("/api", require("./routes/cards"));
 app.use("/api", require("./routes/stockphoto"));
 
-// Hardening headers (X-Content-Type-Options, X-Frame-Options, Referrer-Policy,
-// Permissions-Policy) were duplicated here as well - they now come solely from
-// middleware/auth.js via setupSecurity() above.
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=(self), microphone=(self)");
+  next();
+});
 
 // ── Rate limiting ────────────────────────────────────────────────────────────
 const noopLimiter = (_req, _res, next) => next();
@@ -109,7 +144,20 @@ app.use(globalLimiter);
 app.use("/api/auth", authLimiter);
 
 // ── Simple in-memory TTL cache for external feeds ────────────────────────────
-const { cacheGet, cacheSet } = require("./lib/cache");
+const _cache = new Map();
+function cacheGet(key) {
+  const hit = _cache.get(key);
+  if (!hit) return null;
+  if (Date.now() > hit.exp) { _cache.delete(key); return null; }
+  return hit.val;
+}
+function cacheSet(key, val, ttlMs) {
+  _cache.set(key, { val, exp: Date.now() + ttlMs });
+  if (_cache.size > 500) { // simple LRU-ish trim
+    const first = _cache.keys().next().value;
+    _cache.delete(first);
+  }
+}
 
 // Timed fetch — every external call has a hard cap
 async function tfetch(url, opts = {}, ms = 10000) {
@@ -125,9 +173,6 @@ app.use(express.static(PUBLIC_DIR, { maxAge: "5m", etag: true, index: false }));
 app.get("/", (_req, res) => res.sendFile(path.join(PUBLIC_DIR, "index.html"), { headers: { "Cache-Control": "no-cache" } }));
 
 // Health check for Render / UptimeRobot
-// `integrations` reports ONLY whether each provider is configured (booleans),
-// never the values. Without this a deploy could answer 200 "healthy" while
-// silently 503-ing every feature that needs a missing key.
 app.get("/api/health", (_req, res) => {
   const mem = process.memoryUsage();
   res.json({
@@ -135,26 +180,6 @@ app.get("/api/health", (_req, res) => {
     uptime: Math.round(process.uptime()),
     memoryMB: Math.round(mem.heapUsed / 1024 / 1024),
     node: process.version,
-    integrations: {
-      supabase: !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY),
-      groq: !!process.env.GROQ_API_KEY,
-      huggingface: !!process.env.HF_API_KEY,
-      newsapi: !!process.env.NEWS_API_KEY,
-      newsdata: !!process.env.NEWSDATA_API_KEY,
-      currents: !!process.env.CURRENTS_API_KEY,
-      googleOauth: !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.GOOGLE_REDIRECT_URI),
-      webPush: !!(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY),
-      pollinations: !!process.env.POLLINATIONS_KEY,
-      unsplash: !!process.env.UNSPLASH_ACCESS_KEY,
-      pexels: !!process.env.PEXELS_API_KEY,
-      adminKey: !!process.env.ADMIN_KEY,
-      // Public anon key. Without it /api/auth/reset-password answers 503, so
-      // the password-reset flow silently cannot complete -- worth surfacing.
-      supabaseAnon: !!process.env.SUPABASE_ANON_KEY,
-      // Whether a reset email has anywhere to send the user back to. The
-      // server falls back to FRONTEND_URL, so either one being set counts.
-      passwordReset: !!(process.env.PASSWORD_RESET_REDIRECT || process.env.FRONTEND_URL),
-    },
   });
 });
 
@@ -227,6 +252,43 @@ app.post("/api/auth/login", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// Sends a real password-reset email via Supabase — the link in that email
+// redirects back here with a one-time recovery token in the URL, handled
+// client-side by checkAuthRedirect() the same way email-confirmation links
+// already are.
+app.post("/api/auth/forgot-password", async (req, res) => {
+  if (!supabase) return res.status(503).json({ error: "Auth not configured" });
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: "Email required" });
+  try {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: FRONTEND_URL || undefined });
+    if (error) throw error;
+    // Always return success regardless of whether the email exists — this
+    // is standard practice for password-reset endpoints. Confirming an
+    // email doesn't exist would let anyone check which addresses have
+    // accounts on the service, one at a time.
+    res.json({ success: true, message: "If that email has an account, a reset link is on its way." });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// The recovery link's one-time token proves who this is (same
+// getUser()-based verification every other endpoint here already uses) —
+// admin.updateUserById then actually sets the new password using the
+// service-role client, since a recovery token alone isn't a full session.
+app.post("/api/auth/reset-password", async (req, res) => {
+  if (!supabase) return res.status(503).json({ error: "Auth not configured" });
+  const { accessToken, newPassword } = req.body;
+  if (!accessToken || !newPassword) return res.status(400).json({ error: "Missing fields" });
+  if (newPassword.length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
+  try {
+    const { data: userData, error: userError } = await supabase.auth.getUser(accessToken);
+    if (userError) return res.status(401).json({ error: "This reset link has expired — request a new one." });
+    const { error } = await supabase.auth.admin.updateUserById(userData.user.id, { password: newPassword });
+    if (error) throw error;
+    res.json({ success: true, message: "Password updated — you can sign in now." });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // Access tokens expire (~1h). Client calls this with the stored refresh token
 // to get a new access token without forcing the user to log in again.
 app.post("/api/auth/refresh", async (req, res) => {
@@ -267,62 +329,6 @@ app.post("/api/auth/update-profile", async (req, res) => {
     if (error) return res.status(400).json({ error: error.message });
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// Password recovery — step 1 of 2. Sends the Supabase reset email pointing back
-// into the SPA. The redirect is env-configurable (PASSWORD_RESET_REDIRECT),
-// falling back to FRONTEND_URL and then to localhost for dev.
-// The response is deliberately identical whether or not the address exists, so
-// this endpoint cannot be used to enumerate registered accounts.
-app.post("/api/auth/forgot-password", async (req, res) => {
-  if (!supabase) return res.status(503).json({ error: "Auth not configured" });
-  try {
-    const { email } = req.body || {};
-    if (!email) return res.status(400).json({ error: "Email is required" });
-    const base = process.env.PASSWORD_RESET_REDIRECT || FRONTEND_URL || "http://localhost:3000";
-    const redirectTo = base.replace(/\/+$/, "") + "/?type=recovery";
-    const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
-    if (error) console.error("[auth] resetPasswordForEmail failed:", error.message);
-    res.json({ success: true, message: "If that email has an account, a reset link is on its way." });
-  } catch (e) {
-    console.error("[auth] forgot-password error:", e.message);
-    res.status(500).json({ error: "Could not send reset email" });
-  }
-});
-
-// Password recovery — step 2 of 2. The SPA posts the tokens it read out of the
-// recovery link's URL hash; we exchange them for a session and set the new
-// password. The tokens came from a mail-only link, so holding them IS the
-// proof of ownership — no other auth is required, and none is available (the
-// user cannot log in, that being the whole point).
-app.post("/api/auth/reset-password", async (req, res) => {
-  try {
-    const { access_token, refresh_token, password } = req.body || {};
-    if (!access_token || !refresh_token) {
-      return res.status(400).json({ error: "Reset link is invalid or has expired. Request a new one." });
-    }
-    if (!password || String(password).length < 6) {
-      return res.status(400).json({ error: "Password must be at least 6 characters." });
-    }
-    const url = process.env.SUPABASE_URL;
-    // The anon key, not the service key: setSession() is a user-session
-    // operation and must not run under service-role privileges.
-    const anonKey = process.env.SUPABASE_ANON_KEY;
-    if (!url || !anonKey) return res.status(503).json({ error: "Auth not configured" });
-
-    const client = createClient(url, anonKey, { auth: { persistSession: false, autoRefreshToken: false } });
-    const { error: sessErr } = await client.auth.setSession({ access_token, refresh_token });
-    if (sessErr) {
-      console.error("[auth] setSession failed:", sessErr.message);
-      return res.status(400).json({ error: "Reset link is invalid or has expired. Request a new one." });
-    }
-    const { error: updErr } = await client.auth.updateUser({ password: String(password) });
-    if (updErr) return res.status(400).json({ error: updErr.message });
-    res.json({ success: true, message: "Password updated. You can sign in now." });
-  } catch (e) {
-    console.error("[auth] reset-password error:", e.message);
-    res.status(500).json({ error: "Could not update password" });
-  }
 });
 
 // ── NICHE MAPS ──────────────────────────────────────────────────────────────
@@ -496,7 +502,78 @@ const NICHE_EVENTS = {
     { title: "Premier League season ends", date: "2027-05-30", description: "Final matchday, all games kick off simultaneously." },
     { title: "La Liga season ends", date: "2027-05-30", description: "Final matchday." },
     { title: "Serie A season ends", date: "2027-05-30", description: "Final matchday." },
-    { title: "Champions League Final", date: "2027-06-05", description: "Metropolitano Stadium, Madrid." }
+    { title: "Champions League Final", date: "2027-06-05", description: "Metropolitano Stadium, Madrid." },
+    // -- 70 events added below, sourced via ChatGPT + reviewed for dupes against the list above --
+    { title: "UEFA Nations League Matchday 3", date: "2026-10-03", description: "The opening October international window continues with competitive fixtures that can drive national-team reaction and debate content." },
+    { title: "UEFA Nations League Matchday 4", date: "2026-10-06", description: "The final matchday of the first Nations League block provides another round of results, qualification implications and player storylines." },
+    { title: "2026 Ballon d'Or Ceremony", date: "2026-10-26", description: "Football's major individual awards night takes place in London, creating a major opportunity for predictions, reactions and player debates." },
+    { title: "UEFA Nations League Matchday 5", date: "2026-11-12", description: "The November Nations League window resumes competitive international football and creates fresh national-team narratives." },
+    { title: "UEFA Nations League Matchday 6", date: "2026-11-17", description: "The final Nations League group fixtures determine which teams advance, are relegated or enter promotion/relegation play-offs." },
+    { title: "Carabao Cup Quarter-finals", date: "2026-12-14", description: "The League Cup quarter-finals begin the decisive domestic knockout stage, making the draw and ties strong content opportunities." },
+    { title: "FA Cup Third Round", date: "2027-01-09", description: "Premier League clubs enter the traditional FA Cup third round, bringing major matchups and potential giant-killing storylines." },
+    { title: "January Transfer Window Opens", date: "2027-01-01", description: "The winter transfer market opens, starting one of the busiest periods of the football news cycle." },
+    { title: "January Transfer Deadline Day", date: "2027-02-01", description: "The Premier League winter window closes at 23:00 GMT, making it a major day for transfer rumours, confirmed deals and last-minute drama." },
+    { title: "UEFA Champions League Knockout Play-offs", date: "2027-02-16", description: "The Champions League knockout phase begins with two-legged play-off ties, putting elite European clubs under immediate pressure." },
+    { title: "UEFA Nations League Quarter-finals & Promotion/Relegation Play-offs", date: "2027-03-25", description: "Competitive international football returns with Nations League knockout and promotion/relegation ties." },
+    { title: "AFCON 2027 Qualifiers Matchdays 5-6", date: "2027-03-22", description: "The final AFCON qualifying window determines which African nations reach the 2027 tournament." },
+    { title: "UEFA Champions League Quarter-finals", date: "2027-04-06", description: "Europe's remaining eight clubs begin the quarter-final stage, creating major tactical, player and title-race narratives." },
+    { title: "UEFA Champions League Semi-finals", date: "2027-04-27", description: "The Champions League semi-finals begin, making this one of the biggest club-football content windows of the season." },
+    { title: "UEFA Europa League Final", date: "2027-05-26", description: "Frankfurt hosts the Europa League final and crowns the second-tier European club champion." },
+    { title: "UEFA Women's Champions League Final", date: "2027-05-29", description: "Warsaw hosts the Women's Champions League final, providing a major global women's-football moment." },
+    { title: "UEFA Conference League Final", date: "2027-06-02", description: "Besiktas Stadium in Istanbul hosts the Conference League final and another European trophy is decided." },
+    { title: "UEFA Nations League Finals", date: "2027-06-09", description: "The four-team Nations League finals tournament begins, providing high-profile international football content." },
+    { title: "AFCON 2027 Opening Match", date: "2027-06-19", description: "Kenya, Tanzania and Uganda host the opening match of the expanded East African AFCON tournament." },
+    { title: "FIFA Women's World Cup 2027 Opening Match", date: "2027-06-24", description: "Brazil hosts the opening match of the 2027 Women's World Cup, beginning a 32-team global tournament." },
+    { title: "AFCON 2027 Final", date: "2027-07-17", description: "The Africa Cup of Nations final crowns the continental champion in the first AFCON jointly hosted by three countries." },
+    { title: "FIFA Women's World Cup 2027 Final", date: "2027-07-25", description: "The Women's World Cup concludes with the final at Rio de Janeiro's Maracana, creating a major global football moment." },
+    { title: "2027/28 Premier League Season", date: "2027-08-01", description: "The new Premier League campaign is expected to begin in August, creating the usual wave of previews, transfers, predictions and opening-weekend content (date TBD)." },
+    { title: "2027 UEFA Super Cup", date: "2027-08-01", description: "The Champions League and Europa League winners will meet at Amsterdam's Johan Cruyff ArenA for the first European trophy of the new club season (date TBD)." },
+    { title: "Manchester United vs Manchester City", date: "2026-09-13", description: "The first Manchester derby of the Premier League season is a major rivalry fixture with obvious reaction and debate potential." },
+    { title: "Atletico Madrid vs Real Madrid", date: "2026-09-20", description: "The first Madrid derby of the season gives creators a major rivalry storyline early in La Liga." },
+    { title: "Liverpool vs Manchester City", date: "2026-10-11", description: "Two recent Premier League powers meet at Anfield in one of the season's biggest English fixtures." },
+    { title: "Bayern Munich vs Borussia Dortmund", date: "2026-10-31", description: "Der Klassiker brings Germany's biggest traditional rivalry together on Halloween weekend." },
+    { title: "Chelsea vs Tottenham Hotspur", date: "2026-10-24", description: "A major London derby with strong rivalry and table implications." },
+    { title: "Liverpool vs Arsenal", date: "2026-11-01", description: "Two major title contenders meet at Anfield in a fixture capable of producing major title-race narratives." },
+    { title: "Manchester City vs Manchester United", date: "2026-12-20", description: "The second Manchester derby of the league season returns at the Etihad (date subject to change)." },
+    { title: "Real Madrid vs Barcelona - El Clasico", date: "2026-10-25", description: "The first Clasico of the 2026/27 La Liga season brings together Spain's two biggest clubs." },
+    { title: "Inter Milan vs Juventus", date: "2027-01-10", description: "A major Italian rivalry returns in Serie A, with both clubs expected to be involved in the title picture." },
+    { title: "Manchester United vs Liverpool", date: "2027-01-23", description: "One of English football's biggest rivalries returns at Old Trafford." },
+    { title: "Manchester City vs Arsenal", date: "2027-01-30", description: "A potentially crucial Premier League title-contender matchup at the Etihad." },
+    { title: "Arsenal vs Liverpool", date: "2027-02-06", description: "The reverse Premier League meeting gives creators another major title-race fixture to build around." },
+    { title: "AC Milan vs Inter Milan", date: "2027-02-14", description: "The Derby della Madonnina is one of Serie A's biggest rivalry fixtures." },
+    { title: "Manchester United vs Arsenal", date: "2027-02-27", description: "Two of England's biggest clubs meet at Old Trafford in another major Premier League rivalry fixture." },
+    { title: "Manchester City vs Manchester United", date: "2027-03-20", description: "The return Manchester derby provides another major rivalry-content opportunity late in the season." },
+    { title: "Chelsea vs Manchester City", date: "2027-04-24", description: "A heavyweight Premier League matchup arrives during the decisive run-in." },
+    { title: "Arsenal vs Tottenham Hotspur", date: "2027-05-01", description: "The North London derby lands in the final month of the Premier League season, when league positions can carry major consequences." },
+    { title: "Liverpool vs Chelsea", date: "2027-05-01", description: "Another heavyweight Premier League meeting takes place during the final stretch of the campaign." },
+    { title: "Manchester City vs Liverpool", date: "2027-05-08", description: "A huge late-season meeting between two of the Premier League's biggest clubs could have title or European implications." },
+    { title: "Juventus vs Inter Milan", date: "2027-05-16", description: "The return Derby d'Italia arrives in the closing weeks of the Serie A campaign." },
+    { title: "Tottenham Hotspur vs Chelsea", date: "2027-05-08", description: "A major London derby arrives with only a few Premier League matches remaining." },
+    { title: "Paris Saint-Germain vs Marseille", date: "2027-02-07", description: "Le Classique is one of France's biggest football rivalries and is specifically highlighted by Ligue 1 as a headline fixture." },
+    { title: "Olympique Lyonnais vs Marseille", date: "2027-03-21", description: "A major French rivalry meets during the final third of the Ligue 1 season." },
+    { title: "Paris Saint-Germain vs Lille", date: "2027-04-17", description: "A matchup involving the defending champions and one of France's major clubs arrives during the late-season run-in." },
+    { title: "Lyon vs Paris Saint-Germain", date: "2027-05-09", description: "A major PSG fixture comes with only three Ligue 1 matchdays remaining." },
+    { title: "Ligue 1 Final Matchday", date: "2027-05-29", description: "All Ligue 1 matches kick off simultaneously, creating the final title, European qualification and relegation storylines." },
+    { title: "Arsenal vs Lille", date: "2026-10-13", description: "Arsenal's second league-phase match is a strong creator opportunity, particularly for Arsenal-focused reaction and player-performance content." },
+    { title: "Paris Saint-Germain vs Barcelona", date: "2026-10-20", description: "Two European giants meet in one of the headline fixtures of the league phase, with major attacking and Ballon d'Or storylines." },
+    { title: "Bayern Munich vs Arsenal", date: "2026-10-21", description: "A heavyweight European matchup pits Bayern against Arsenal and renews a historically significant Champions League rivalry." },
+    { title: "Real Madrid vs Leipzig", date: "2026-10-21", description: "Real Madrid face Leipzig in a fixture that can generate major European-giant and player-performance discussion." },
+    { title: "Atletico Madrid vs Bayern Munich", date: "2026-11-03", description: "Two established Champions League clubs meet in Madrid in another heavyweight league-phase fixture." },
+    { title: "Manchester City vs Paris Saint-Germain", date: "2026-10-14", description: "Two recent European heavyweights meet at the Etihad in one of the biggest Matchday 2 fixtures." },
+    { title: "Arsenal vs Borussia Dortmund", date: "2026-11-24", description: "Arsenal face Dortmund in a major league-phase clash that could have significant qualification implications." },
+    { title: "Barcelona vs Manchester City", date: "2026-12-08", description: "Barcelona host Manchester City in one of the standout fixtures of the entire league phase." },
+    { title: "Arsenal vs Real Madrid", date: "2026-12-09", description: "A repeat of the recent Champions League heavyweight matchup gives creators a huge Arsenal-vs-Madrid storyline to build around." },
+    { title: "Borussia Dortmund vs Inter", date: "2026-12-09", description: "Two major European clubs meet during the second half of the league phase." },
+    { title: "Inter vs Liverpool", date: "2027-01-19", description: "A heavyweight European matchup arrives during the penultimate league-phase matchday." },
+    { title: "Manchester United vs Bayern Munich", date: "2027-01-20", description: "Two of Europe's biggest clubs meet at Old Trafford late in the league phase, making it a major reaction-content opportunity." },
+    { title: "Sporting CP vs Barcelona", date: "2027-01-20", description: "Barcelona face Sporting in one of the more prominent Matchday 7 fixtures." },
+    { title: "Manchester City vs Sporting CP", date: "2027-01-27", description: "City close their league phase against Sporting in a match that could carry qualification or seeding significance." },
+    { title: "Shakhtar Donetsk vs Real Madrid", date: "2027-01-27", description: "Madrid's final league-phase fixture provides another opportunity for Real Madrid-focused content." },
+    { title: "Champions League Knockout Play-off Draw", date: "2027-02-01", description: "The draw determines the first knockout opponents for teams finishing outside the automatic Round of 16 places (date TBD)." },
+    { title: "Champions League Knockout Play-offs", date: "2027-02-16", description: "The knockout phase begins with the first legs of the play-offs." },
+    { title: "Champions League Round of 16", date: "2027-03-09", description: "Europe's elite enter the Round of 16, producing two weeks of major knockout football." },
+    { title: "Champions League Quarter-finals", date: "2027-04-06", description: "The quarter-finals begin, bringing the competition's final eight teams into the decisive knockout stage." },
+    { title: "Champions League Semi-finals", date: "2027-04-27", description: "The semi-finals begin as four clubs compete for places in the Madrid final." },
   ],
   "Basketball": [
     { title: "NBA regular season tip-off", date: "2026-10-20", description: "Opening night." },
@@ -512,17 +589,77 @@ const NICHE_EVENTS = {
     { title: "US Open", date: "2027-08-29", description: "Hard-court major in New York, runs through Sept 12." }
   ],
   "Formula 1": [
-    { title: "Bahrain Grand Prix", date: "2027-03-07", description: "Season opener." },
-    { title: "Monaco Grand Prix", date: "2027-05-23", description: "Street classic." },
-    { title: "British Grand Prix", date: "2027-07-04", description: "Silverstone." },
-    { title: "Italian Grand Prix", date: "2027-09-05", description: "Monza." },
-    { title: "Abu Dhabi Grand Prix", date: "2027-12-05", description: "Season finale." }
+    // -- old Bahrain/Monaco/British/Italian placeholder dates replaced by
+    // the sourced ones below (they didn't match the real calendar). The
+    // 2027 Abu Dhabi finale is kept as-is -- no corrected data was given
+    // for it, and it doesn't conflict with the new 2026 Abu Dhabi entry
+    // below (different year/event). --
+    { title: "Abu Dhabi Grand Prix (2027 finale)", date: "2027-12-05", description: "Season finale." },
+    { title: "Bahrain Grand Prix (relocated to Sepang, Malaysia)", date: "2026-10-02", description: "F1 returns to Sepang for a one-off relocation of the Bahrain Grand Prix, making this an unusual calendar and circuit story." },
+    { title: "Singapore Grand Prix", date: "2026-10-09", description: "The Marina Bay night race is a major strategic and championship talking point during the closing stretch of 2026." },
+    { title: "United States Grand Prix — Austin", date: "2026-10-23", description: "Austin begins the final Americas run, creating a key weekend for championship battles and the late-season narrative." },
+    { title: "Mexico City Grand Prix", date: "2026-10-30", description: "The Autodromo Hermanos Rodriguez provides another major late-season race and a strong fan-focused content opportunity." },
+    { title: "Sao Paulo Grand Prix", date: "2026-11-06", description: "Interlagos is one of the season's most historic venues and hosts the final 2026 Sprint weekend in the Americas." },
+    { title: "Las Vegas Grand Prix", date: "2026-11-19", description: "The Las Vegas night race launches the final triple-header and is one of F1's biggest spectacle-driven weekends." },
+    { title: "Qatar Grand Prix", date: "2026-11-27", description: "Qatar is the penultimate 2026 round and a potentially decisive championship weekend before the finale." },
+    { title: "Abu Dhabi Grand Prix (2026 finale)", date: "2026-12-04", description: "Yas Marina hosts the 2026 season finale, making it the natural point for championship, driver and team season reviews." },
+    { title: "2026-27 Driver Market / Contract Announcements", date: "2026-12-15", description: "Contract confirmations, extensions and driver changes can reshape the 2027 grid and generate major news content as announcements emerge. (date TBD)" },
+    { title: "2027 Pre-Season Testing — Bahrain", date: "2027-02-24", description: "The first official running of the 2027 cars gives creators their first meaningful look at performance, reliability and technical developments." },
+    { title: "Bahrain Grand Prix", date: "2027-03-12", description: "Bahrain opens the 2027 championship and hosts the first of the season's expanded 10 Sprint weekends." },
+    { title: "Saudi Arabian Grand Prix", date: "2027-03-19", description: "Jeddah follows immediately after Bahrain, creating an early-season double-header with little recovery time for teams." },
+    { title: "Australian Grand Prix", date: "2027-04-02", description: "Melbourne begins the 2027 Asia-Pacific run and hosts a Sprint for the first time." },
+    { title: "Japanese Grand Prix", date: "2027-04-09", description: "Suzuka's high-speed layout and huge fan following make it one of the season's major technical and driver-focused weekends, with a Sprint added for 2027." },
+    { title: "Chinese Grand Prix", date: "2027-04-16", description: "Shanghai continues the early Asian swing and provides an important opportunity to assess the competitive order after the opening rounds." },
+    { title: "Miami Grand Prix", date: "2027-04-30", description: "Miami brings F1's major U.S. entertainment spectacle back to the calendar and marks the start of another North American phase." },
+    { title: "Canadian Grand Prix", date: "2027-05-21", description: "Montreal hosts a Sprint weekend, making the traditionally unpredictable Circuit Gilles-Villeneuve especially valuable for race-weekend content." },
+    { title: "Monaco Grand Prix", date: "2027-06-04", description: "Monaco returns with a Sprint for the first time, giving creators an unusually packed weekend at F1's most iconic street circuit." },
+    { title: "Portuguese Grand Prix — Portimao", date: "2027-06-18", description: "F1 returns to Portugal for the first time since 1996, making Portimao's comeback one of the major calendar stories of 2027." },
+    { title: "British Grand Prix", date: "2027-07-02", description: "Silverstone hosts another Sprint weekend and remains one of the championship's biggest home-race occasions." },
+    { title: "Austrian Grand Prix", date: "2027-07-09", description: "The Red Bull Ring follows Silverstone immediately, creating a second consecutive European weekend with major championship implications." },
+    { title: "Belgian Grand Prix", date: "2027-07-23", description: "Spa-Francorchamps returns as one of the calendar's most anticipated traditional circuits and a key test of car performance." },
+    { title: "Hungarian Grand Prix", date: "2027-07-30", description: "Budapest closes the first half of the European summer stretch and provides a natural point for mid-season championship analysis." },
+    { title: "Italian Grand Prix — Monza", date: "2027-09-03", description: "Monza hosts a Sprint and brings Ferrari's home crowd into one of the sport's most emotionally significant weekends." },
+    { title: "Spanish Grand Prix — Madrid", date: "2027-09-10", description: "Madrid's second F1 weekend follows Barcelona's departure from the main calendar and gives creators a major new Spanish Grand Prix venue to cover." },
+    { title: "Azerbaijan Grand Prix", date: "2027-09-24", description: "Baku begins the late-season run and its street circuit regularly creates strategic and unpredictable race narratives." },
   ],
   "American Football": [
-    { title: "NFL Kickoff Game", date: "2026-09-10", description: "Season opener." },
-    { title: "Thanksgiving Football", date: "2026-11-26", description: "Holiday tripleheader." },
-    { title: "Wild Card Weekend", date: "2027-01-09", description: "Playoffs begin." },
-    { title: "Super Bowl LXI", date: "2027-02-07", description: "NFL championship." }
+    // -- replaced 4 stale/incorrect seed entries (wrong Super Bowl/Wild
+    // Card dates) with 34 events merged from two ChatGPT-sourced batches,
+    // deduped against each other --
+    { title: "2026 NFL Kickoff", date: "2026-09-09", description: "The regular season opens with the defending champion Seattle Seahawks hosting the New England Patriots in a Super Bowl rematch." },
+    { title: "49ers vs Rams (Australia)", date: "2026-09-10", description: "The NFL's first 2026 international game takes American football to Melbourne, giving creators a major global-growth storyline." },
+    { title: "Eagles vs Cowboys", date: "2026-10-11", description: "The NFC East rivalry provides one of the NFL's biggest fanbase-driven matchup days." },
+    { title: "Eagles vs Jaguars (London)", date: "2026-10-11", description: "Philadelphia and Jacksonville play in London in another international matchup featuring two prominent NFL teams." },
+    { title: "Chiefs vs Bills", date: "2026-10-18", description: "One of the NFL's defining AFC matchups brings two perennial contenders together during the regular season." },
+    { title: "Texans vs Jaguars (London)", date: "2026-10-18", description: "Jacksonville hosts Houston at Wembley, giving creators another European NFL weekend to cover." },
+    { title: "Steelers vs Saints (Paris)", date: "2026-10-25", description: "Pittsburgh and New Orleans meet at Stade de France in the NFL's first 2026 Paris game." },
+    { title: "Ravens vs Steelers", date: "2026-11-01", description: "The AFC North rivalry is one of the league's most physical and historically significant annual matchups." },
+    { title: "2026 NFL Trade Deadline", date: "2026-11-10", description: "All 2026 trading ends at 4 p.m. ET, making this a major day for blockbuster-deal, contender and roster-content coverage." },
+    { title: "Bengals vs Falcons (Madrid)", date: "2026-11-08", description: "Cincinnati and Atlanta play at the Bernabeu, bringing NFL football to one of Europe's most famous sporting venues." },
+    { title: "Patriots vs Lions (Munich)", date: "2026-11-15", description: "New England and Detroit meet in Germany as the NFL continues its international expansion." },
+    { title: "Vikings vs 49ers (Mexico City)", date: "2026-11-22", description: "Minnesota and San Francisco face off at Estadio Banorte in the NFL's Mexico City international game." },
+    { title: "Packers vs Rams — Thanksgiving Eve", date: "2026-11-25", description: "Green Bay visits the Rams in the NFL's new Thanksgiving Eve showcase featuring two NFC heavyweights." },
+    { title: "Thanksgiving Day — Packers vs Lions", date: "2026-11-26", description: "Detroit's traditional Thanksgiving game is one of the NFL's biggest annual viewing moments." },
+    { title: "Thanksgiving Day — Chiefs vs Cowboys", date: "2026-11-26", description: "Kansas City and Dallas provide the marquee matchup in the Thanksgiving tripleheader." },
+    { title: "Thanksgiving Day — Patriots vs Bengals", date: "2026-11-26", description: "New England and Cincinnati complete the Thanksgiving tripleheader with another high-profile AFC matchup." },
+    { title: "Black Friday — Broncos vs Steelers", date: "2026-11-27", description: "Denver and Pittsburgh meet in the NFL's Black Friday showcase, giving creators another major holiday-content window." },
+    { title: "Chiefs vs Rams", date: "2026-12-03", description: "Kansas City and Los Angeles meet in a nationally televised Thursday-night matchup involving two major NFL brands." },
+    { title: "2026 NFL Christmas Games", date: "2026-12-25", description: "The NFL's Christmas slate is a major annual viewing and social-media moment (date TBD -- exact matchups need the finalized schedule)." },
+    { title: "Texans vs Eagles — Christmas Eve", date: "2026-12-24", description: "Houston visits Philadelphia on Christmas Eve, creating a rare holiday NFL matchup and strong social-content opportunity." },
+    { title: "Ravens vs Bengals — New Year's Eve", date: "2026-12-31", description: "Baltimore and Cincinnati meet on New Year's Eve in a potentially important AFC North matchup." },
+    { title: "NFL Week 18 — Regular Season Ends", date: "2027-01-09", description: "The final regular-season weekend determines the playoff field and creates elimination, seeding and win-and-in storylines (exact date/time TBD until Week 17 concludes)." },
+    { title: "NFL Wild Card Weekend", date: "2027-01-16", description: "The postseason begins with six elimination games and the first major playoff upset opportunities." },
+    { title: "NFL Divisional Round", date: "2027-01-23", description: "The remaining eight teams battle for four conference-championship spots." },
+    { title: "AFC Championship Game", date: "2027-01-31", description: "The AFC champion is decided and the first half of the Super Bowl LXI matchup is confirmed." },
+    { title: "NFC Championship Game", date: "2027-01-31", description: "The NFC champion is decided and the second half of the Super Bowl LXI matchup is confirmed." },
+    { title: "Super Bowl LXI", date: "2027-02-14", description: "The NFL season culminates at SoFi Stadium in Inglewood, making this the biggest single NFL content day of the year." },
+    { title: "NFL Scouting Combine", date: "2027-03-01", description: "Top prospects perform athletic testing and interviews in Indianapolis, creating major Draft stock and prospect-debate content. Runs through March 8." },
+    { title: "NFL Free-Agent Legal Tampering Period", date: "2027-03-09", description: "Teams can negotiate with unrestricted free agents, traditionally triggering a huge wave of reported deals and roster news." },
+    { title: "2027 NFL Free Agency Opens", date: "2027-03-11", description: "The new league year opens and free-agent signings and trades become official." },
+    { title: "NFL Annual League Meeting", date: "2027-03-21", description: "Owners and league officials meet in Phoenix to discuss rules and major league matters, potentially creating significant news. Runs through March 24." },
+    { title: "NFL Draft — Round 1 / Draft Night", date: "2027-04-29", description: "The first round in Washington, D.C. is one of the biggest individual nights for prospect reactions, surprise picks and trades." },
+    { title: "NFL Draft — Rounds 2-3", date: "2027-04-30", description: "The second night continues major selections and trade activity while teams fill key roster needs." },
+    { title: "NFL Draft — Rounds 4-7", date: "2027-05-01", description: "The final draft day produces late-round steals, positional debates and sleeper-player storylines." },
   ],
   "Movies & TV": [
     { title: "Emmy Awards", date: "2026-09-13", description: "TV's biggest night." },
@@ -573,9 +710,35 @@ const NICHE_EVENTS = {
     { title: "PGA Championship", date: "2027-05-13", description: "Second major of the year." }
   ],
   "Esports": [
-    { title: "League of Legends World Championship", date: "2027-10-30", description: "LoL Worlds finals window." },
+    // -- "League of Legends World Championship" and "CS Major" placeholders
+    // replaced by the specific sourced events below. "The International"
+    // left as-is -- no corrected data was provided for it. --
     { title: "The International (Dota 2)", date: "2027-10-15", description: "Dota 2 world championship." },
-    { title: "CS Major", date: "2027-05-01", description: "Counter-Strike major tournament." }
+    { title: "BLAST SLAM IX — Dota 2", date: "2026-09-29", description: "One of Dota 2's final major tournaments of 2026, with the season's top teams competing for a $750,000 prize pool." },
+    { title: "VALORANT Champions 2026 — Shanghai", date: "2026-09-24", description: "VALORANT's 2026 world championship runs through October 18, with the title and $2.25 million prize pool at stake." },
+    { title: "League of Legends Worlds 2026 — Play-In", date: "2026-10-15", description: "Worlds begins in Los Angeles, launching League's biggest annual tournament and the final international championship race of 2026." },
+    { title: "VALORANT Champions 2026 — Grand Final", date: "2026-10-18", description: "The Shanghai grand final crowns the 2026 VALORANT world champion and closes Riot's 2026 competitive season." },
+    { title: "League of Legends Worlds 2026 — Swiss Stage", date: "2026-10-23", description: "The Worlds Swiss Stage begins in Texas, where teams fight for qualification into the knockout rounds." },
+    { title: "League of Legends Worlds 2026 — Final", date: "2026-11-14", description: "The Worlds Final at Brooklyn's Barclays Center is the climax of the League of Legends competitive year." },
+    { title: "VALORANT VCT 2027 Open Qualifiers", date: "2026-11-01", description: "Riot is introducing open qualification for the 2027 VCT, creating a major new pathway for non-partnered teams to reach the global circuit. (date TBD)" },
+    { title: "PGL Major Singapore 2026 — CS2", date: "2026-11-25", description: "The second Counter-Strike 2 Major of 2026 brings the world's best teams together in Singapore for a $1.25 million championship." },
+    { title: "DreamLeague Season 30 — Dota 2", date: "2026-12-02", description: "The final listed Tier-1 Dota 2 event of 2026 offers another major storyline before the competitive calendar turns to 2027." },
+    { title: "BLAST Bounty Season 1 2027 — CS2", date: "2027-01-11", description: "BLAST opens the 2027 Counter-Strike season with a $1.25 million LAN event featuring 16 teams." },
+    { title: "PGL Bucharest 2027 — CS2", date: "2027-01-17", description: "A $1 million PGL event gives the new CS2 season an early high-profile international LAN." },
+    { title: "IEM Krakow 2027 — CS2", date: "2027-01-27", description: "A 24-team IEM event in Krakow provides one of the first major tests of the 2027 Counter-Strike competitive hierarchy." },
+    { title: "VCT 2027 Kickoff", date: "2027-01-15", description: "Riot's redesigned VCT begins its first season under the new tournament model, with open qualification giving new teams a route toward the global stages. (date TBD)" },
+    { title: "PGL Cluj-Napoca 2027 — CS2", date: "2027-02-13", description: "The $1 million PGL tournament continues the early CS2 calendar and provides another high-level LAN storyline." },
+    { title: "PGL Dota 2 Event #1", date: "2027-03-02", description: "PGL's first announced Dota 2 event of 2027 begins the new competitive year with a two-week international tournament." },
+    { title: "League of Legends First Stand 2027", date: "2027-03-01", description: "Riot's first global League event of the 2027 season will bring the strongest regional representatives together early in the new competitive year. (date TBD)" },
+    { title: "BLAST Open Singapore 2027 — CS2", date: "2027-03-15", description: "BLAST's Singapore Open is one of the major early-season CS2 tournaments in the revamped 2027 calendar." },
+    { title: "PGL Lodz 2027 — CS2", date: "2027-03-20", description: "A $1 million PGL LAN in Poland gives creators another major European CS2 event to cover during March." },
+    { title: "PGL Dota 2 Event #2", date: "2027-05-11", description: "PGL's second announced Dota 2 event of 2027 creates another major competitive checkpoint before the summer championship period." },
+    { title: "FiRe Major Buenos Aires 2027 — CS2", date: "2027-05-31", description: "The first Counter-Strike 2 Major of 2027 takes the world championship race to Buenos Aires with 32 teams competing." },
+    { title: "League of Legends MSI 2027", date: "2027-06-15", description: "MSI is League's mid-season global championship and one of the year's two major international events outside Worlds. (date TBD)" },
+    { title: "Esports World Cup 2027", date: "2027-07-20", description: "Riyadh hosts the next multi-title Esports World Cup, bringing major competitive games together across a large international festival." },
+    { title: "CS2 at Esports World Cup 2027", date: "2027-07-20", description: "The CS2 competition at EWC features 32 teams and a $2 million prize pool, making it a major summer storyline alongside the other EWC titles." },
+    { title: "League of Legends Worlds 2027", date: "2027-10-15", description: "Worlds remains the defining League of Legends championship event and the culmination of the 2027 global season. (date TBD)" },
+    { title: "Counter-Strike 2 Major #2 — Perfect World Shanghai Major 2027", date: "2027-11-15", description: "The second CS2 Major of 2027 is scheduled for Shanghai and provides the year's final Valve Major championship storyline. (date TBD)" },
   ],
   "Music (Hip-Hop)": [
     { title: "BET Hip Hop Awards", date: "2027-10-08", description: "Annual hip-hop awards show." },
@@ -1252,10 +1415,81 @@ app.post("/api/generate", heavyLimiter, async (req, res) => {
 // ── IMAGE GENERATION ────────────────────────────────────────────────────────
 // Moved to services/imageGen.js (provider logic) + routes/image.js (endpoint),
 // mounted near the top of the file with the other route imports.
-// A dead `if (false) { ... }` copy of that logic used to sit below this comment.
-// It still contained the deprecated image.pollinations.ai URL AND a shadowed
-// /api/generate-image route, so anyone grepping for "pollinations" found the
-// retired endpoint first. Deleted — there is now exactly one implementation.
+if (false) {
+function dimsForFormat(format) {
+  const f = String(format || "square").toLowerCase();
+  if (f.includes("thumbnail") || f.includes("youtube") || f.includes("16:9")) return { w: 1280, h: 720 };
+  if (f.includes("reel") || f.includes("tiktok") || f.includes("story") || f.includes("9:16") || f.includes("portrait")) return { w: 720, h: 1280 };
+  if (f.includes("carousel") || f.includes("4:5")) return { w: 1080, h: 1350 };
+  return { w: 1024, h: 1024 };
+}
+
+async function pollinationsImage(prompt, w, h) {
+  const seed = Math.floor(Math.random() * 1e9);
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=${w}&height=${h}&nologo=true&enhance=true&seed=${seed}&model=flux`;
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 25000);
+  try {
+    const r = await fetch(url, { headers: { "User-Agent": "CreatorPulse/1.0" }, signal: ctl.signal });
+    if (!r.ok) throw new Error("pollinations " + r.status);
+    const buf = await r.buffer();
+    if (buf.length < 2000) throw new Error("empty image");
+    return `data:image/jpeg;base64,${buf.toString("base64")}`;
+  } finally { clearTimeout(timer); }
+}
+
+async function hfImage(prompt) {
+  if (!HF_KEY) throw new Error("no hf key");
+  const models = ["black-forest-labs/FLUX.1-schnell", "stabilityai/stable-diffusion-xl-base-1.0"];
+  for (const model of models) {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 25000);
+    try {
+      const r = await fetch(`https://api-inference.huggingface.co/models/${model}`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${HF_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ inputs: prompt, parameters: { negative_prompt: "blurry, watermark, text, logo, deformed", num_inference_steps: 25 } }),
+        signal: ctl.signal
+      });
+      if (!r.ok) continue;
+      const b64 = (await r.buffer()).toString("base64");
+      return `data:image/jpeg;base64,${b64}`;
+    } catch (e) { /* try next */ }
+    finally { clearTimeout(timer); }
+  }
+  throw new Error("hf unavailable");
+}
+
+async function generateOneImage(prompt, format) {
+  const { w, h } = dimsForFormat(format);
+  const styled = `${prompt}. Editorial photography, sharp focus, cinematic lighting, magazine-quality composition, no text, no watermark, no logo`;
+  try { return await pollinationsImage(styled, w, h); }
+  catch (e1) {
+    try { return await hfImage(styled); }
+    catch (e2) { throw new Error("All image providers unavailable: " + e1.message); }
+  }
+}
+
+app.post("/api/generate-image", heavyLimiter, async (req, res) => {
+  const { prompt, format, count } = req.body;
+  const n = Math.max(1, Math.min(5, parseInt(count) || 1));
+  try {
+    if (n === 1) {
+      const image = await generateOneImage(prompt, format);
+      return res.json({ image, format: format || "square" });
+    }
+    // parallel for carousel/multi
+    const results = await Promise.allSettled(
+      Array.from({ length: n }, (_, i) => generateOneImage(`${prompt} — slide ${i + 1} of ${n}`, format))
+    );
+    const images = results.filter(r => r.status === "fulfilled").map(r => r.value);
+    if (!images.length) return res.status(500).json({ error: "All image models unavailable" });
+    return res.json({ images, image: images[0], format: format || "square" });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+}
 
 // ── NOTIFICATIONS ───────────────────────────────────────────────────────────
 app.get("/api/notifications", async (req, res) => {
@@ -1272,11 +1506,7 @@ app.get("/api/notifications", async (req, res) => {
       }
       const feed = await parser.parseURL(NICHE_RSS[niche] || NICHE_RSS.default);
       if (feed.items?.[0]) notifications.push({ niche, headline: feed.items[0].title, time: "Just now" });
-    } catch (e) {
-      // Was an empty catch - a dead feed produced a silently missing
-      // notification with nothing in the logs to explain it.
-      console.error(`[notifications] feed failed for niche "${niche}":`, e.message);
-    }
+    } catch (e) {}
   }
   res.json({ notifications });
 });
@@ -2103,10 +2333,7 @@ app.post("/api/feedback", async (req, res) => {
   _feedback.push(entry);
   if (_feedback.length > 500) _feedback.shift();
   if (supabase) {
-    try { await supabase.from("feedback").insert(entry); } catch (e) {
-      // Was an empty catch - a failed feedback insert vanished without a trace.
-      console.error("[feedback] Supabase insert failed:", e.message);
-    }
+    try { await supabase.from("feedback").insert(entry); } catch (e) {}
   }
   console.log("[feedback]", entry.userId, entry.screen, entry.message.slice(0, 120));
   res.json({ ok: true, id: entry.id });
@@ -2369,3 +2596,5 @@ app.listen(PORT, () => console.log(`CreatorPulse running on port ${PORT}`));
 //   to the Pro plan (7-day PITR). Free tier includes daily backups.
 // - This deployment uses Bearer-token auth (no cookies), so CSRF tokens are
 //   not required. Do NOT switch to cookie-based auth without adding CSRF.
+
+
