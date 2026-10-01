@@ -576,11 +576,31 @@ const NICHE_EVENTS = {
     { title: "Champions League Semi-finals", date: "2027-04-27", description: "The semi-finals begin as four clubs compete for places in the Madrid final." },
   ],
   "Basketball": [
-    { title: "NBA regular season tip-off", date: "2026-10-20", description: "Opening night." },
-    { title: "NBA Christmas Day slate", date: "2026-12-25", description: "Marquee holiday games." },
-    { title: "NBA All-Star Weekend", date: "2027-02-13", description: "All-Star festivities." },
-    { title: "NBA Playoffs begin", date: "2027-04-18", description: "First round." },
-    { title: "NBA Finals tip-off", date: "2027-06-03", description: "Championship series." }
+    // -- all 5 old placeholder entries replaced/superseded by the sourced
+    // events below (same moments, correct dates and real detail) --
+    { title: "2026-27 NBA Regular Season Opening Night", date: "2026-10-20", description: "The new NBA season tips off, giving creators their first major slate of storylines, debuts and early championship narratives." },
+    { title: "NBA Cup 2026 Group Play Begins", date: "2026-10-30", description: "The Emirates NBA Cup begins its fourth edition, creating a separate in-season competition and new stakes during the regular season." },
+    { title: "NBA Cup 2026 Championship", date: "2026-12-11", description: "The NBA Cup champion is crowned at Hinkle Fieldhouse in Indianapolis, making this a major standalone trophy moment." },
+    { title: "NBA Christmas Day", date: "2026-12-25", description: "The five-game Christmas slate includes a Knicks-Spurs rematch of the 2026 NBA Finals and LeBron James' return to Los Angeles with Philadelphia." },
+    { title: "NBA Paris Game", date: "2027-01-14", description: "The Spurs and Pelicans meet in Paris, giving creators a major international NBA event during the regular season." },
+    { title: "NBA Manchester Game", date: "2027-01-17", description: "San Antonio and New Orleans meet in Manchester, extending the NBA's international schedule with a second European game days after Paris." },
+    { title: "NBA Rivals Week", date: "2027-01-26", description: "Five days of rivalry-focused NBA programming create a concentrated stretch of matchup-driven content opportunities." },
+    { title: "NBA Trade Deadline", date: "2027-02-11", description: "The deadline is one of the NBA's biggest news days as contenders and rebuilding teams make their final major roster moves." },
+    { title: "NBA All-Star 2027", date: "2027-02-19", description: "All-Star Weekend begins in Phoenix, bringing together the league's biggest stars for a major creator-friendly weekend." },
+    { title: "NBA All-Star Game 2027", date: "2027-02-21", description: "The league's premier midseason showcase culminates in the All-Star Game in Phoenix." },
+    { title: "2026-27 NBA Regular Season Finale", date: "2027-04-11", description: "All 30 teams play on the final regular-season day, with playoff seeding, Play-In positions and awards narratives reaching their deadline." },
+    { title: "NBA Play-In Tournament", date: "2027-04-13", description: "The Play-In Tournament begins, determining the final playoff berths in both conferences." },
+    { title: "NBA Playoffs Begin", date: "2027-04-18", description: "The postseason begins after the Play-In, launching the championship race and the highest-volume stretch of NBA creator content. (date TBD)" },
+    { title: "NBA Draft Lottery — New 3-2-1 System", date: "2027-05-15", description: "The first NBA Draft Lottery using the new 3-2-1 system will determine the top 16 selections under the league's revised lottery format. (date TBD)" },
+    { title: "NBA Conference Semifinals", date: "2027-05-04", description: "The second round begins, narrowing the championship field to the league's strongest remaining contenders." },
+    { title: "NBA Conference Finals", date: "2027-05-18", description: "The conference finals begin, putting the remaining teams one series away from the NBA Finals." },
+    { title: "NBA Draft", date: "2027-06-25", description: "The 2027 NBA Draft will introduce the next wave of prospects and reshape team rosters through selections and trades. (date TBD)" },
+    { title: "NBA Finals", date: "2027-06-03", description: "The NBA Finals crown the 2027 champion and provide the defining conclusion to the league's season-long storyline. (date TBD)" },
+    { title: "NBA Free Agency", date: "2027-07-01", description: "The 2027 free-agency period will open a major roster-building window, with stars and contenders potentially changing teams. (date TBD)" },
+    { title: "NBA Summer League 2027", date: "2027-07-10", description: "Summer League provides the first major look at newly drafted players and young prospects in NBA competition. (date TBD)" },
+    { title: "FIBA Basketball World Cup 2027", date: "2027-08-27", description: "The men's Basketball World Cup begins in Qatar, bringing national teams and NBA stars together for the sport's biggest international tournament." },
+    { title: "FIBA Basketball World Cup Final", date: "2027-09-12", description: "The World Cup concludes in Qatar with the global men's basketball champion being crowned." },
+    { title: "WNBA All-Star 2027", date: "2027-07-31", description: "The WNBA's premier midseason event takes place at Chase Center in the San Francisco Bay Area for the first time." },
   ],
   "Tennis": [
     { title: "Australian Open", date: "2027-01-17", description: "First Grand Slam of the year, Melbourne Park, runs through Jan 31." },
@@ -662,23 +682,73 @@ const NICHE_EVENTS = {
     { title: "NFL Draft — Rounds 4-7", date: "2027-05-01", description: "The final draft day produces late-round steals, positional debates and sleeper-player storylines." },
   ],
   "Movies & TV": [
+    // -- Oscar nominations / Academy Awards replaced by the more precise
+    // sourced versions below. Emmy Awards and Cannes kept as-is -- not
+    // addressed by the new data. --
     { title: "Emmy Awards", date: "2026-09-13", description: "TV's biggest night." },
-    { title: "Oscar nominations", date: "2027-01-22", description: "Academy Awards nods." },
-    { title: "Academy Awards", date: "2027-03-14", description: "Oscars ceremony." },
-    { title: "Cannes Film Festival", date: "2027-05-11", description: "Prestige film festival." }
+    { title: "Cannes Film Festival", date: "2027-05-11", description: "Prestige film festival." },
+    { title: "Governors Awards", date: "2026-11-15", description: "The Academy's honorary-awards ceremony kicks off the major stretch of the 2026-27 Oscars conversation." },
+    { title: "Oscars Shortlists Announcement", date: "2026-12-15", description: "The Academy reveals the shortlisted films and performances, giving creators an early awards-season talking point before nominations." },
+    { title: "Avengers: Doomsday", date: "2026-12-18", description: "Marvel's next Avengers film arrives in theaters, making it one of the year's biggest franchise releases and a major spoiler/theory/reaction opportunity." },
+    { title: "Dune: Part Three", date: "2026-12-18", description: "Denis Villeneuve's Dune saga continues with a major theatrical release arriving the same day as Avengers: Doomsday." },
+    { title: "84th Golden Globes Nominations", date: "2026-12-07", description: "The Golden Globes announce their 2027 film and television nominees, officially kicking off a major phase of awards-season content." },
+    { title: "84th Golden Globes", date: "2027-01-10", description: "The Golden Globes ceremony brings together major film and television contenders and provides an early indicator of the awards-season conversation." },
+    { title: "Oscars Nominations", date: "2027-01-21", description: "The Academy announces the 99th Oscars nominees, creating one of the biggest film-news days of the awards calendar." },
+    { title: "99th Oscars", date: "2027-03-14", description: "The Academy Awards crown the major winners of the 2026 film year, creating a huge night for reactions, analysis and viral moments." },
+    { title: "Star Wars: Starfighter", date: "2027-05-28", description: "A new Star Wars theatrical film opens, giving franchise creators a major opportunity for trailer, lore and reaction content." },
+    { title: "John Rambo", date: "2027-06-04", description: "The Rambo franchise returns with a prequel centered on the character's origins, making the long-running action series relevant again." },
+    { title: "Spider-Man: Beyond the Spider-Verse", date: "2027-06-18", description: "The third Spider-Verse film continues Miles Morales' story and represents a major franchise finale with substantial fan-theory and reaction potential." },
+    { title: "Shrek 5", date: "2027-06-30", description: "DreamWorks brings Shrek and Fiona back to theaters, creating a major nostalgia-driven franchise moment." },
+    { title: "Superman: Man of Tomorrow", date: "2027-07-09", description: "DC's next Superman film arrives in theaters, making it a major superhero-franchise release for reviews, theories and audience reactions." },
+    { title: "A Minecraft Movie Squared", date: "2027-07-23", description: "The Minecraft movie sequel returns the world's biggest game franchise to theaters and creates another major gaming-to-film crossover moment." },
+    { title: "The New Simpsons Movie", date: "2027-09-03", description: "The Simpsons returns to theaters with a new feature film, creating a major nostalgia and animation-content opportunity." },
+    { title: "The Mummy", date: "2027-10-15", description: "Universal launches another Mummy film, making the classic monster property relevant for franchise and horror-focused creators." },
+    { title: "Avengers: Secret Wars", date: "2027-12-17", description: "Marvel's Secret Wars is scheduled to conclude the Multiverse Saga and is one of the biggest theatrical franchise events currently dated within the period." },
+    { title: "Lord of the Rings: The Hunt for Gollum", date: "2027-12-17", description: "A new Middle-earth theatrical story arrives alongside Secret Wars, making the return to Tolkien's world a major fantasy-film event." },
   ],
   "Music (Afrobeats)": [
     { title: "Afro Nation Portugal", date: "2027-07-01", description: "Flagship Afrobeats festival." },
     { title: "Headies Awards", date: "2027-05-22", description: "African music awards." }
   ],
   "Crypto": [
+    // -- Bitcoin halving kept as-is: it's already more precise than the
+    // new batch's "TBD, expected 2028" version. "Consensus (Austin)"
+    // dropped -- the sourced data says Miami, not Austin; corrected
+    // version is in the list below. --
     { title: "Bitcoin halving", date: "2028-04-15", description: "Supply issuance halves." },
-    { title: "Consensus (Austin)", date: "2027-05-10", description: "Major crypto conference." }
+    { title: "Ethereum Glamsterdam — Sepolia Testnet Activation", date: "2026-10-06", description: "Ethereum's next major upgrade activates on Sepolia, giving creators an early look at the changes planned for Ethereum's next mainnet upgrade." },
+    { title: "TOKEN2049 Singapore 2026", date: "2026-10-07", description: "One of Asia's biggest crypto conferences brings exchanges, protocols, investors and policymakers together for major industry announcements and narratives." },
+    { title: "SEC Regulation Crypto Assets — Public Comment Deadline", date: "2026-10-20", description: "The SEC's proposed crypto-asset securities framework reaches its public-comment deadline, making this a significant U.S. regulatory story." },
+    { title: "Bitcoin Amsterdam 2026", date: "2026-11-05", description: "Bitcoin-focused companies, developers and investors gather in Amsterdam for a major European industry event." },
+    { title: "Digital Asset Summit London 2026", date: "2026-11-10", description: "Blockworks' institutional crypto event brings financial institutions and digital-asset companies together around adoption, infrastructure and regulation." },
+    { title: "Ethereum Glamsterdam — Mainnet Upgrade", date: "2026-11-15", description: "Ethereum's next major protocol upgrade is targeted for Q4 2026, but the mainnet activation date has not yet been confirmed. (date TBD)" },
+    { title: "Consensus Hong Kong 2027", date: "2027-02-01", description: "CoinDesk's major Asian crypto conference brings global digital-asset, finance and technology leaders together for three days of industry news." },
+    { title: "ETHDenver 2027", date: "2027-02-15", description: "ETHDenver's annual Ethereum builder gathering is a major source of protocol, DeFi, infrastructure and developer announcements, but its 2027 dates are not officially confirmed. (date TBD)" },
+    { title: "EthCC[10]", date: "2027-04-12", description: "Europe's major Ethereum conference begins in Cannes, bringing builders, investors, policymakers and protocol teams together." },
+    { title: "TOKEN2049 Dubai 2027", date: "2027-04-21", description: "TOKEN2049's Dubai edition brings thousands of crypto companies and industry decision-makers together and is a major global Web3 news window." },
+    { title: "Consensus Miami 2027", date: "2027-05-04", description: "CoinDesk's flagship North American crypto conference returns to Miami with major discussions spanning digital assets, finance, technology and policy." },
+    { title: "ETHConf 2027", date: "2027-06-14", description: "ETHGlobal's New York conference provides a major Ethereum ecosystem gathering focused on developers, projects and new products." },
+    { title: "MiCA Application Report", date: "2027-06-30", description: "The European Commission is scheduled to present a report on MiCA's application, creating a significant regulatory checkpoint for the European crypto industry." },
+    { title: "Bitcoin 2027", date: "2027-07-15", description: "Bitcoin 2027 brings the global Bitcoin ecosystem together for a major annual conference covering the network, industry and surrounding infrastructure." },
+    { title: "MiCA Transitional White-Paper Deadline", date: "2027-12-31", description: "EU trading platforms must ensure qualifying pre-existing crypto assets have the required MiCA white-paper documentation by this deadline." },
   ],
   "AI & Tech News": [
-    { title: "Apple WWDC keynote", date: "2027-06-07", description: "Apple developer conference." },
-    { title: "Google I/O", date: "2027-05-11", description: "Google's annual keynote." },
-    { title: "CES Las Vegas", date: "2027-01-05", description: "Consumer tech expo." }
+    // -- WWDC/Google I/O: new data says these 2027 dates aren't actually
+    // confirmed yet, so kept the old dates as placeholders but flagged
+    // TBD rather than presenting them as certain. CES corrected to the
+    // new, more specific confirmed date (Jan 6, not Jan 5). --
+    { title: "Apple WWDC 2027", date: "2027-06-07", description: "Apple's annual developer conference is a major expected window for new OS features, developer tools and AI-related platform updates. (date TBD)" },
+    { title: "Google I/O 2027", date: "2027-05-11", description: "Google's annual developer conference is a major expected window for Gemini, Android, Search and other AI/product announcements. (date TBD)" },
+    { title: "CES 2027", date: "2027-01-06", description: "CES brings the global consumer-tech industry together for major hardware, AI, robotics, computing and startup announcements." },
+    { title: "NVIDIA GTC Berlin 2026", date: "2026-10-20", description: "NVIDIA's Berlin conference brings major AI infrastructure, agentic AI and computing developments into focus for European tech coverage." },
+    { title: "Web Summit 2026", date: "2026-11-09", description: "Lisbon's major technology conference brings together AI companies, startups and technology leaders, creating a concentrated week of industry announcements and trends." },
+    { title: "NVIDIA GTC Washington, D.C. 2026", date: "2026-11-30", description: "NVIDIA's Washington event focuses on the intersection of AI technology, policy and government, making it relevant for AI-regulation and infrastructure coverage." },
+    { title: "AWS re:Invent 2026", date: "2026-11-30", description: "AWS's flagship cloud conference is a major launch window for new cloud, developer and AI services." },
+    { title: "NeurIPS 2026", date: "2026-12-08", description: "NeurIPS brings together leading AI and machine-learning researchers, with research announcements and technical breakthroughs worth tracking." },
+    { title: "NVIDIA GTC 2027", date: "2027-03-15", description: "NVIDIA's flagship AI conference is a major stage for announcements involving GPUs, AI infrastructure, agents and accelerated computing." },
+    { title: "ICLR 2027", date: "2027-04-26", description: "The International Conference on Learning Representations is a major machine-learning research event where influential new AI research is presented." },
+    { title: "Microsoft Build 2027", date: "2027-05-15", description: "Microsoft's developer conference is a major expected launch window for Windows, Azure, Copilot and developer-focused AI announcements, but a 2027 date has not yet been publicly confirmed. (date TBD)" },
+    { title: "OpenAI DevDay 2027", date: "2027-09-15", description: "OpenAI's developer conference is a potential major launch window for new models, APIs and developer products, but a 2027 date has not been announced. (date TBD)" },
   ],
   "Tennis": [
     { title: "Australian Open", date: "2027-01-18", description: "First Grand Slam of the year." },
@@ -696,13 +766,41 @@ const NICHE_EVENTS = {
     { title: "Ring Magazine Awards", date: "2027-01-15", description: "End-of-year boxing awards." }
   ],
   "MMA/UFC": [
+    // -- both old entries kept as-is -- the new data's specific numbered
+    // cards don't reach July 2027 or confirm/deny a Jan 16 opener, so
+    // neither is contradicted. --
     { title: "UFC 300+ (International Fight Week)", date: "2027-07-03", description: "UFC's biggest annual card." },
-    { title: "UFC Fight Night: Year Opener", date: "2027-01-16", description: "First card of the year." }
+    { title: "UFC Fight Night: Year Opener", date: "2027-01-16", description: "First card of the year." },
+    { title: "UFC 332: Silva vs. Wang", date: "2026-10-03", description: "UFC returns to Salt Lake City with Natalia Silva and Wang Cong fighting for the women's flyweight title." },
+    { title: "UFC Fight Night: Allen vs. Duncan", date: "2026-10-10", description: "Brendan Allen and Christian Leroy Duncan headline a middleweight matchup between two ranked contenders at the Meta APEX." },
+    { title: "PFL Africa: Morocco", date: "2026-10-10", description: "PFL brings its Africa league to Casablanca, making it a notable regional MMA event with growing continental significance." },
+    { title: "PFL Chicago 2", date: "2026-10-16", description: "PFL returns to Chicago for another major U.S. card during its 2026 season." },
+    { title: "UFC Fight Night: Buckley vs. Malott", date: "2026-10-17", description: "Joaquin Buckley and Canadian contender Mike Malott headline UFC's return to Edmonton in a pivotal welterweight fight." },
+    { title: "UFC Fight Night: Moicano vs. Nolan", date: "2026-10-31", description: "Renato Moicano and Tom Nolan headline a Halloween-night lightweight matchup between ranked contenders." },
+    { title: "UFC Fight Night: Bonfim vs. Brady", date: "2026-11-07", description: "Gabriel Bonfim and Sean Brady headline a ranked welterweight clash at the Meta APEX." },
+    { title: "UFC 334: Gane vs. Hokit", date: "2026-11-14", description: "Ciryl Gane defends the undisputed heavyweight title against Josh Hokit while Kayla Harrison faces Amanda Nunes in a second championship fight." },
+    { title: "PFL Dubai", date: "2026-11-14", description: "PFL stages a major international card in Dubai as its 2026 calendar enters its closing stretch." },
+    { title: "UFC Fight Night: Qatar", date: "2026-11-21", description: "UFC returns to Doha for a major Fight Night at ABHA Arena, giving creators another international fight-week story." },
+    { title: "UFC 335", date: "2026-12-12", description: "T-Mobile Arena in Las Vegas hosts the final currently announced numbered UFC event of 2026." },
+    { title: "PFL Lyon 2026", date: "2026-12-19", description: "The final PFL event under the PFL banner features Taylor Lapilus vs. Mitch McKee for the inaugural bantamweight world title before the promotion moves forward as MVP in 2027." },
+    { title: "UFC Fight Night: Sydney", date: "2027-02-07", description: "UFC returns to Sydney for the first time since 2017, creating a major Australian fight-week story at Afterpay Arena." },
+    { title: "UFC 2027 Numbered Events", date: "2027-05-01", description: "Additional 2027 numbered UFC events will be announced as the promotion finalizes its calendar, with title fights and marquee matchups becoming major content opportunities. (date TBD)" },
+    { title: "PFL/MVP 2027 Season", date: "2027-01-15", description: "PFL is set to move forward under the MVP identity in 2027, making the promotion's first post-PFL-brand season a notable organizational storyline. (date TBD)" },
   ],
   "WWE Wrestling": [
-    { title: "Royal Rumble", date: "2027-01-30", description: "Road to WrestleMania begins." },
-    { title: "WrestleMania", date: "2027-04-03", description: "WWE's flagship event." },
-    { title: "SummerSlam", date: "2027-08-07", description: "Summer's biggest party." }
+    // -- Royal Rumble/WrestleMania replaced by the more specific sourced
+    // versions below. SummerSlam kept as-is -- not addressed by the new
+    // data, so left untouched. --
+    { title: "SummerSlam", date: "2027-08-07", description: "Summer's biggest party." },
+    { title: "WWE Money in the Bank 2026", date: "2026-10-10", description: "The New Orleans PLE features the iconic ladder matches whose winners earn future championship opportunities, making it a major storyline-shaping event." },
+    { title: "WWE Main Event moves to Rumble", date: "2026-10-14", description: "WWE Main Event begins streaming on Rumble, marking a notable change in WWE's weekly content distribution." },
+    { title: "WWE Crown Jewel 2026", date: "2026-11-07", description: "Riyadh hosts WWE's annual Champion-vs-Champion spectacle, with men's and women's Crown Jewel Championships at stake." },
+    { title: "WWE Survivor Series: WarGames 2026", date: "2026-11-28", description: "Houston hosts the 40th Survivor Series, with WarGames providing the major team-based climax of the late-2026 WWE storylines." },
+    { title: "WWE Wrestlepalooza 2026", date: "2026-12-12", description: "Perth hosts Wrestlepalooza, giving WWE another major Australian event and a significant international PLE weekend." },
+    { title: "Road to Royal Rumble — European Tour", date: "2027-01-15", description: "WWE begins an eight-event European run featuring first-ever televised WWE events in several cities, building directly toward Royal Rumble." },
+    { title: "WWE Royal Rumble 2027", date: "2027-02-01", description: "The 40th Royal Rumble will take place at State Farm Stadium in Arizona, with the men's and women's winners earning WrestleMania 43 championship opportunities. (date TBD)" },
+    { title: "WrestleMania 43", date: "2027-04-03", description: "Riyadh will host WrestleMania for the first time outside North America, making it one of WWE's biggest global events of the year. (date TBD)" },
+    { title: "NXT Stand & Deliver 2027", date: "2027-04-03", description: "NXT's marquee annual event will take place during WrestleMania 43 weekend in New York, creating a major supporting event around WWE's biggest weekend. (date TBD)" },
   ],
   "Golf": [
     { title: "The Masters", date: "2027-04-08", description: "Augusta National tournament." },
@@ -754,8 +852,23 @@ const NICHE_EVENTS = {
     { title: "Golden Disc Awards", date: "2027-01-05", description: "Korean music awards." }
   ],
   "Anime": [
-    { title: "Anime Expo (Los Angeles)", date: "2027-07-02", description: "Largest anime convention in North America." },
-    { title: "Crunchyroll Anime Awards", date: "2027-03-06", description: "Global anime awards show." }
+    // -- old single Anime Expo entry replaced by the day-by-day sourced
+    // version below. Crunchyroll Awards kept as-is -- not addressed. --
+    { title: "Crunchyroll Anime Awards", date: "2027-03-06", description: "Global anime awards show." },
+    { title: "The Apothecary Diaries Season 3 Premiere", date: "2026-10-02", description: "Maomao returns for Season 3, making it one of the biggest confirmed Fall 2026 premieres for reaction, theory and episode-content creators." },
+    { title: "Black Clover Season 2 Premiere", date: "2026-10-03", description: "Black Clover returns for its second season, creating a major comeback moment for one of the most recognizable shonen franchises." },
+    { title: "ONE PIECE Elbaph Arc English Dub Premiere", date: "2026-10-20", description: "The English dub of One Piece's Elbaph Arc begins on Crunchyroll, opening another major wave of One Piece discussion for international fans." },
+    { title: "The Apothecary Diaries: The Secret Treasure of the Deceased Consort", date: "2026-12-11", description: "The Apothecary Diaries gets a theatrical movie between the two parts of Season 3, giving fans another major Maomao story to discuss." },
+    { title: "Witch on the Holy Night Anime Movie", date: "2027-01-15", description: "The highly anticipated anime adaptation of Witch on the Holy Night is scheduled for worldwide release in January 2027. (date TBD)" },
+    { title: "Doraemon: Nobita's Steam-Powered Time Machine", date: "2027-03-05", description: "A new Doraemon theatrical film arrives in Japan, providing a major annual franchise release and nostalgia-driven content opportunity." },
+    { title: "AnimeJapan 2027 — Business Day", date: "2027-03-26", description: "Industry professionals gather in Osaka ahead of the public convention, making this an important window for anime announcements and licensing news." },
+    { title: "AnimeJapan 2027", date: "2027-03-27", description: "Japan's biggest annual anime industry/fan event brings major studios, publishers and franchises together for premieres, announcements and stage events." },
+    { title: "AnimeJapan 2027 — Day 2", date: "2027-03-28", description: "The second public day continues the major franchise panels and announcements that can drive anime news and reaction content." },
+    { title: "ONE PIECE: God Valley", date: "2027-07-15", description: "A new One Piece film centered on the God Valley storyline is expected in summer 2027, making it a major franchise movie event once the exact date is confirmed. (date TBD)" },
+    { title: "Anime Expo 2027", date: "2027-07-02", description: "North America's largest anime convention returns to Los Angeles with industry panels, premieres, guests and major franchise announcements." },
+    { title: "Anime Expo 2027 — Day 2", date: "2027-07-03", description: "The second day continues the convention's major industry programming and exclusive reveals, creating another high-volume news day for creators." },
+    { title: "Anime Expo 2027 — Day 3", date: "2027-07-04", description: "Major panels, premieres and fan events continue through the holiday weekend, keeping Anime Expo among the year's biggest anime-content windows." },
+    { title: "Anime Expo 2027 — Final Day", date: "2027-07-05", description: "The final day closes one of the year's biggest anime gatherings and gives creators a chance to recap its biggest reveals and announcements." },
   ],
   "Console Gaming": [
     { title: "Summer Game Fest", date: "2027-06-05", description: "Kickoff of summer game reveals." },
@@ -767,9 +880,18 @@ const NICHE_EVENTS = {
     { title: "Steam Winter Sale", date: "2027-12-19", description: "Holiday PC gaming sale." }
   ],
   "Celebrity Gossip": [
-    { title: "Met Gala", date: "2027-05-03", description: "Fashion's biggest night." },
-    { title: "Cannes red carpet", date: "2027-05-11", description: "Peak celebrity season." },
-    { title: "Oscars red carpet", date: "2027-03-14", description: "Award season peak." }
+    // -- all 3 old entries superseded by richer sourced versions below --
+    { title: "2027 Grammy Nominations", date: "2026-11-16", description: "The Grammy nominations reveal the year's biggest music contenders and create a major celebrity reaction, fashion and social-media conversation." },
+    { title: "Governors Awards", date: "2026-11-15", description: "The Academy's Governors Awards bring a high-profile Hollywood crowd together for an early awards-season red-carpet moment." },
+    { title: "99th Oscars Nominations", date: "2027-01-21", description: "Oscar nominations create a major celebrity-news cycle around reactions, snubs, surprises and red-carpet anticipation." },
+    { title: "84th Golden Globes", date: "2027-01-10", description: "Hollywood's first major awards ceremony of 2027 creates a strong celebrity red-carpet, acceptance-speech and reaction-content opportunity." },
+    { title: "2027 Grammy Awards", date: "2027-02-07", description: "Music's biggest annual awards night brings major celebrity performances, fashion moments and viral reactions, with the ceremony moving to ABC, Disney+ and Hulu." },
+    { title: "2027 BAFTA Film Awards", date: "2027-02-21", description: "The BAFTAs bring major film stars together in London for another major awards-season red carpet and celebrity-content opportunity." },
+    { title: "99th Oscars", date: "2027-03-14", description: "Hollywood's biggest awards night creates a major celebrity cycle around arrivals, fashion, speeches, winners and viral moments." },
+    { title: "2027 BAFTA Games Awards", date: "2027-04-14", description: "The BAFTA Games ceremony brings gaming personalities and entertainment figures together for a major creator-friendly awards event in London." },
+    { title: "2027 Met Gala", date: "2027-05-03", description: "The Met Gala returns with celebrities on fashion's biggest red carpet, while the Costume Institute's 2027 exhibition focuses on John Galliano." },
+    { title: "Cannes Film Festival — 80th Edition", date: "2027-05-11", description: "Cannes brings global film stars, models and major entertainment personalities together for nearly two weeks of red carpets, premieres and celebrity coverage." },
+    { title: "2027-28 Awards Season", date: "2027-10-01", description: "Major entertainment awards organizations will begin announcing nominees and ceremony dates for the next awards cycle, creating another sustained celebrity-news window. (date TBD)" },
   ],
   "Streetwear": [
     { title: "ComplexCon", date: "2027-11-13", description: "Streetwear and culture convention." },
