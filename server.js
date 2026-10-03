@@ -757,9 +757,30 @@ const NICHE_EVENTS = {
     { title: "US Open", date: "2027-08-30", description: "Hard court Grand Slam." }
   ],
   "Cricket": [
+    // -- IPL and Champions Trophy kept as-is (unaddressed). Generic "The
+    // Ashes" entry (wrong month) replaced by the specific Test-by-Test
+    // dates below. --
     { title: "IPL Season Start", date: "2027-03-22", description: "Indian Premier League kick-off." },
     { title: "ICC Champions Trophy", date: "2027-02-19", description: "Global ODI tournament." },
-    { title: "The Ashes", date: "2027-11-21", description: "England vs Australia Test series." }
+    { title: "South Africa vs Australia — 1st Test", date: "2026-10-09", description: "The opening Test of the series brings together the reigning World Test Championship finalists and begins a major WTC storyline." },
+    { title: "WPL 2027 Player Auction", date: "2026-10-28", description: "The Women's Premier League auction is a major squad-building event with strong opportunities for player-value, team-strategy and reaction content." },
+    { title: "South Africa vs Australia — 2nd Test", date: "2026-10-18", description: "The second Test is another major WTC fixture between two elite Test nations, creating natural match-preview and reaction opportunities." },
+    { title: "India vs New Zealand — Test series begins", date: "2026-10-22", description: "India's tour of New Zealand provides a major bilateral storyline across Test, ODI and T20 cricket." },
+    { title: "South Africa vs Australia — 3rd Test", date: "2026-10-27", description: "The series finale provides a major opportunity for creators to cover the result, standout performers and wider WTC implications." },
+    { title: "Big Bash League 2026-27 begins", date: "2026-12-12", description: "The BBL season opener launches one of the world's major domestic T20 leagues and creates weeks of short-form cricket content opportunities." },
+    { title: "India vs Sri Lanka — ODI series begins", date: "2026-12-13", description: "India's home series against Sri Lanka provides high-profile international white-ball fixtures during the build-up to 2027." },
+    { title: "South Africa vs England — 1st Test", date: "2026-12-17", description: "The opening Test of England's South Africa tour is a major WTC fixture and the beginning of a high-profile multi-format series." },
+    { title: "WPL 2027 begins", date: "2027-01-14", description: "The fifth WPL season brings leading women's T20 players together and provides a concentrated period of match, player and team content." },
+    { title: "India vs Australia — 1st Test", date: "2027-01-21", description: "The first Border-Gavaskar Trophy Test begins a five-match series with major World Test Championship implications." },
+    { title: "Big Bash League 2026-27 Final", date: "2027-01-26", description: "The BBL final closes the season on Australia Day and creates a natural championship-recap and standout-player content moment." },
+    { title: "WPL 2027 Final", date: "2027-02-07", description: "The WPL championship match provides the league's biggest moment for final reactions, player performances and season retrospectives." },
+    { title: "India vs Australia — 5th Test", date: "2027-02-27", description: "The final Border-Gavaskar Trophy Test is a major series-closing moment with potential WTC consequences and extensive reaction coverage." },
+    { title: "The Ashes — 1st Test", date: "2027-06-18", description: "England and Australia begin the five-Test men's Ashes series, one of cricket's biggest recurring rivalries and a major content window." },
+    { title: "The Ashes — 5th Test", date: "2027-07-29", description: "The Oval hosts the final men's Ashes Test, creating a natural climax for series analysis, reactions and player-story content." },
+    { title: "ICC Men's Cricket World Cup 2027 begins", date: "2027-10-02", description: "The 2027 ODI World Cup begins across South Africa, Zimbabwe and Namibia, creating the year's biggest sustained cricket-content opportunity." },
+    { title: "India vs Australia — Cricket World Cup", date: "2027-10-07", description: "The defending champions Australia meet India in the opening Group A match, immediately creating a marquee World Cup storyline." },
+    { title: "India vs Pakistan — Cricket World Cup", date: "2027-10-10", description: "The World Cup group-stage clash between India and Pakistan is one of the tournament's biggest scheduled fixtures for global cricket audiences." },
+    { title: "ICC Men's Cricket World Cup 2027 Final", date: "2027-11-21", description: "The World Cup final in Johannesburg crowns the next ODI world champion and provides the year's biggest cricket recap and reaction moment." },
   ],
   "Boxing": [
     { title: "Boxing Super Bowl weekend", date: "2027-05-01", description: "Cinco de Mayo card tradition." },
@@ -843,9 +864,23 @@ const NICHE_EVENTS = {
     { title: "Grammy Awards", date: "2027-02-05", description: "Music's biggest night." }
   ],
   "Music (Pop)": [
-    { title: "Grammy Awards", date: "2027-02-05", description: "Music's biggest night." },
-    { title: "MTV VMAs", date: "2027-09-12", description: "MTV Video Music Awards." },
-    { title: "iHeartRadio Music Awards", date: "2027-04-01", description: "Fan-voted pop awards." }
+    // -- Grammy date corrected (was off by 2 days). VMAs: new data says
+    // the 2027 date isn't actually confirmed, so flagged TBD rather than
+    // presenting the old guess as certain. iHeartRadio kept as-is. --
+    { title: "MTV VMAs", date: "2027-09-12", description: "The annual VMAs remain a major pop-culture and music-performance event, but a 2027 ceremony date has not yet been officially announced. (date TBD)" },
+    { title: "iHeartRadio Music Awards", date: "2027-04-01", description: "Fan-voted pop awards." },
+    { title: "Angele — Instinct album release", date: "2026-10-16", description: "Angele's confirmed new album gives pop creators a timely opportunity for first-listen reactions, track rankings, and album-breakdown content." },
+    { title: "John Legend — Muse album release", date: "2026-10-23", description: "John Legend's confirmed album release creates an opportunity for reviews, standout-track reactions, and discussion of his latest pop/R&B era." },
+    { title: "LISA — Press Play album release", date: "2026-10-23", description: "LISA's confirmed album gives creators a major K-pop/pop crossover moment for reactions, rankings, and performance-focused content." },
+    { title: "Delta Goodrem — Pure album release", date: "2026-11-06", description: "Delta Goodrem's confirmed new album provides a notable pop release moment for reviews and track-by-track reactions." },
+    { title: "2027 Grammy nominations announced", date: "2026-11-16", description: "The Grammy nominations reveal is a major engagement moment for predictions, snubs, surprises, and nominee reactions ahead of the ceremony." },
+    { title: "2027 Grammy final voting period begins", date: "2026-12-10", description: "Grammy final voting begins, creating a timely window for creators to discuss the nominated categories and artists before the winners are revealed." },
+    { title: "2027 Grammy final voting period ends", date: "2027-01-07", description: "The end of final voting is a natural point for Grammy-focused prediction, category-analysis, and pre-show content." },
+    { title: "69th Annual Grammy Awards", date: "2027-02-07", description: "Music's biggest awards night provides a major live-content opportunity around winners, performances, fashion, surprises, and fan reactions." },
+    { title: "Carly Rae Jepsen — Day and Night Tour kickoff", date: "2027-04-15", description: "Jepsen's confirmed North American headline tour begins in Edmonton, creating opportunities for concert clips, setlist discussion, and tour coverage." },
+    { title: "Carly Rae Jepsen — Madison Square Garden show", date: "2027-05-15", description: "Jepsen's first headlining Madison Square Garden performance is a notable tour milestone with strong potential for fan and performance coverage." },
+    { title: "Carly Rae Jepsen — Day and Night Tour finale", date: "2027-05-29", description: "The final show of the 26-date North American tour creates a natural moment for tour recaps, standout performances, and fan-reaction content." },
+    { title: "American Music Awards", date: "2027-11-15", description: "The fan-voted AMAs are confirmed to return in 2027, making the eventual ceremony date a major opportunity for pop-music award and performance coverage. (date TBD)" },
   ],
   "Music (K-Pop)": [
     { title: "MAMA Awards", date: "2027-11-30", description: "Mnet Asian Music Awards." },
@@ -871,9 +906,23 @@ const NICHE_EVENTS = {
     { title: "Anime Expo 2027 — Final Day", date: "2027-07-05", description: "The final day closes one of the year's biggest anime gatherings and gives creators a chance to recap its biggest reveals and announcements." },
   ],
   "Console Gaming": [
-    { title: "Summer Game Fest", date: "2027-06-05", description: "Kickoff of summer game reveals." },
-    { title: "The Game Awards", date: "2027-12-10", description: "Industry's biggest awards night." },
-    { title: "gamescom (Cologne)", date: "2027-08-20", description: "Europe's biggest gaming trade fair." }
+    // -- Renamed "The Game Awards" to specify 2027 so it doesn't read as
+    // a duplicate of the sourced "The Game Awards 2026" entry below --
+    // they're different years, both real. Summer Game Fest flagged TBD
+    // per the new data. gamescom kept as-is. --
+    { title: "The Game Awards 2027", date: "2027-12-10", description: "Industry's biggest awards night." },
+    { title: "gamescom (Cologne)", date: "2027-08-20", description: "Europe's biggest gaming trade fair." },
+    { title: "Call of Duty: Modern Warfare 4 Release", date: "2026-10-23", description: "The next major Call of Duty launch creates a huge opportunity for launch-day gameplay, reviews, multiplayer reactions, and comparison content." },
+    { title: "The Legend of Zelda: Ocarina of Time Release", date: "2026-11-05", description: "Nintendo's rebuilt Switch 2 version of the classic Zelda is a major nostalgia-driven release with strong potential for gameplay, comparison, and reaction content." },
+    { title: "Grand Theft Auto VI Release", date: "2026-11-19", description: "GTA VI is one of the biggest releases in the entire calendar, creating a major window for launch coverage, gameplay, easter eggs, comparisons, and viral reactions." },
+    { title: "The Game Awards 2026", date: "2026-12-10", description: "The year's biggest gaming awards and announcement show provides content opportunities around awards, trailers, reveals, reactions, and Game of the Year discussion." },
+    { title: "Stranger Than Heaven Release", date: "2027-01-15", description: "Ryu Ga Gotoku Studio's new action-adventure title gives creators a notable January launch to cover with gameplay and first-impression content." },
+    { title: "Until Dawn 2 Release", date: "2027-01-28", description: "The PS5 horror sequel offers a strong opportunity for reaction, choice-based gameplay, endings, and horror-focused creator content." },
+    { title: "Fate/Extra Record Release", date: "2027-01-28", description: "The worldwide PS4 and PS5 launch gives anime and JRPG-focused gaming creators a notable crossover moment to cover." },
+    { title: "Fable Release", date: "2027-02-23", description: "The long-awaited Fable reboot arrives on Xbox Series X." },
+    { title: "Final Fantasy VII Revelation Release", date: "2027-04-08", description: "The finale of the Final Fantasy VII Remake series is a major PS5 release with substantial potential for story, gameplay, lore, and reaction coverage." },
+    { title: "Summer Game Fest 2027", date: "2027-06-05", description: "The annual summer showcase is a major trailer and announcement window, but the 2027 date has not yet been officially announced. (date TBD)" },
+    { title: "Pokemon Winds & Pokemon Waves Release", date: "2027-09-01", description: "Nintendo has confirmed the new Pokemon games for a simultaneous worldwide Switch 2 release in 2027, making the eventual date a major Nintendo-content moment. (date TBD)" },
   ],
   "PC Gaming": [
     { title: "Steam Summer Sale", date: "2027-06-24", description: "Steam's biggest sale of the year." },
@@ -907,9 +956,27 @@ const NICHE_EVENTS = {
     { title: "Winter skincare shift", date: "2026-11-01", description: "Barrier repair content spikes." }
   ],
   "Personal Finance": [
+    // -- "Tax season begins" and "New Year budget reset" kept as-is.
+    // "Tax Day" superseded by the richer sourced version in the list
+    // below (same date, same event). --
     { title: "Tax season begins (US)", date: "2027-01-27", description: "Tax filing content peaks." },
-    { title: "Tax Day (US)", date: "2027-04-15", description: "Final filing deadline." },
-    { title: "New Year budget reset", date: "2027-01-01", description: "Financial goals content." }
+    { title: "New Year budget reset", date: "2027-01-01", description: "Financial goals content." },
+    { title: "Federal tax filing deadline", date: "2027-04-15", description: "The U.S. federal individual tax deadline is the year's biggest tax-content moment for filing, deductions, refunds, and last-minute tax planning." },
+    { title: "Social Security 2027 COLA announcement", date: "2026-10-15", description: "The 2027 cost-of-living adjustment will be announced in October and can drive content on benefit changes, retirement income, and household budgets. (date TBD)" },
+    { title: "U.S. Medicare Open Enrollment begins", date: "2026-10-15", description: "Medicare's annual enrollment window begins, creating a major opportunity for content about plan choices, premiums, and healthcare costs." },
+    { title: "Federal Reserve FOMC meeting (Oct 2026)", date: "2026-10-27", description: "The Fed's scheduled policy meeting is a major personal-finance moment because its rate decision can affect borrowing and saving costs." },
+    { title: "2027 federal tax brackets and inflation adjustments", date: "2026-11-01", description: "The IRS's annual inflation adjustments provide material for creators explaining how tax brackets, deductions, and other thresholds will change for 2027. (date TBD)" },
+    { title: "2027 retirement contribution limits", date: "2026-11-01", description: "The IRS's annual retirement-limit announcement determines how much people can put into 401(k)s, IRAs, and related accounts for 2027. (date TBD)" },
+    { title: "U.S. Medicare Open Enrollment ends", date: "2026-12-07", description: "The enrollment deadline is a key consumer-finance moment because eligible beneficiaries must make changes by this date for the next coverage year." },
+    { title: "Federal Reserve FOMC meeting (Dec 2026)", date: "2026-12-08", description: "The final scheduled Fed meeting of 2026 is a major opportunity to explain the year's final monetary-policy decision and its household-finance implications." },
+    { title: "Federal Reserve FOMC meeting (Jan 2027)", date: "2027-01-26", description: "The first scheduled Fed meeting of 2027 gives creators an early-year opportunity to cover the new interest-rate environment and its effect on consumers." },
+    { title: "Federal Reserve FOMC meeting (Mar 2027)", date: "2027-03-16", description: "A scheduled Fed policy meeting creates a timely opportunity to explain the latest rate decision and what it means for borrowers and savers." },
+    { title: "Federal Reserve FOMC meeting (Apr 2027)", date: "2027-04-27", description: "The April Fed meeting is a natural checkpoint for personal-finance content about borrowing costs, savings yields, and the broader interest-rate environment." },
+    { title: "2027 HSA contribution limits", date: "2027-05-01", description: "The annual HSA limit announcement matters to people planning tax-advantaged healthcare savings and can support contribution-strategy content. (date TBD)" },
+    { title: "Federal Reserve FOMC meeting (Jun 2027)", date: "2027-06-08", description: "The June meeting includes updated economic projections, making it a particularly useful scheduled moment for explaining the Fed's outlook and household-finance implications." },
+    { title: "Federal Reserve FOMC meeting (Jul 2027)", date: "2027-07-27", description: "The July policy meeting provides another scheduled opportunity to cover changes in borrowing and savings conditions." },
+    { title: "Federal Reserve FOMC meeting (Sep 2027)", date: "2027-09-14", description: "The September meeting includes updated economic projections and is a major scheduled checkpoint for personal-finance coverage heading into the final quarter." },
+    { title: "U.S. tax-filing extension deadline", date: "2027-10-15", description: "Taxpayers who obtained the standard six-month extension generally face this deadline, making it another important tax-content opportunity." },
   ],
   "Stock Market": [
     { title: "Q4 earnings season", date: "2027-01-25", description: "Big tech earnings drop." },
