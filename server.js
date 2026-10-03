@@ -173,6 +173,9 @@ app.use(express.static(PUBLIC_DIR, { maxAge: "5m", etag: true, index: false }));
 app.get("/", (_req, res) => res.sendFile(path.join(PUBLIC_DIR, "index.html"), { headers: { "Cache-Control": "no-cache" } }));
 
 // Health check for Render / UptimeRobot
+// `integrations` reports ONLY whether each provider is configured (booleans),
+// never the values. Without this a deploy could answer 200 "healthy" while
+// silently 503-ing every feature that needs a missing key.
 app.get("/api/health", (_req, res) => {
   const mem = process.memoryUsage();
   res.json({
@@ -180,6 +183,26 @@ app.get("/api/health", (_req, res) => {
     uptime: Math.round(process.uptime()),
     memoryMB: Math.round(mem.heapUsed / 1024 / 1024),
     node: process.version,
+    integrations: {
+      supabase: !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY),
+      groq: !!process.env.GROQ_API_KEY,
+      huggingface: !!process.env.HF_API_KEY,
+      newsapi: !!process.env.NEWS_API_KEY,
+      newsdata: !!process.env.NEWSDATA_API_KEY,
+      currents: !!process.env.CURRENTS_API_KEY,
+      googleOauth: !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.GOOGLE_REDIRECT_URI),
+      webPush: !!(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY),
+      pollinations: !!process.env.POLLINATIONS_KEY,
+      unsplash: !!process.env.UNSPLASH_ACCESS_KEY,
+      pexels: !!process.env.PEXELS_API_KEY,
+      adminKey: !!process.env.ADMIN_KEY,
+      // Public anon key. Without it /api/auth/reset-password answers 503, so
+      // the password-reset flow silently cannot complete -- worth surfacing.
+      supabaseAnon: !!process.env.SUPABASE_ANON_KEY,
+      // Whether a reset email has anywhere to send the user back to. The
+      // server falls back to FRONTEND_URL, so either one being set counts.
+      passwordReset: !!(process.env.PASSWORD_RESET_REDIRECT || process.env.FRONTEND_URL),
+    },
   });
 });
 
