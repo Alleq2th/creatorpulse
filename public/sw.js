@@ -8,7 +8,7 @@
 //   - Offline: the app still opens instead of showing a browser error.
 // API calls and anything cross-origin are never touched by this worker.
 
-const CACHE_NAME = "creatorpulse-v1";
+const CACHE_NAME = "creatorpulse-v2";
 const PRECACHE_URLS = ["/", "/manifest.json", "/icon-192.png", "/icon-512.png"];
 
 self.addEventListener("install", (event) => {
