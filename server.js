@@ -73,8 +73,14 @@ if (helmet) {
       useDefaults: true,
       directives: {
         "default-src": ["'self'"],
-        "script-src": ["'self'", "'unsafe-inline'", "https://apis.google.com"],
+        // 'wasm-unsafe-eval' is required for the in-browser export engine
+        // (ffmpeg.wasm). Without it Chrome aborts with a CompileError and
+        // export can never work in production. It grants wasm compilation
+        // ONLY -- it does not open up eval().
+        "script-src": ["'self'", "'unsafe-inline'", "'wasm-unsafe-eval'", "https://apis.google.com"],
         "script-src-attr": ["'unsafe-inline'"],
+        // The encoder runs inside a Worker built from a blob URL.
+        "worker-src": ["'self'", "blob:"],
         "style-src": ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
         "font-src": ["'self'", "https://fonts.gstatic.com", "data:"],
         "img-src": ["'self'", "data:", "blob:", "https:"],

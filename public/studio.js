@@ -349,7 +349,7 @@ function svCameraView(st){
         <button class="sv-rail-btn ${st.countdown ? 'on' : ''}" data-act="cycleCountdown">${svIcon('timer')}<span>${st.countdown ? st.countdown + 's' : 'Timer'}</span></button>
         <button class="sv-rail-btn ${st.micOn ? '' : 'warn'}" data-act="mic">${svIcon('voice')}<span>${st.micOn ? 'Mic' : 'Muted'}</span></button>
         <button class="sv-rail-btn ${st.camFilter !== 'none' ? 'on' : ''}" data-act="camFilters">${svIcon('fx')}<span>${st.camFilter === 'none' ? 'Look' : (SP_RECORD_FILTERS[st.camFilter] ? SP_RECORD_FILTERS[st.camFilter].label : 'Look')}</span></button>
-        <button class="sv-rail-btn ${st.fpsWanted ? 'on' : ''}" data-act="fps" aria-label="Frame rate"><span>${svFpsLabel()}</span></button>
+        <button class="sv-rail-btn ${st.fpsWanted ? 'on' : ''}" data-act="fps" aria-label="Frame rate">${svIcon('speed')}<span>${svFpsLabel()}</span></button>
       </div>
 
       ${svCamFilterStrip(st)}
