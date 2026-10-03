@@ -438,12 +438,16 @@
   flex: 0 0 auto; display: grid; place-items: center; padding: 10px 16px 4px;
 }
 .sv-review-stage video{
-  width: auto; height: auto; max-height: 46vh; max-width: 100%;
+  /* Deliberately compact. At 46vh this filled most of the page with black
+     letterbox, so the creator could barely see their own take. Sized to the
+     clip and capped, with the empty gap collapsing around it. */
+  width: auto; height: auto; max-height: 34vh; max-width: 100%;
   border-radius: var(--sv-r); background: #000;
 }
-/* The stage is sized to the clip instead of being stretched over the whole
-   screen, so the black space that used to fill the page collapses. */
-.sv-review-gap{ flex: 1 1 auto; min-height: 0; }
+.sv-media video{
+  /* Capped against the stage rather than allowed to stretch it. */
+  max-width: 100%; max-height: 100%; background: #000;
+}
 .sv-review-note{
   flex: 0 0 auto; text-align: center; padding: 0 24px 10px;
   font-size: 12.5px; color: rgba(255,255,255,.55);
