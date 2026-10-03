@@ -1250,6 +1250,12 @@ function csAfterRender(){
       }
     }
     if(S.studio.mode === 'editor') csApplyPreview();
+    // The Studio (studio.js) owns its own post-render hook. renderApp() rebuilds
+    // the whole page with innerHTML, which DESTROYS the camera <video> element
+    // and drops its srcObject. Nothing re-attached the stream, so the preview
+    // went black the instant recording started (the timer re-renders every
+    // 200ms). This call is the black-screen fix.
+    if (typeof window.svAfterRender === 'function') window.svAfterRender();
   } catch(err){ console.warn('csAfterRender', err); }
 }
 
