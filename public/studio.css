@@ -476,8 +476,11 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    EDITOR
    ═══════════════════════════════════════════════════════════════════════════ */
-.sv-ed{ display: flex; flex-direction: column; height: 100%; background: var(--bg); }
-.sv-ed .sv-bar{ border-bottom: 1px solid var(--sv-line); background: var(--bg); }
+/* Edits-style dark chrome. The reference editor is near-black throughout, not
+   the app's light surface, so the whole editor column is pinned to one dark
+   value and every band inherits it. */
+.sv-ed{ display: flex; flex-direction: column; height: 100%; background: #0B0E11; }
+.sv-ed .sv-bar{ border-bottom: 1px solid rgba(255,255,255,.08); background: #0B0E11; }
 
 .sv-ed-stage{
   position: relative; flex: 1 1 auto; min-height: 0;
@@ -511,7 +514,8 @@
   border: 1.5px dashed transparent; border-radius: 8px;
   padding: 2px 4px; white-space: pre-wrap;
 }
-.sv-overlay.sel{ border-color: var(--sv-accent); background: rgba(124,58,237,.14); }
+.sv-overlay.sel{ border-color: var(--sv-accent); background: rgba(124,58,237,.14);
+  box-shadow: 0 0 0 1px rgba(255,255,255,.35); }
 .sv-overlay .sv-ov-inner{ display: block; }
 /* Real, wired resize handles. The old "handle" was a CSS ::after decal wired to
    nothing, which is why resizing appeared to do nothing at all. */
@@ -547,7 +551,8 @@
   line-height: 1.34; text-wrap: balance;
   touch-action: none;
 }
-.sv-cap.sel{ border-color: var(--sv-accent); background: rgba(124,58,237,.14); }
+.sv-cap.sel{ border-color: var(--sv-accent); background: rgba(124,58,237,.14);
+  box-shadow: 0 0 0 1px rgba(255,255,255,.35); }
 .sv-cap.sel::before{
   content: "\2261"; position: absolute; right: 4px; top: -26px;
   width: 24px; height: 20px; border-radius: 6px;
@@ -588,7 +593,7 @@
    build, whose Trim button opened a sheet of sliders that changed nothing. */
 .sv-timeline{
   flex: 0 0 auto; position: relative;
-  border-top: 1px solid var(--sv-line); background: var(--sv-sf);
+  border-top: 1px solid rgba(255,255,255,.08); background: #0B0E11;
   padding: 8px 0 6px;
 }
 .sv-tl-scroll{
@@ -628,7 +633,7 @@
 /* Tracks */
 .sv-track{
   position: relative; height: var(--sv-track-h); margin-bottom: 6px;
-  border-radius: 10px; background: rgba(255,255,255,.035);
+  border-radius: 10px; background: rgba(255,255,255,.06);
 }
 .sv-track.sv-track-ov{ height: 30px; }
 .sv-track.sv-track-cap{ height: 30px; }
@@ -703,7 +708,7 @@
    Context tools appear only when something is selected, and they push the main
    row down rather than overlaying the timeline. */
 .sv-toolbar{
-  flex: 0 0 auto; border-top: 1px solid var(--sv-line); background: var(--sv-sf);
+  flex: 0 0 auto; border-top: 1px solid rgba(255,255,255,.08); background: #0B0E11;
   padding: 8px var(--sv-pad) calc(8px + var(--sv-safe-b));
 }
 .sv-tb-row{
@@ -718,14 +723,14 @@
   flex: 1 0 62px; min-width: 62px;
   display: flex; flex-direction: column; align-items: center; gap: 5px;
   padding: 8px 4px; border-radius: 11px;
-  font-size: 10px; font-weight: 600; color: var(--sv-mu);
+  font-size: 10px; font-weight: 600; color: rgba(255,255,255,.62);
   /* Labels must never collide. "Duplicate" is the longest and used to run
      straight into "Replace" on a narrow phone. */
   white-space: nowrap; letter-spacing: -.01em;
   transition: background .14s var(--sv-ease), color .14s var(--sv-ease), transform .12s var(--sv-ease);
 }
 .sv-tb:active{ transform: scale(.94); background: rgba(255,255,255,.06); }
-.sv-tb.on{ color: var(--sv-accent-lit); background: rgba(124,58,237,.14); }
+.sv-tb.on{ color: #fff; background: rgba(255,255,255,.14); }
 .sv-tb.danger{ color: #F87171; }
 .sv-tb[disabled]{ opacity: .32; }
 .sv-tb .sv-ico{ width: 20px; height: 20px; }
