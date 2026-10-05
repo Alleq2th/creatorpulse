@@ -109,7 +109,16 @@ function clearSession(){ localStorage.removeItem("cp_v2"); S.token=null; S.refre
 
 // ─── PERSISTENT CACHE (additive, survives reload) ──────────────────────────
 const CACHE_KEY = "cp_cache_v1";
+// Bump when the SHAPE of cached data changes (a new field the UI depends on).
+// Without this, a browser holding an older cache keeps rendering the old data
+// forever: loadCalendarEvents only refetched when a niche's cache was EMPTY,
+// so a user could sit on last season's event list - with no `importance`
+// field, hence no photos - while the server was returning fresh events.
+const CACHE_VERSION = 2;
 const CACHE_FIELDS = ["hooksCache","remixCache","titleCache","eventsCache"];
+// Event lists are refetched after this long even when a cache exists, so a
+// long-lived tab cannot drift permanently away from the server's data.
+const EVENTS_TTL_MS = 12 * 60 * 60 * 1000; // 12 hours
 const CACHE_MAX = 20;
 function capCache(obj){
   if(!obj || typeof obj !== "object") return {};
@@ -121,7 +130,7 @@ function capCache(obj){
 }
 function saveCaches(){
   try {
-    const payload = {};
+    const payload = { _v: CACHE_VERSION };
     CACHE_FIELDS.forEach(f => { payload[f] = capCache(S[f] || {}); });
     localStorage.setItem(CACHE_KEY, JSON.stringify(payload));
   } catch(e){ /* quota or private mode — cache is best-effort */ }
@@ -131,10 +140,22 @@ function restoreCaches(){
     const j = localStorage.getItem(CACHE_KEY);
     if(!j) return false;
     const data = JSON.parse(j) || {};
-    CACHE_FIELDS.forEach(f => { if(data[f] && typeof data[f] === "object") S[f] = capCache(data[f]); });
+    // A cache written by an older version may be missing fields the current
+    // UI needs - the events cache predating `importance` is the real case
+    // that produced blank calendar photos. Drop it and let the app refetch.
+    const stale = data._v !== CACHE_VERSION;
+    CACHE_FIELDS.forEach(f => {
+      if(stale && f === "eventsCache") return;
+      if(data[f] && typeof data[f] === "object") S[f] = capCache(data[f]);
+    });
     return true;
   } catch(e){ return false; }
 }
+// When each niche's event list was last fetched, so a stale-but-present cache
+// is refreshed instead of being trusted forever.
+const EVENTS_AT_KEY = "cp_events_at_v1";
+function eventsAt(){ try { return JSON.parse(localStorage.getItem(EVENTS_AT_KEY) || "{}") || {}; } catch(e){ return {}; } }
+function markEventsAt(niche){ try { const m = eventsAt(); m[niche] = Date.now(); localStorage.setItem(EVENTS_AT_KEY, JSON.stringify(m)); } catch(e){} }
 // Write-through helper: cacheSet("hooksCache", niche, value)
 function cacheSet(field, key, value){
   if(!S[field]) S[field] = {};
@@ -1710,7 +1731,10 @@ function renderAgendaItem(it){
   // seasonal filler item, and not user posts) so this stays cheap even
   // once the dataset grows to ~100 events/niche. Falls back to the icon
   // tile if the fetch fails or an event just isn't worth the API call.
-  const wantsPhoto = !isPost && (isMajor || it.importance === "relevant");
+  // Every niche event gets a real photo, not only the "major"/"relevant" ones.
+  // The old filter left most rows as plain icon tiles - in several niches ALL
+  // events are "seasonal" - which read as "the photos are broken".
+  const wantsPhoto = !isPost;
   const evKey = wantsPhoto ? `${it.niche||""}|${it.title}` : null;
   const evQuery = wantsPhoto ? `${it.niche||""} ${it.title}`.trim() : null;
   const cachedUrl = evKey ? (S.eventPhoto||{})[evKey] : null;
@@ -1907,10 +1931,16 @@ async function loadCalendarEvents(){
   // unpredictable succession. One render, after everything has actually
   // settled, is both correct and far cheaper.
   const niches = S.user?.niches || [];
+  const at = eventsAt();
   await Promise.all(niches.map(async n => {
-    if(!S.eventsCache[n]){
-      try { cacheSet("eventsCache", n, await fetchEvents(n)); } catch(e){}
-    }
+    const cached = S.eventsCache[n];
+    const fresh = cached && (Date.now() - (at[n] || 0) < EVENTS_TTL_MS);
+    if(fresh) return;
+    try {
+      const evs = await fetchEvents(n);
+      // Never let a transient empty/error response wipe a good cache.
+      if(Array.isArray(evs) && (evs.length || !cached)){ cacheSet("eventsCache", n, evs); markEventsAt(n); }
+    } catch(e){ /* keep whatever we already had */ }
   }));
   render();
 }
