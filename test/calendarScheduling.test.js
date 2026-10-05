@@ -205,6 +205,40 @@ test("the asset version and service worker cache were bumped", () => {
   const m = /core\.js\?v=(\d+)/.exec(INDEX);
   assert.ok(m, "index.html must load core.js with a ?v= cache-bust");
   assert.ok(Number(m[1]) >= 23, `core.js cache-bust must be >= 23, got ${m[1]}`);
-  assert.match(SW, /const CACHE_NAME = "creatorpulse-v5"/,
-    "the service worker cache name must be bumped so old HTML is dropped");
+  // Version-agnostic: the cache name must be at least v5 (the bump that
+  // dropped the pre-PR#17 HTML). Asserting an exact string made every later
+  // legitimate bump fail the suite, which is the opposite of the intent.
+  const c = /const CACHE_NAME = "creatorpulse-v(\d+)"/.exec(SW);
+  assert.ok(c, "the service worker must declare a versioned CACHE_NAME");
+  assert.ok(Number(c[1]) >= 5,
+    `the service worker cache name must be bumped so old HTML is dropped, got v${c[1]}`);
+});
+
+// ── 4. floating buttons can never cover an open sheet ───────────────────────
+// The feedback button and the cookie banner were pinned at z-index 9998/9999,
+// far above the sheet overlay's 200. They floated on top of every open sheet -
+// including "Schedule a post" - covering its submit button. Both must now sit
+// BELOW the overlay.
+
+test("floating buttons sit below the sheet overlay, never above it", () => {
+  const overlay = /\.sheet-overlay\{[^}]*z-index:(\d+)/.exec(INDEX);
+  assert.ok(overlay, "the sheet overlay must declare a z-index");
+  const overlayZ = Number(overlay[1]);
+
+  // The PERSISTENT floating elements - the feedback button and the cookie
+  // banner - must sit below the overlay, or they cover an open sheet.
+  // (The feedback MODAL is deliberately excluded: it is a real dialog that
+  // only appears when opened, so it is meant to be above everything.)
+  const persistent = [
+    /fbBtn\.style\.cssText = "[^"]*z-index:(\d+)/.exec(APP),
+    /b\.style\.cssText = "[^"]*z-index:(\d+)/.exec(APP),
+  ];
+  for (const m of persistent) {
+    assert.ok(m, "a persistent floating element must declare a z-index");
+    assert.ok(Number(m[1]) < overlayZ,
+      `a persistent floating element at z-index ${m[1]} would cover the sheet overlay (z-index ${overlayZ})`);
+  }
+  // And the specific regression: the feedback button must not be at 9998.
+  assert.doesNotMatch(APP, /fbBtn\.style\.cssText = "[^"]*z-index:9998/,
+    "the feedback button must not sit above the sheet overlay");
 });
