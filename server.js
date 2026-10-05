@@ -105,16 +105,31 @@ if (helmet) {
 if (compression) app.use(compression());
 
 // CORS — allowlist FRONTEND_URL + localhost dev origins
+//
+// The frontend and backend are two DIFFERENT addresses whenever the app is
+// opened on a static host (GitHub Pages) and the server runs on Render. That is
+// a cross-origin request, so the browser requires the server to opt in. Two
+// things are added to the allowlist here, both of them ours:
+//   - RENDER_EXTERNAL_URL: the public address Render gives this very service.
+//     Without it, a service rename silently drops the app out of the allowlist
+//     and every request from the frontend fails as "could not connect to the
+//     server" even though the server is up.
+//   - any *.github.io and *.onrender.com origin: the two hosts this project is
+//     actually published on. Both are public, read-only static/pass-through
+//     origins - there is no cookie or private data behind this app's CORS.
 const CORS_ALLOWLIST = [
   process.env.FRONTEND_URL,
+  process.env.RENDER_EXTERNAL_URL,
   "http://localhost:3000",
   "http://localhost:5173",
   "http://127.0.0.1:3000",
 ].filter(Boolean);
+const CORS_ORIGIN_RE = /^https?:\/\/([a-z0-9-]+\.)*(github\.io|onrender\.com)$/i;
 app.use(cors({
   origin: (origin, cb) => {
     // same-origin requests have no Origin header — allow
     if (!origin) return cb(null, true);
+    if (CORS_ORIGIN_RE.test(origin)) return cb(null, true);
     if (CORS_ALLOWLIST.length === 0) return cb(null, true); // no allowlist configured → permissive
     if (CORS_ALLOWLIST.some(a => origin === a || origin.startsWith(a))) return cb(null, true);
     return cb(null, false);
@@ -188,7 +203,55 @@ async function tfetch(url, opts = {}, ms = 10000) {
 // ── Static assets with cache headers ─────────────────────────────────────────
 const PUBLIC_DIR = path.join(__dirname, "public");
 app.use(express.static(PUBLIC_DIR, { maxAge: "5m", etag: true, index: false }));
-app.get("/", (_req, res) => res.sendFile(path.join(PUBLIC_DIR, "index.html"), { headers: { "Cache-Control": "no-cache" } }));
+
+// ── WHERE AM I? STAMPED INTO THE PAGE AT BOOT ─────────────────────────────
+// The frontend needs to know the backend's address. It used to hold one
+// hardcoded string, which went stale the moment the Render service was renamed:
+// every visitor on the GitHub Pages address was then sent to a retired host that
+// answered 503, so photos, captions and notifications all failed while the real
+// server was perfectly healthy elsewhere.
+//
+// Render tells each service its own public address in RENDER_EXTERNAL_URL, so we
+// can seed the page with the truth at boot. The frontend prefers the origin of
+// the page it is actually on (exact, no configuration) and falls back to this
+// stamp, which removes the hardcoded value from the critical path entirely.
+let INDEX_HTML = null;
+let INDEX_HTML_SEEDED = null;
+function backendSeed() {
+  const raw = process.env.RENDER_EXTERNAL_URL || process.env.API_BASE_URL || "";
+  // Only an absolute https URL is usable as a cross-origin API base; anything
+  // else (unset, a bare host, a local http:// dev address) is ignored so the
+  // page keeps whatever seed it already had rather than gaining a broken one.
+  if (!/^https:\/\/[^\s"'<>]+$/i.test(raw.trim())) return "";
+  return raw.trim().replace(/\/+$/, "");
+}
+function loadIndexHtml() {
+  const p = path.join(PUBLIC_DIR, "index.html");
+  if (INDEX_HTML === null) INDEX_HTML = require("fs").readFileSync(p, "utf8");
+  if (INDEX_HTML_SEEDED !== null) return INDEX_HTML_SEEDED;
+  const seed = backendSeed();
+  if (!seed) { INDEX_HTML_SEEDED = INDEX_HTML; return INDEX_HTML_SEEDED; }
+  // Written as the FIRST thing inside <head> so it exists before any script
+  // reads it. index.html ships no such tag, so this can never double-insert.
+  const tag = `<meta name="aria-api-base-seed" content="${seed.replace(/"/g, "&quot;")}">`;
+  INDEX_HTML_SEEDED = INDEX_HTML.replace(/<head([^>]*)>/i, (m, attrs) => `<head${attrs}>${tag}`);
+  if (INDEX_HTML_SEEDED === INDEX_HTML) {
+    // No <head> to stamp into - not fatal, the frontend still resolves the
+    // page's own origin, which is correct for this deployment anyway.
+    console.warn("[boot] index.html has no <head> - api base seed not injected");
+    INDEX_HTML_SEEDED = INDEX_HTML;
+  }
+  return INDEX_HTML_SEEDED;
+}
+
+app.get("/", (_req, res) => {
+  try {
+    res.type("html").set("Cache-Control", "no-cache").send(loadIndexHtml());
+  } catch (e) {
+    // Never let the stamp take the app down: fall back to the file on disk.
+    res.sendFile(path.join(PUBLIC_DIR, "index.html"), { headers: { "Cache-Control": "no-cache" } });
+  }
+});
 
 // Health check for Render / UptimeRobot
 // `integrations` reports ONLY whether each provider is configured (booleans),

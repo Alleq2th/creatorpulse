@@ -36,13 +36,44 @@
 (function () {
   "use strict";
 
-  // The deployed backend. Change this ONE line if the Render service is ever
-  // renamed, or set API_BASE_URL on Render / window.ARIA_API_BASE_URL instead.
-  var DEFAULT_BACKEND = "https://creatorpulse.onrender.com";
+  // ── THE BACKEND ADDRESS, AND WHY IT IS NOT A FROZEN CONSTANT ────────────
+  // This used to be one hardcoded string. That was correct right up until the
+  // Render service was RENAMED. The retired address kept answering - but with
+  // HTTP 503 "Service Suspended" - so every visitor on the static address was
+  // sent to a switched-off host. That single stale constant is what produced
+  // blank calendar photos, dead captions, and a notification flow reporting
+  // "could not connect to the server" while the server was in fact live at the
+  // other address.
+  //
+  // A rename must never again need a frontend change to keep the app pointed at
+  // itself. The address is therefore resolved in this order:
+  //   1. selfBase()      - the origin of the page itself. Exact, free and always
+  //                        current whenever our own Express server serves the
+  //                        page, which is the deployment to use.
+  //   2. the meta seed   - <meta name="aria-api-base-seed">. Our server stamps
+  //                        its own current address into index.html at boot (it
+  //                        reads Render's RENDER_EXTERNAL_URL), and the static
+  //                        build can stamp the same tag at build time. This is
+  //                        what keeps a GitHub Pages copy correct.
+  //   3. DEFAULT_BACKEND - the built-in seed, used only when neither above
+  //                        produced anything.
+  var DEFAULT_BACKEND = "https://creatorpulse-3khg.onrender.com";
+
+  // The boot/build stamp, if one was written into the page.
+  var META_BACKEND = normalize(readMeta("aria-api-base-seed"));
 
   var LS_BASE = "cp_api_base";          // explicit, user/ops chosen
   var LS_LEARNED = "cp_api_base_ok";    // proven to answer /api/health
   var HEALTH_PATH = "/api/health";
+
+  // Declared after its first use, which is safe: `function` declarations hoist
+  // to the top of this scope.
+  function readMeta(name) {
+    try {
+      var m = document.querySelector('meta[name="' + name + '"]');
+      return m ? (m.getAttribute("content") || "") : "";
+    } catch (e) { return ""; }
+  }
 
   function readLS(key) {
     try { return localStorage.getItem(key) || ""; } catch (e) { return ""; }
@@ -76,6 +107,18 @@
     return /^(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])$/i.test(location.hostname);
   }
 
+  // Where did THIS page come from? Trusting it is what makes the app immune to
+  // a service rename: a page served by our own Express server knows its own
+  // backend address exactly, for free, with no configuration. On a `file:` URL
+  // there is no host at all, and an opaque origin ("null") is not a backend.
+  function selfBase() {
+    try {
+      if (location.protocol === "file:") return "";
+      if (!location.origin || location.origin === "null") return "";
+      return normalize(location.origin);
+    } catch (e) { return ""; }
+  }
+
   // Static-only hosts cannot answer /api/ no matter what.
   function isStaticHost() {
     return /(^|\.)(github\.io|gitlab\.io|netlify\.app|vercel\.app|pages\.dev|surge\.sh|web\.app)$/i.test(location.hostname);
@@ -87,8 +130,15 @@
     if (input.explicit) return input.explicit;
     if (input.learnedOk) return input.learnedOk;
     if (input.protocol === "file:") return "";
-    if (input.isLocal) return input.origin;
+    // A static-only host is the one case where the page cannot answer /api/
+    // itself, so it has to be told where the backend is (build stamp, else the
+    // built-in seed).
     if (input.isStaticHost) return input.defaultBackend;
+    // Everywhere else, trust the page's own origin OVER the frozen constant.
+    // This is the rename-proof path: change the Render service name and the
+    // next page load is still correct, with no code change and no deploy.
+    if (input.selfBase) return input.selfBase;
+    if (input.isLocal) return input.origin;
     return input.origin;
   }
 
@@ -99,8 +149,9 @@
       protocol: location.protocol,
       isLocal: isLocalHost(),
       isStaticHost: isStaticHost(),
+      selfBase: selfBase(),
       origin: location.origin,
-      defaultBackend: DEFAULT_BACKEND,
+      defaultBackend: META_BACKEND || DEFAULT_BACKEND,
     });
   }
 
@@ -167,8 +218,12 @@
   // Render's free tier sleeps after ~15 min idle and takes ~1 min to wake.
   // Rather than leave a blank screen, ask /api/health and describe what is
   // happening in plain words.
-  function ariaHealth(timeoutMs) {
-    var base = apiBase() || location.origin;
+  function ariaHealth(timeoutMs, overrideBase) {
+    // overrideBase is the address of the machine that served THIS page. Asking
+    // it to health-check itself is the one probe that cannot go stale, because
+    // it is literally where the page came from - unlike a remembered value that
+    // a service rename may already have retired.
+    var base = normalize(overrideBase) || apiBase() || location.origin;
     var url = base + HEALTH_PATH;
     var ctl = (typeof AbortController === "function") ? new AbortController() : null;
     var timer = ctl ? setTimeout(function () { ctl.abort(); }, timeoutMs || 90000) : null;
@@ -194,6 +249,7 @@
   }
 
   window.ariaApiBase = apiBase;
+  window.ariaSelfBase = selfBase;
   window.ariaFetch = ariaFetch;
   window.ariaHealth = ariaHealth;
   window.ariaLearnBase = ariaLearnBase;

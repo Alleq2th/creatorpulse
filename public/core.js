@@ -63,7 +63,13 @@ const M_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","No
 const DAYS = ["S","M","T","W","T","F","S"];
 const NICHE_HANDLES = {"American Football": ["AdamSchefter", "RapSheet", "MikeGarafolo", "TomPelissero", "FieldYates", "NFL", "ESPNNFL", "NFLNetwork"], "Football/Soccer": ["FabrizioRomano", "ESPNFC", "SkySportsPL", "BBCSport", "GoalNews", "TheAthleticFC", "TouchlineX", "TMuk_news"], "Basketball": ["ShamsCharania", "WojESPN", "NBA", "ESPNNBA", "TheAthleticNBA", "BleacherReport"], "Baseball": ["MLB", "Ken_Rosenthal", "JeffPassan", "MLBNetwork", "TheAthleticMLB"], "Ice Hockey": ["NHL", "TSNBobMcKenzie", "FriedgeHNIC", "NHLNetwork", "SportsCenter"], "Tennis": ["TennisChannel", "atptour", "WTA", "TennisTV", "Eurosport"], "Cricket": ["ESPNcricinfo", "ICC", "BCCI", "cricbuzz", "BBCCricket"], "Formula 1": ["F1", "SkySportsF1", "ScuderiaFerrari", "McLarenF1", "MercedesAMGF1"], "Boxing": ["BoxingScene", "DAZNBoxing", "MikeCoppinger", "MatchroomBoxing", "SecondsOut"], "MMA/UFC": ["ufc", "espnmma", "arielhelwani", "MMAFighting", "MMAJunkie"], "WWE Wrestling": ["WWE", "FightfulSelect", "WrestleVotes", "WrestlingInc", "PWInsidercom"], "Golf": ["PGATOUR", "GolfChannel", "McIlroyRory", "GolfDigest", "EuropeanTour"], "Rugby": ["WorldRugby", "SixNationsRugby", "planetrugby", "rugbyworldcup"], "Esports": ["esportscom", "DotEsports", "DBLTAP", "ESLGaming", "LiquipediaNet"], "Movies & TV": ["DEADLINE", "Variety", "THR", "FilmUpdates", "IndieWire"], "Anime": ["AnimeNewsNet", "Crunchyroll", "AnimeCornerNews", "IGNAnime"], "Celebrity Gossip": ["PopCrave", "PopBase", "TMZ", "EOnline"], "Pop Culture": ["PopCrave", "PopBase", "BuzzFeed"], "Music (Hip-Hop)": ["ComplexMusic", "HipHopDX", "XXL", "rapalert6"], "Music (Afrobeats)": ["afrobeatsnews", "notjustok", "PulseNigeria247", "Naijaloaded"], "Music (Pop)": ["PopCrave", "billboard", "RollingStone"], "Music (K-Pop)": ["allkpop", "soompi", "koreaboo"], "Console Gaming": ["IGN", "GameSpot", "Wario64", "PlayStation", "Xbox"], "PC Gaming": ["PCGamer", "Wario64", "IGN"], "AI & Tech News": ["TechCrunch", "WIRED", "TheVerge", "OpenAI", "AndrewYNg"], "Gadget Reviews": ["engadget", "MKBHD", "TheVerge", "Gizmodo"], "Cybersecurity": ["briankrebs", "TheHackersNews", "Google_Bugs"], "Space & Science": ["NASA", "SpaceX", "NatGeo", "ESA"], "Crypto": ["CoinDesk", "Cointelegraph", "WatcherGuru", "TheBlock__"], "Stock Market": ["CNBC", "MarketWatch", "YahooFinance"], "Business News": ["Bloomberg", "ReutersBiz", "FT", "CNBC"], "Travel": ["TravelLeisure", "CNTraveler", "LonelyPlanet"], "Food & Recipes": ["NYTFood", "bonappetit", "foodandwine"], "Fitness & Gym": ["MensHealthMag", "WomensHealthMag", "MuscleAndFitness"], "Streetwear": ["Hypebeast", "complex", "Highsnobiety"], "Luxury Fashion": ["Vogue", "GQMagazine", "BoF"], "True Crime": ["oxygen", "IDNetwork"], "Political Commentary": ["politico", "axios", "thehill"], "Entrepreneurship": ["Inc", "Entrepreneur", "ForbesEntre"], "default": ["BreakingNews", "Reuters", "AP"]};
 
-const API = window.location.origin;
+// Was `window.location.origin`, i.e. "ask whatever machine served me this page".
+// That is only correct when our own Express server serves the page. On a
+// static-only host (GitHub Pages) it asked a file server for /api/..., got a
+// 404, and that was the real reason photos, captions and notifications all
+// failed there. apiBase() is the single place that decides where the brain is;
+// loaded before this file, so it is always available.
+const API = (typeof window.ariaApiBase === 'function' ? window.ariaApiBase() : '') || window.location.origin;
 const SYS = "You are CreatorPulse AI, a scriptwriter for social media creators. Write in plain spoken language exactly as a person would say it on camera. Never use markdown: no headers, no bold, no bullets, no --- rules, no JSON unless asked. Never label or separate sections with bracketed tags like [HOOK] or [CTA] — a script is one continuous flow of speech, not labeled parts stitched together; the hook is simply how it opens, not a section of its own. Write full sentences in natural paragraphs the way someone actually talks. Be specific, punchy, and direct. No meta-commentary, no preamble. Output the spoken words themselves, ready for a teleprompter.";
 
 // ─── STATE ──────────────────────────────────────────────────────────────────
@@ -204,7 +210,7 @@ function ariaBootNotice(){
   const st = (S.backend && S.backend.state) || "unknown";
   if(st === "ok" || st === "unknown") return "";
   if(st === "suspended"){
-    return '<div class="cp-server-note cp-server-warn">CreatorPulse\'s server is switched off right now, so photos, captions and news can\'t load. Whoever runs it needs to open the Render dashboard and press <b>Resume</b> on the <b>creatorpulse</b> service.</div>';
+    return '<div class="cp-server-note cp-server-warn">CreatorPulse\'s server is switched off right now, so photos, captions and news can\'t load. Whoever runs it needs to open the Render dashboard and press <b>Resume</b> on the <b>creatorpulse</b> service. <b>Also make sure you are opening the app at the Render address itself</b> (' + esc((S.backend && S.backend.base) || "") + ') — an address that only serves files can never reach the server.</div>';
   }
   if(st === "waking"){
     return '<div class="cp-server-note">Waking the server up… photos, captions and news should start working in about a minute. Everything else already works.</div>';
@@ -229,8 +235,18 @@ function ariaPaintBootNotice(){
 async function ariaAnnounceBackend(){
   if(typeof window.ariaHealth !== "function") return; // apiBase.js not loaded
   S.backend = S.backend || { state: "unknown", base: "" };
+  // The machine that served THIS page. If that is our own Express server, then
+  // it IS the backend and this probe cannot go stale - which matters because a
+  // remembered address can outlive a renamed (or retired) service and produce a
+  // misleading "server is switched off" notice while the server is fine.
+  const self = (typeof window.ariaSelfBase === "function") ? window.ariaSelfBase() : "";
   try {
-    let h = await window.ariaHealth(12000);
+    let h = self ? await window.ariaHealth(12000, self) : null;
+    if(!(h && h.ok)){
+      // The page's own host did not answer as a backend. Only now is the
+      // resolved/remembered address worth asking.
+      h = await window.ariaHealth(12000);
+    }
     if(h && h.ok){ S.backend.state = "ok"; S.backend.base = h.base; return; }
     if(h && h.status === 503){
       // /api/health always answers 200 when our own server is up, so a 503

@@ -13,10 +13,18 @@ const path = require("node:path");
 const vm = require("node:vm");
 
 const SRC = fs.readFileSync(path.join(__dirname, "..", "public", "lib", "apiBase.js"), "utf8");
-const BACKEND = "https://creatorpulse.onrender.com";
+
+// This is the address the app must fall back to on a static-only host.
+// It is asserted here on purpose: it went stale once (it named a retired Render
+// service that answered 503 "Service Suspended"), and that single stale string
+// is what made every photo, caption and notification fail for real people while
+// the actual server was healthy at a different name.
+const BACKEND = "https://creatorpulse-3khg.onrender.com";
 
 // Run the file in a sandboxed "browser" and hand back the globals it creates.
-function runInBrowser({ hostname = "creatorpulse.onrender.com", protocol = "https:", origin, store = {} } = {}) {
+// `metaSeed` simulates <meta name="aria-api-base-seed"> - the tag our own server
+// stamps into index.html at boot (and the static build stamps at build time).
+function runInBrowser({ hostname = "creatorpulse-3khg.onrender.com", protocol = "https:", origin, store = {}, metaSeed = "" } = {}) {
   const loc = {
     hostname,
     protocol,
@@ -29,7 +37,14 @@ function runInBrowser({ hostname = "creatorpulse.onrender.com", protocol = "http
   };
   const sandbox = {
     window: {},
-    document: { querySelector: () => null },
+    document: {
+      querySelector: (sel) => {
+        if (metaSeed && String(sel).indexOf("aria-api-base-seed") !== -1) {
+          return { getAttribute: () => metaSeed };
+        }
+        return null;
+      },
+    },
     localStorage,
     location: loc,
     fetch: () => Promise.reject(new Error("no network in tests")),
@@ -68,8 +83,41 @@ test("every static host in the list resolves to the backend", () => {
 });
 
 test("when our own Express server serves the page, the API stays same-origin", () => {
-  const w = runInBrowser({ hostname: "creatorpulse.onrender.com" });
-  assert.equal(w.ariaApiBase(), "https://creatorpulse.onrender.com");
+  const w = runInBrowser({ hostname: "creatorpulse-3khg.onrender.com" });
+  assert.equal(w.ariaApiBase(), "https://creatorpulse-3khg.onrender.com");
+});
+
+test("a RENAMED service still resolves to itself, with no code change", () => {
+  // The exact failure this suite guards against: the Render service was renamed
+  // and the frontend kept asking the retired address, which answered 503. The
+  // page's own origin must win over any frozen constant.
+  const w = runInBrowser({
+    hostname: "creatorpulse-somethingnew.onrender.com",
+    origin: "https://creatorpulse-somethingnew.onrender.com",
+  });
+  assert.equal(w.ariaApiBase(), "https://creatorpulse-somethingnew.onrender.com");
+});
+
+test("a static host uses the build/boot seed when one was stamped into the page", () => {
+  const w = runInBrowser({
+    hostname: "alleq2th.github.io",
+    origin: "https://alleq2th.github.io",
+    metaSeed: "https://some-new-service.onrender.com/",
+  });
+  assert.equal(w.ariaApiBase(), "https://some-new-service.onrender.com"); // trailing slash trimmed
+});
+
+test("without a seed, a static host falls back to the built-in backend", () => {
+  const w = runInBrowser({ hostname: "alleq2th.github.io", origin: "https://alleq2th.github.io" });
+  assert.equal(w.ariaApiBase(), BACKEND);
+});
+
+test("ariaSelfBase reports the page's own origin, and nothing on a file: URL", () => {
+  const w = runInBrowser({ hostname: "creatorpulse-3khg.onrender.com" });
+  assert.equal(typeof w.ariaSelfBase, "function");
+  assert.equal(w.ariaSelfBase(), "https://creatorpulse-3khg.onrender.com");
+  const f = runInBrowser({ protocol: "file:", hostname: "", origin: "null" });
+  assert.equal(f.ariaSelfBase(), "", "a file: page has no backend origin to trust");
 });
 
 test("localhost keeps the dev port instead of jumping to production", () => {
@@ -109,21 +157,29 @@ test("resolveStatic is a pure rule table", () => {
   const r = w.__ariaResolveStatic;
   const base = {
     explicit: "", learnedOk: "", protocol: "https:", isLocal: false,
-    isStaticHost: false, origin: "https://x.com", defaultBackend: BACKEND,
+    isStaticHost: false, selfBase: "", origin: "https://x.com", defaultBackend: BACKEND,
   };
   assert.equal(r({ ...base, explicit: "https://a.com" }), "https://a.com");
   assert.equal(r({ ...base, learnedOk: "https://b.com" }), "https://b.com");
   assert.equal(r({ ...base, protocol: "file:" }), "");
   assert.equal(r({ ...base, isLocal: true, origin: "http://localhost:3000" }), "http://localhost:3000");
   assert.equal(r({ ...base, isStaticHost: true }), BACKEND);
+  // The page's own origin beats the constant whenever the page came from a real
+  // host that is not a static-only one - this is the rename-proof rule.
+  assert.equal(r({ ...base, selfBase: "https://renamed.onrender.com" }), "https://renamed.onrender.com");
   assert.equal(r(base), "https://x.com");
 });
 
-test("the deployed backend host is the one the app is actually published on", () => {
+test("the deployed backend fallback is a real, current Render address", () => {
   // Guards against a typo silently pointing every static visitor at nothing.
   const w = runInBrowser({ hostname: "alleq2th.github.io", origin: "https://alleq2th.github.io" });
   const base = w.ariaApiBase();
-  assert.match(base, /^https:\/\/creatorpulse\.onrender\.com$/);
+  assert.match(base, /^https:\/\/creatorpulse(-[a-z0-9]+)?\.onrender\.com$/);
+  assert.doesNotMatch(
+    base,
+    /creatorpulse\.onrender\.com$/,
+    "the retired bare 'creatorpulse.onrender.com' name answers 503 and must never be the fallback"
+  );
 });
 
 test("index.html loads apiBase.js BEFORE anything that makes API calls", () => {
