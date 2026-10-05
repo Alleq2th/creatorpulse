@@ -191,7 +191,9 @@ app.get("/api/health", (_req, res) => {
     node: process.version,
     integrations: {
       supabase: !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY),
-      groq: !!process.env.GROQ_API_KEY,
+      // Same resolution the transcribe route uses (any spelling, trimmed), so
+      // health can never say "configured" while the route answers 503.
+      groq: !![process.env.GROQ_API_KEY, process.env.GROQ_KEY, process.env.GROK_API_KEY, process.env.WHISPER_API_KEY].map((v) => (v || "").trim()).find(Boolean),
       huggingface: !!process.env.HF_API_KEY,
       newsapi: !!process.env.NEWS_API_KEY,
       newsdata: !!process.env.NEWSDATA_API_KEY,
@@ -212,7 +214,16 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
-const GROQ_KEY = process.env.GROQ_API_KEY;
+// Accept the common spellings of the Groq key. A single mismatched name used
+// to make /api/transcribe answer 503 "not configured" even though a valid key
+// was present on the server. Trim too: a key pasted with a trailing newline or
+// space is truthy but rejected by Groq as 401.
+const GROQ_KEY = [
+  process.env.GROQ_API_KEY,
+  process.env.GROQ_KEY,
+  process.env.GROK_API_KEY,
+  process.env.WHISPER_API_KEY,
+].map((v) => (v || "").trim()).find(Boolean) || "";
 const HF_KEY = process.env.HF_API_KEY;
 const NEWS_KEY = process.env.NEWS_API_KEY;
 const NEWSDATA_KEY = process.env.NEWSDATA_API_KEY;
@@ -2722,7 +2733,7 @@ app.post(
   upload.single("file"),
   async (req, res) => {
     try {
-      if (!GROQ_KEY) return res.status(503).json({ error: "Transcription not configured." });
+      if (!GROQ_KEY) return res.status(503).json({ error: "Transcription not configured.", hint: "Set GROQ_API_KEY (or GROQ_KEY) in the server environment, then redeploy." });
       const file = req.file;
       if (!file || !file.buffer || !file.buffer.length) return res.status(400).json({ error: "Empty audio body." });
       if (file.buffer.length > 25 * 1024 * 1024) return res.status(413).json({ error: "Audio too large (25MB max)." });
