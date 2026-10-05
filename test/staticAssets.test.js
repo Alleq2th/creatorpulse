@@ -71,10 +71,15 @@ test("every local asset index.html references exists under public/", () => {
 
 // The exact bug, pinned by name so a future refactor away from public/lib/
 // fails loudly here instead of silently in a browser.
+//
+// Path form note: the tag may be written either "/lib/x.js" (root-relative,
+// correct when our own Express server serves the site) or "lib/x.js"
+// (page-relative, required on a project page hosted under a sub-path such as
+// /creatorpulse/). Both point at the same file, so accept either.
 test("the parseAuthRedirect script is served from under public/", () => {
   const refs = localAssetRefs(INDEX).filter((r) => r.includes("authRedirect"));
   assert.equal(refs.length, 1, "expected exactly one authRedirect.js reference");
-  assert.match(refs[0], /^\/lib\//, "should be loaded from /lib/");
+  assert.match(refs[0], /^(\/)?lib\//, "should be loaded from /lib/");
   assert.ok(
     fs.existsSync(path.join(PUBLIC_DIR, refs[0].replace(/^\/+/, ""))),
     `${refs[0]} is referenced but not served by express.static(public/)`

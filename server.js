@@ -12,8 +12,15 @@ require("dotenv").config();
 // when routes/push.js hit a bad request — it took down hooks, calendar,
 // digest, everything, for every user, until Render restarted it). Now it just
 // gets logged instead of crashing the server for everyone over one bad request.
-process.on("unhandledRejection", (err) => { console.error("[unhandledRejection]", err); });
-process.on("uncaughtException", (err) => { console.error("[uncaughtException]", err); });
+// Health can name the most recent unexpected error, so a non-technical owner
+// sees something concrete instead of only a blank screen. Set from the two
+// process-level handlers below.
+let LAST_ERROR = null;
+function noteError(err) {
+  try { LAST_ERROR = { at: new Date().toISOString(), message: String((err && err.message) || err).slice(0, 300) }; } catch (_) {}
+}
+process.on("unhandledRejection", (err) => { noteError(err); console.error("[unhandledRejection]", err); });
+process.on("uncaughtException", (err) => { noteError(err); console.error("[uncaughtException]", err); });
 
 const path = require("path");
 const express = require("express");
@@ -194,6 +201,9 @@ app.get("/api/health", (_req, res) => {
     uptime: Math.round(process.uptime()),
     memoryMB: Math.round(mem.heapUsed / 1024 / 1024),
     node: process.version,
+    // The most recent crash/rejection, if any, so a non-technical owner can
+    // see something actionable rather than only a blank screen.
+    lastError: LAST_ERROR,
     integrations: {
       supabase: !!(process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_KEY),
       // Same resolution the transcribe route uses (any spelling, trimmed), so

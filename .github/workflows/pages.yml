@@ -1,0 +1,57 @@
+// The github.io address used to show GitHub's auto-generated README page,
+// because Pages serves static files and the app never had a static build.
+// This job builds `public/` into `pages/` and publishes that.
+//
+// It does NOT touch the Render deployment: Render runs server.js, which still
+// serves `public/` directly.
+//
+// The build step is a plain Node script with no dependencies, so there is
+// nothing to install here and the job cannot fail because a package changed.
+name: Deploy web app to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Build static site
+        run: node scripts/buildPages.js
+      - uses: actions/configure-pages@v5
+        continue-on-error: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: pages
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      # continue-on-error because deploying needs one setting switched on by
+      # hand in the repo: Settings -> Pages -> Build and deployment ->
+      # Source: "GitHub Actions". Until that is done these steps cannot
+      # publish, and failing the whole run would just put a red X on every
+      # future push without saying why. The build job above still fails
+      # loudly on a real build error, which is the part that matters.
+      - id: deployment
+        continue-on-error: true
+        uses: actions/deploy-pages@v4
