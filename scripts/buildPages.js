@@ -78,6 +78,21 @@ function copyTree(from, to) {
 function buildIndex(html) {
   let out = html;
 
+  // 0. Backend address seed. The static copy of the app cannot answer /api/
+  //    itself, so it has to be TOLD where the server is. Historically this was a
+  //    hardcoded string inside lib/apiBase.js, which silently went stale when
+  //    the Render service was renamed - every photo, caption and notification
+  //    then failed against a retired address. Stamping the value into the page
+  //    at build time makes the repo the single place to change it (and lets a
+  //    GitHub Actions variable do it with no code edit at all).
+  const seed = (process.env.ARIA_API_BASE || "").trim().replace(/\/+$/, "");
+  if (/^https:\/\/[^\s"'<>]+$/i.test(seed)) {
+    const tag = `<meta name="aria-api-base-seed" content="${seed.replace(/"/g, "&quot;")}">`;
+    if (!/<meta name="aria-api-base-seed"/.test(out)) {
+      out = out.replace(/<head([^>]*)>/i, (m, attrs) => `<head${attrs}>${tag}`);
+    }
+  }
+
   // 1. Service worker: "/sw.js" -> "sw.js" so it resolves under /creatorpulse/.
   const before = out;
   out = out.replace(
@@ -137,6 +152,10 @@ function main() {
 
   log(`copied ${copied} file(s) from public/ -> pages/`);
   log(`verified ${REQUIRED.length} required file(s) present`);
+  const seeded = /<meta name="aria-api-base-seed"[^>]*content="([^"]+)"/.exec(
+    fs.readFileSync(path.join(OUT, "index.html"), "utf8")
+  );
+  log(seeded ? `backend seed stamped: ${seeded[1]}` : "backend seed not set (ARIA_API_BASE empty) - apiBase.js fallback will be used");
   log("done");
 }
 
