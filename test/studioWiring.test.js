@@ -67,7 +67,9 @@ test('every sv*/sm*/sp* helper studio.js calls is actually defined', () => {
 test('the perf helpers are loaded before studio.js, which calls them', () => {
   // A helper module must be parsed before its caller. Loading studio.js first
   // would leave every sp* call undefined at the moment the file runs.
-  const perfAt = INDEX_SRC.indexOf('src="/lib/studioPerf.js');
+  // The tag may be root-relative ("/lib/...") or page-relative ("lib/...") —
+  // the latter is required on a project page hosted under a sub-path.
+  const perfAt = INDEX_SRC.indexOf('lib/studioPerf.js');
   const studioAt = INDEX_SRC.indexOf('src="studio.js');
   assert.ok(perfAt > -1, 'index.html must load lib/studioPerf.js');
   assert.ok(studioAt > -1, 'index.html must load studio.js');
@@ -167,7 +169,8 @@ test('every pointer gesture the markup declares has a handler', () => {
 test('index.html loads the model before studio, and both are served', () => {
   // same ordering trap as authRedirect.js: studio.js calls sm* helpers at
   // render time, so the model script has to exist first.
-  const iModel = INDEX_SRC.indexOf('src="/lib/studioModel.js');
+  // Path form may be "/lib/..." or "lib/..." (see staticAssets.test.js).
+  const iModel = INDEX_SRC.indexOf('lib/studioModel.js');
   const iStudio = INDEX_SRC.indexOf('src="studio.js');
   assert.ok(iModel !== -1, 'index.html must load lib/studioModel.js');
   assert.ok(iStudio !== -1, 'index.html must load studio.js');

@@ -190,6 +190,70 @@ async function flushOutbox(){
 setInterval(flushOutbox, 30000);
 
 function toast(msg){ const t=document.createElement("div"); t.className="toast"; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),2400); }
+
+// ── BACKEND REACHABILITY ───────────────────────────────────────────────
+// Render's free tier sleeps a web service after ~15 minutes with no traffic
+// and takes up to a minute to wake; a service whose free hours ran out (or
+// that was switched off) answers 503 until someone presses Resume in the
+// Render dashboard. Both used to show up as a blank calendar with no
+// explanation at all. This asks /api/health once per load, says in plain
+// words what is happening, and keeps re-checking until the server answers.
+const CP_OFFLINE_MSG = "Can't reach the CreatorPulse server right now, so photos, captions and news won't load. If it was just asleep it should be awake in about a minute — this page checks by itself.";
+
+function ariaBootNotice(){
+  const st = (S.backend && S.backend.state) || "unknown";
+  if(st === "ok" || st === "unknown") return "";
+  if(st === "suspended"){
+    return '<div class="cp-server-note cp-server-warn">CreatorPulse\'s server is switched off right now, so photos, captions and news can\'t load. Whoever runs it needs to open the Render dashboard and press <b>Resume</b> on the <b>creatorpulse</b> service.</div>';
+  }
+  if(st === "waking"){
+    return '<div class="cp-server-note">Waking the server up… photos, captions and news should start working in about a minute. Everything else already works.</div>';
+  }
+  return '<div class="cp-server-note">' + esc(CP_OFFLINE_MSG) + '</div>';
+}
+
+function ariaPaintBootNotice(){
+  let host = document.getElementById("cp-server-note-host");
+  if(!host){
+    host = document.createElement("div");
+    host.id = "cp-server-note-host";
+    const rootEl = document.getElementById("root");
+    if(rootEl && rootEl.parentNode) rootEl.parentNode.insertBefore(host, rootEl);
+    else document.body.appendChild(host);
+  }
+  const html = ariaBootNotice();
+  host.innerHTML = html;
+  host.style.display = html ? "" : "none";
+}
+
+async function ariaAnnounceBackend(){
+  if(typeof window.ariaHealth !== "function") return; // apiBase.js not loaded
+  S.backend = S.backend || { state: "unknown", base: "" };
+  try {
+    let h = await window.ariaHealth(12000);
+    if(h && h.ok){ S.backend.state = "ok"; S.backend.base = h.base; return; }
+    if(h && h.status === 503){
+      // /api/health always answers 200 when our own server is up, so a 503
+      // here means the host itself is down — i.e. Render suspended it.
+      S.backend.state = "suspended"; S.backend.base = h.base || "";
+      ariaPaintBootNotice(); return;
+    }
+    S.backend.state = "waking"; S.backend.base = (h && h.base) || "";
+    ariaPaintBootNotice();
+    for(let i = 0; i < 3; i++){
+      h = await window.ariaHealth(90000);
+      if(h && h.ok){
+        S.backend.state = "ok"; S.backend.base = h.base;
+        ariaPaintBootNotice();
+        toast("Server is awake — photos and captions will load now.");
+        return;
+      }
+      if(h && h.status === 503){ S.backend.state = "suspended"; S.backend.base = h.base || ""; ariaPaintBootNotice(); return; }
+    }
+    S.backend.state = "offline";
+    ariaPaintBootNotice();
+  } catch(e){ /* a reachability notice failing must never break the app */ }
+}
 function esc(s){ return String(s||"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
 window.imgFail = function(el){ try { const ph = document.createElement('div'); ph.className = 'timg-ph'; ph.innerHTML = I.news; if(el && el.parentNode) el.parentNode.replaceChild(ph, el); else if(el) el.remove(); } catch(e){ if(el) el.remove(); } };
 
@@ -450,7 +514,7 @@ async function loadAgendaSchedule(){
     if(successful.length){ S.agendaSchedule = successful.flatMap(r => r.posts); cleanupPendingSchedule(); render(); }
   } catch(e){}
 }
-async function bootApp(){ render(); loadTrends(); loadNotifs(); loadSchedule(); loadSaved(); loadDigest(); loadAgendaSchedule(); flushOutbox(); startGlobalTimer(); initPush(); }
+async function bootApp(){ render(); ariaAnnounceBackend(); loadTrends(); loadNotifs(); loadSchedule(); loadSaved(); loadDigest(); loadAgendaSchedule(); flushOutbox(); startGlobalTimer(); initPush(); }
 
 // ─── PUSH NOTIFICATIONS ─────────────────────────────────────────────────────
 // Public key only — safe to embed client-side. Must match VAPID_PUBLIC_KEY on the server.
@@ -1138,7 +1202,7 @@ function render(){
     const ev = document.getElementById("cs-ed-video");
     if(ev){ window.__csKeep.edTime = ev.currentTime || window.__csKeep.edTime; window.__csKeep.edCid = ev.dataset.cid || window.__csKeep.edCid; }
   } catch(_){}
-  if(S.mode === "boot"){ root.innerHTML = `<div class="auth-wrap"><div class="boot-brand"><img src="/logo-64.png" class="brand-mark boot-pulse" alt="CreatorPulse"/><div class="brand-name" style="margin-top:14px">CreatorPulse</div></div><div class="boot-spinner-wrap"><span class="sp boot-sp"></span></div><div class="boot-status">Setting things up…</div></div>`; return; }
+  if(S.mode === "boot"){ root.innerHTML = `<div class="auth-wrap"><div class="boot-brand"><img src="logo-64.png" class="brand-mark boot-pulse" alt="CreatorPulse"/><div class="brand-name" style="margin-top:14px">CreatorPulse</div></div><div class="boot-spinner-wrap"><span class="sp boot-sp"></span></div><div class="boot-status">Setting things up…</div></div>`; return; }
   if(S.mode === "auth") { renderAuth(); return csAfterRender(); }
   if(S.mode === "onboard") { renderOnboard(); return csAfterRender(); }
   renderApp();

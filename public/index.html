@@ -7,8 +7,8 @@
 <title>CreatorPulse — Content engine for creators</title>
 <meta name="description" content="Trending stories, scripts, thumbnails, and a schedule that actually thinks. Built for creators across 130+ niches."/>
 <meta name="theme-color" content="#131110"/>
-<link rel="manifest" href="/manifest.json"/>
-<link rel="apple-touch-icon" href="/icon-192.png"/>
+<link rel="manifest" href="manifest.json"/>
+<link rel="apple-touch-icon" href="icon-192.png"/>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Bricolage+Grotesque:wght@600;700;800&family=Sora:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&family=Bebas+Neue&family=Anton&family=Oswald:wght@500;700&family=Playfair+Display:wght@700;900&family=Abril+Fatface&family=Dancing+Script:wght@700&family=Pacifico&family=Lobster&family=Caveat:wght@700&family=Permanent+Marker&family=Special+Elite&family=Righteous&family=Press+Start+2P&family=Archivo+Black&family=Zilla+Slab:wght@700&family=Bungee&display=swap" rel="stylesheet">
@@ -22,7 +22,7 @@
      styles at all -- it is why the Create screen came up unstyled. Kept as a
      separate file (rather than inlined) so it can be cached and versioned on
      its own. -->
-<link rel="stylesheet" href="/studio.css?v=19">
+<link rel="stylesheet" href="studio.css?v=20">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -822,7 +822,7 @@ body{padding-bottom:var(--tab-h);letter-spacing:-0.005em}
    CREATE STUDIO v3 — UI stylesheet
    Paste this whole block inside a <style> tag in index.html (after your
    existing app CSS so it wins), or ship it as studio.css and add
-   <link rel="stylesheet" href="/studio.css"> in <head>.
+   <link rel="stylesheet" href="studio.css"> in <head>.
    Dark base + purple accent. Mobile-first, tuned for mid-range Android.
    ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -1476,6 +1476,20 @@ body{padding-bottom:var(--tab-h);letter-spacing:-0.005em}
   .cs-shutter span{ width:52px; height:52px; }
 }
 
+/* ── backend reachability notice ─────────────────────────────────────
+   Shown only when /api/health cannot be reached, so a sleeping or
+   switched-off server reads as a sentence instead of a blank calendar.
+   Solid colours rather than theme variables, so it is legible in both
+   the light and dark themes. */
+#cp-server-note-host{ padding:0 14px; }
+.cp-server-note{
+  max-width:720px; margin:10px auto 0; padding:11px 14px;
+  border-radius:12px; font-size:13px; line-height:1.5;
+  background:#1e1b19; border:1px solid #3a3532; color:#e8e6e3;
+}
+.cp-server-note b{ font-weight:700; }
+.cp-server-warn{ background:#2a1f12; border-color:#7a5320; color:#ffd9a0; }
+
 </style>
 
 </head>
@@ -1484,12 +1498,13 @@ body{padding-bottom:var(--tab-h);letter-spacing:-0.005em}
 
 <div id="root"></div>
 
-<script src="/lib/authRedirect.js?v=19"></script>
-<script src="/lib/studioModel.js?v=19"></script>
-<script src="core.js?v=19"></script>
-<script src="/lib/studioPerf.js?v=19"></script>
-<script src="studio.js?v=19"></script>
-<script src="app.js?v=19"></script>
+<script src="lib/apiBase.js?v=20"></script>
+<script src="lib/authRedirect.js?v=20"></script>
+<script src="lib/studioModel.js?v=20"></script>
+<script src="core.js?v=20"></script>
+<script src="lib/studioPerf.js?v=20"></script>
+<script src="studio.js?v=20"></script>
+<script src="app.js?v=20"></script>
 <script>
   if("serviceWorker" in navigator){
     window.addEventListener("load", () => {
