@@ -528,7 +528,10 @@ window.addEventListener("pagehide", () => { if(window.saveCaches) window.saveCac
   fbBtn.id = "cp-fb-btn";
   fbBtn.innerHTML = "💬";
   fbBtn.title = "Send feedback";
-  fbBtn.style.cssText = "position:fixed;left:14px;bottom:calc(var(--tab-h) + 20px + env(safe-area-inset-bottom));z-index:9998;width:44px;height:44px;border-radius:50%;border:0;background:#1a1a1a;color:#fff;font-size:20px;box-shadow:0 6px 18px rgba(0,0,0,.28);cursor:pointer";
+  // z-index 60: above the tab bar (50) and page content, but BELOW the
+  // sheet overlay (200). At 9998 this button floated on top of every open
+  // sheet - including "Schedule a post" - covering its submit button.
+  fbBtn.style.cssText = "position:fixed;left:14px;bottom:calc(var(--tab-h) + 20px + env(safe-area-inset-bottom));z-index:60;width:44px;height:44px;border-radius:50%;border:0;background:#1a1a1a;color:#fff;font-size:20px;box-shadow:0 6px 18px rgba(0,0,0,.28);cursor:pointer";
   document.body.appendChild(fbBtn);
   fbBtn.onclick = () => openModal("feedback");
 
@@ -1026,7 +1029,8 @@ else if (kind === "terms" || kind === "privacy" || kind === "cookies" || kind ==
     if (document.getElementById("cp-cookie-banner")) return;
     const b = document.createElement("div");
     b.id = "cp-cookie-banner";
-    b.style.cssText = "position:fixed;left:12px;right:12px;bottom:calc(var(--tab-h) + 16px + env(safe-area-inset-bottom));z-index:9999;max-width:520px;margin:0 auto;background:#141420;color:#fff;border:1px solid #2a2a3a;border-radius:14px;padding:14px 16px;font:13px/1.5 system-ui,-apple-system,sans-serif;box-shadow:0 10px 40px rgba(0,0,0,.4)";
+    // z-index 60: same rule as the feedback button - never above an open sheet.
+    b.style.cssText = "position:fixed;left:12px;right:12px;bottom:calc(var(--tab-h) + 16px + env(safe-area-inset-bottom));z-index:60;max-width:520px;margin:0 auto;background:#141420;color:#fff;border:1px solid #2a2a3a;border-radius:14px;padding:14px 16px;font:13px/1.5 system-ui,-apple-system,sans-serif;box-shadow:0 10px 40px rgba(0,0,0,.4)";
     b.innerHTML = '<div style="margin-bottom:10px">We use only what\'s needed to keep you signed in and remember your preferences. No ad trackers. <a href="#" onclick="cpOpen(\'cookies\');return false;" style="color:#a5b4fc">Read our cookie notice</a>.</div>' +
       '<div style="display:flex;gap:8px;justify-content:flex-end">' +
       '<button id="cp-cookie-ok" style="background:#1E1C22;color:#fff;border:0;border-radius:8px;padding:8px 16px;cursor:pointer;font:600 13px system-ui">Got it</button>' +
