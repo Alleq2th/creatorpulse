@@ -528,7 +528,7 @@ window.addEventListener("pagehide", () => { if(window.saveCaches) window.saveCac
   fbBtn.id = "cp-fb-btn";
   fbBtn.innerHTML = "💬";
   fbBtn.title = "Send feedback";
-  fbBtn.style.cssText = "position:fixed;left:14px;bottom:82px;z-index:9998;width:44px;height:44px;border-radius:50%;border:0;background:#1a1a1a;color:#fff;font-size:20px;box-shadow:0 6px 18px rgba(0,0,0,.28);cursor:pointer";
+  fbBtn.style.cssText = "position:fixed;left:14px;bottom:calc(var(--tab-h) + 20px + env(safe-area-inset-bottom));z-index:9998;width:44px;height:44px;border-radius:50%;border:0;background:#1a1a1a;color:#fff;font-size:20px;box-shadow:0 6px 18px rgba(0,0,0,.28);cursor:pointer";
   document.body.appendChild(fbBtn);
   fbBtn.onclick = () => openModal("feedback");
 
