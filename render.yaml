@@ -39,6 +39,10 @@ services:
       # but is rate-limited to roughly one request every 15 seconds.
       - key: POLLINATIONS_KEY
         sync: false
+      # Stock photos: EITHER key alone is enough — you do not need both. The
+      # /api/stock-photo route tries Unsplash, then Pexels, and the server also
+      # accepts UNSPLASH_API_KEY / UNSPLASH_KEY / UNSPLASH_CLIENT_ID and
+      # PEXELS_KEY as aliases.
       - key: UNSPLASH_ACCESS_KEY
         sync: false
       - key: PEXELS_API_KEY
