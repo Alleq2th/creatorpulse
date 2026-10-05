@@ -129,6 +129,11 @@ app.use("/api", require("./routes/image"));
 app.use("/api", require("./routes/cards"));
 app.use("/api", require("./routes/stockphoto"));
 
+// Shared, alias-aware key resolution for stock photos. Read here (not inline
+// against process.env) so /api/health can never report a provider as missing
+// when the route would in fact work, or vice versa — the two must agree.
+const stockPhoto = require("./services/stockPhoto");
+
 app.use((req, res, next) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
@@ -201,8 +206,12 @@ app.get("/api/health", (_req, res) => {
       googleOauth: !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET && process.env.GOOGLE_REDIRECT_URI),
       webPush: !!(process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY),
       pollinations: !!process.env.POLLINATIONS_KEY,
-      unsplash: !!process.env.UNSPLASH_ACCESS_KEY,
-      pexels: !!process.env.PEXELS_API_KEY,
+      // Same alias-aware resolution the /api/stock-photo route uses (any
+      // recognised spelling, trimmed), so health cannot disagree with the
+      // route. Either provider alone is enough for photos to work.
+      unsplash: !!stockPhoto.unsplashKey(),
+      pexels: !!stockPhoto.pexelsKey(),
+      stockPhotos: !!(stockPhoto.unsplashKey() || stockPhoto.pexelsKey()),
       adminKey: !!process.env.ADMIN_KEY,
       // Public anon key. Without it /api/auth/reset-password answers 503, so
       // the password-reset flow silently cannot complete -- worth surfacing.
