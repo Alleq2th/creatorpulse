@@ -1510,35 +1510,55 @@ app.delete("/api/delete-post", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── USER RECURRING SCHEDULE (e.g. "Go live Fridays 8pm") ────────────────────
-// Uses saved_posts with content_type="Recurring" so no new table needed.
+// ── SCHEDULE ONE POST ON ONE DATE ──────────────────────────────────────
+// Uses saved_posts so no new table is needed. Writes EXACTLY ONE row, for the
+// date the user picked.
+//
+// This route used to materialise the next 52 weeks from a weekday - so
+// scheduling one post "on Friday" produced a row on that Friday in every
+// following week through the end of the year. The owner reported exactly that.
+// A post now appears on the chosen day and nowhere else. A weekday is still
+// accepted as a fallback (the next occurrence of that day) so an older client
+// can never silently no-op, but it produces one row, not fifty-two.
 app.post("/api/user-schedule", async (req, res) => {
   if (!supabase) return res.status(503).json({ error: "Database not configured" });
-  const { token, title, weekday, time, notes } = req.body;
+  const { token, title, date, time, weekday, notes } = req.body;
   try {
     const { data: userData, error: userError } = await supabase.auth.getUser(token);
     if (userError) return res.status(401).json({ error: "Invalid token" });
-    // Materialise next 52 weeks
-    const dayIdx = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"].indexOf(String(weekday).toLowerCase());
-    if (dayIdx < 0) return res.status(400).json({ error: "Invalid weekday" });
-    const today = new Date();
-    const rows = [];
-    for (let w = 0; w < 52; w++) {
-      const d = new Date(today);
-      d.setDate(today.getDate() + ((dayIdx - today.getDay() + 7) % 7) + w * 7);
-      rows.push({
-        user_id: userData.user.id,
-        headline: title,
-        niche: "Personal Schedule",
-        platform: "all",
-        content_type: "Recurring",
-        content: { title, weekday, time, notes },
-        scheduled_date: d.toISOString().slice(0, 10)
-      });
+    if (!title) return res.status(400).json({ error: "Title required" });
+
+    // Resolve the ONE date this post belongs to.
+    let scheduledDate = String(date || "").slice(0, 10);
+    if (scheduledDate && !/^\d{4}-\d{2}-\d{2}$/.test(scheduledDate)) {
+      return res.status(400).json({ error: "Invalid date" });
     }
-    const { error } = await supabase.from("saved_posts").insert(rows);
+    if (!scheduledDate) {
+      const dayIdx = ["sunday","monday","tuesday","wednesday","thursday","friday","saturday"].indexOf(String(weekday||"").toLowerCase());
+      if (dayIdx < 0) return res.status(400).json({ error: "Date required" });
+      const today = new Date();
+      const d = new Date(today);
+      d.setDate(today.getDate() + ((dayIdx - today.getDay() + 7) % 7));
+      scheduledDate = d.toISOString().slice(0, 10);
+    }
+
+    // Same date + headline + user is the same reminder, so one row is enough.
+    // Makes a retry from the client's outbox safe instead of a duplicate.
+    const { data: existing } = await supabase.from("saved_posts").select("id")
+      .eq("user_id", userData.user.id).eq("headline", title).eq("scheduled_date", scheduledDate).limit(1);
+    if (existing && existing.length) return res.json({ success: true, added: 0, duplicate: true, scheduled_date: scheduledDate });
+
+    const { error } = await supabase.from("saved_posts").insert({
+      user_id: userData.user.id,
+      headline: title,
+      niche: "Personal Schedule",
+      platform: "all",
+      content_type: "Reminder",
+      content: { title, date: scheduledDate, time: time || null, notes: notes || null },
+      scheduled_date: scheduledDate
+    });
     if (error) throw error;
-    res.json({ success: true, added: rows.length });
+    res.json({ success: true, added: 1, scheduled_date: scheduledDate });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 

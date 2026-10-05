@@ -22,7 +22,7 @@
      styles at all -- it is why the Create screen came up unstyled. Kept as a
      separate file (rather than inlined) so it can be cached and versioned on
      its own. -->
-<link rel="stylesheet" href="studio.css?v=22">
+<link rel="stylesheet" href="studio.css?v=23">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -322,7 +322,7 @@ body{padding-bottom:var(--tab-h);letter-spacing:-0.005em}
 .agenda-group{margin-bottom:22px}
 .agenda-group-hd{display:flex;align-items:baseline;justify-content:space-between;font-family:var(--serif);font-size:16px;font-weight:700;margin-bottom:10px;letter-spacing:-0.01em}
 .agenda-group-sub{font-size:11px;color:var(--mu);font-family:var(--sans);font-weight:500}
-.agenda-item{display:flex;gap:12px;align-items:flex-start;padding:12px;border-radius:16px;margin-bottom:8px;border:1px solid var(--br);background:var(--sf)}
+.agenda-item{display:flex;gap:12px;align-items:flex-start;padding:12px;border-radius:16px;margin-bottom:8px;border:1px solid var(--br);background:var(--sf);cursor:pointer}
 .agenda-item-major{border-color:rgba(232,90,44,.35);background:rgba(232,90,44,.05)}
 .agenda-item-post{border-color:rgba(108,76,245,.35);background:rgba(108,76,245,.06)}
 .agenda-item-thumb{width:44px;height:44px;border-radius:11px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:19px;background:var(--hero)}
@@ -334,6 +334,29 @@ body{padding-bottom:var(--tab-h);letter-spacing:-0.005em}
 .agenda-item-title{font-size:13px;font-weight:600;line-height:1.4}
 .agenda-item-niche{font-size:10px;color:var(--mu);text-transform:none;letter-spacing:.4px;font-weight:600;margin-top:3px}
 .agenda-item-desc{font-size:11px;color:var(--mu);margin-top:4px;line-height:1.4}
+
+/* Collapsed row vs. opened row.
+   A row is a clean summary until it is tapped: date, title, one quiet meta
+   line, and a small chevron. Everything else - the category, the full
+   description and the row's Create/Remove button - lives inside
+   .agenda-item-detail, which only displays once the row carries .expanded. */
+.agenda-item-head{display:flex;align-items:center;gap:8px}
+.agenda-item-head .agenda-item-title{flex:1;min-width:0}
+.agenda-item-meta{font-size:10px;color:var(--mu);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:45%}
+.agenda-item-chevron{margin-left:auto;color:var(--mu);font-size:16px;line-height:1;flex-shrink:0;transition:transform .18s}
+.agenda-item.expanded .agenda-item-chevron{transform:rotate(90deg)}
+.agenda-item-detail{display:none}
+.agenda-item.expanded .agenda-item-detail{display:block;margin-top:6px}
+.agenda-item-actions{display:flex;justify-content:flex-end;margin-top:8px}
+
+/* The full-width Schedule Post button at the foot of the Calendar.
+   It used to be an inline style plus margin-top:16px, so it sat flush against
+   the last row with no reserved space beneath it - which is how the floating
+   chat/refresh button and the tab bar ended up sitting over it. It now carries
+   a real bottom margin that clears the floating buttons, and the floating
+   buttons are lifted out of that column entirely (see .fab-coach) so they can
+   never land on top of it again. */
+.cal-schedule-btn{position:relative;z-index:90;width:100%;padding:13px;justify-content:center;margin-top:16px;margin-bottom:96px}
 
 .cal-empty{text-align:center;padding:48px 20px;color:var(--mu)}
 .cal-empty-icon{font-size:32px;margin-bottom:10px}
@@ -548,7 +571,7 @@ body{padding-bottom:var(--tab-h);letter-spacing:-0.005em}
 .fab-coach:hover{transform:translateX(-2px)}
 .fab-coach:active{transform:scale(.97)}
 .fab-coach .icon{width:16px;height:16px;stroke:var(--ac);fill:none}
-@media(min-width:900px){.fab-coach{right:calc(50% - 280px)}}
+@media(min-width:900px){.fab-coach{display:none}}
 
 /* ── STUDIO ── */
 .st-wrap{display:flex;flex-direction:column;gap:12px}
@@ -1498,13 +1521,13 @@ body{padding-bottom:var(--tab-h);letter-spacing:-0.005em}
 
 <div id="root"></div>
 
-<script src="lib/apiBase.js?v=22"></script>
-<script src="lib/authRedirect.js?v=22"></script>
-<script src="lib/studioModel.js?v=22"></script>
-<script src="core.js?v=22"></script>
-<script src="lib/studioPerf.js?v=22"></script>
-<script src="studio.js?v=22"></script>
-<script src="app.js?v=22"></script>
+<script src="lib/apiBase.js?v=23"></script>
+<script src="lib/authRedirect.js?v=23"></script>
+<script src="lib/studioModel.js?v=23"></script>
+<script src="core.js?v=23"></script>
+<script src="lib/studioPerf.js?v=23"></script>
+<script src="studio.js?v=23"></script>
+<script src="app.js?v=23"></script>
 <script>
   if("serviceWorker" in navigator){
     window.addEventListener("load", () => {

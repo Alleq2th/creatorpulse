@@ -84,6 +84,11 @@ const S = {
   loading: {}, expanded: {}, plat: {}, ctype: {}, tone: {}, palette: {}, slideCount: {}, outs: {}, recs: {},
   cal: { y: new Date().getFullYear(), m: new Date().getMonth() },
   calView: "agenda", // agenda | week | month — agenda is the default per rebuild
+  // Which calendar rows the user has tapped open. Keyed by the item's own
+  // identity (post id, or "niche|title" for an event) rather than its array
+  // index, so an opened row stays open across a re-render or a background
+  // refresh that reorders the list.
+  agendaExpanded: {},
   agendaSchedule: [], // rolling multi-month schedule fetch, separate from the month-scoped one Month view uses
   scheduleSheetOpen: false,
   // Optimistically-added items not yet confirmed by a real server fetch.
@@ -94,7 +99,7 @@ const S = {
   // in three separate places.
   pendingSchedule: [],
   coachHandle: "", coachPlatform: "instagram", coachMetrics: "", coachAnswer: "", coachLoading: false,
-  addSched: { title:"", weekday:"friday", time:"20:00", notes:"" },
+  addSched: { title:"", date:"", time:"20:00", notes:"" },
   quickAdd: null, // { date: "YYYY-MM-DD", title: "" } — set when a specific calendar day is tapped
   hooksNiche: null, hooksSearch: "", hooksCache: {}, uqCheck: { text:"", loading:false, result:null },
   sheet: null, remixCache: {}, titleCache: {},
@@ -1171,18 +1176,47 @@ window.runCoach = async () => {
 };
 
 // ─── SCHEDULE ADD ───────────────────────────────────────────────────────────
-window.addRecurring = async () => {
+// Schedule ONE post on ONE date.
+//
+// This used to be addRecurring(), which asked the server to materialise the
+// next 52 weeks - so a post scheduled "on Friday" appeared on that Friday in
+// every following week through the end of the year. It now sends a single
+// calendar date and the server writes a single row, so the post shows on the
+// exact day picked and nowhere else.
+window.addScheduledPost = async () => {
   const p = S.addSched;
   if(!p.title){ toast("Add a title"); return; }
-  const r = await api("/api/user-schedule", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:S.token,...p})});
-  if(r.success){
-    toast(`Scheduled ${r.added} weeks`);
-    S.addSched={title:"",weekday:"friday",time:"20:00",notes:""};
-    S.scheduleSheetOpen=false;
-    render(); // show the sheet closing immediately, don't wait on the refresh below
-    loadSchedule(); loadAgendaSchedule(); loadSaved();
+  if(!p.date){ toast("Pick a date"); return; }
+  const scheduledDate = p.time ? `${p.date}T${p.time}:00` : p.date;
+  const niche = "Personal Schedule";
+  const platform = S.user?.primaryPlatform || (S.user?.platforms||[])[0] || "instagram";
+  const payload = { token: S.token, title: p.title, date: p.date, time: p.time, notes: p.notes };
+
+  // Show it and persist the pending copy FIRST, before even attempting the
+  // network call - the same pattern the quick-add form already uses. The item
+  // is on screen and survives an app close no matter what happens next.
+  S.pendingSchedule = [...(S.pendingSchedule||[]), { id: `temp_${Date.now()}`, headline: p.title, niche, scheduled_date: scheduledDate, content_type: "Reminder" }];
+  savePendingSchedule();
+  S.addSched = { title:"", date:"", time:"20:00", notes:"" };
+  S.scheduleSheetOpen = false;
+  render(); // show the sheet closing and the item appearing immediately
+
+  try {
+    const r = await api("/api/user-schedule", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+    if(r.success){
+      toast("Scheduled for " + p.date);
+      loadSchedule(); loadAgendaSchedule(); loadSaved();
+    } else {
+      // A real failure (not just slow) - queue it so it keeps retrying on its
+      // own instead of being silently abandoned. The item already on screen
+      // stays exactly where it is.
+      S.outbox = [...(S.outbox||[]), { endpoint: "/api/user-schedule", payload, attempts: 1 }];
+      saveOutboxState();
+    }
+  } catch(e){
+    S.outbox = [...(S.outbox||[]), { endpoint: "/api/user-schedule", payload, attempts: 1 }];
+    saveOutboxState();
   }
-  else toast(r.error||"Error");
 };
 window.openQuickAdd = (dateIso, existing) => { S.quickAdd = { date: dateIso, title: "", time: "12:00", existing: existing||[] }; render(); };
 window.saveQuickAdd = async () => {
@@ -1277,6 +1311,27 @@ function pumpEventPhotoQueue(){
 }
 function calAfterRender(){
   if(S.tab !== "calendar") return;
+  // ONE delegated listener for the whole app handles tap-to-expand. Delegation
+  // rather than an inline handler per row is what lets a row safely carry an
+  // arbitrary "niche|title" key: the key lives in a data attribute, so quotes
+  // or slashes in a real event title never have to survive being interpolated
+  // into JavaScript and then read back out of an HTML attribute.
+  if(!window.__agendaTapBound){
+    window.__agendaTapBound = true;
+    document.addEventListener("click", (e) => {
+      const row = e.target.closest && e.target.closest(".agenda-item[data-item-key]");
+      if(!row) return;
+      if(e.target.closest(".agenda-item-actions button")) return; // the row's own buttons keep their own job
+      window.toggleAgendaItem(row.dataset.itemKey);
+    });
+    document.addEventListener("keydown", (e) => {
+      if(e.key !== "Enter" && e.key !== " ") return;
+      const row = e.target.closest && e.target.closest(".agenda-item[data-item-key]");
+      if(!row) return;
+      e.preventDefault();
+      window.toggleAgendaItem(row.dataset.itemKey);
+    });
+  }
   S.eventPhoto = S.eventPhoto || {};
   document.querySelectorAll("[data-ev-key]").forEach(el => {
     const key = el.dataset.evKey;
@@ -1713,45 +1768,67 @@ function getUnifiedAgendaItems(){
 // language; major niche events get a stronger accent; ordinary events stay
 // neutral — the spec's "this is MY content vs. something happening in my
 // niche" distinction.
+// The identity of one calendar row. Deliberately the item's own identity and
+// not its position in the list, so an opened row survives a re-render or a
+// background refresh that reorders things underneath it.
+function agendaItemKey(it){
+  return it.type === "post" ? `post:${it.id}` : `event:${it.niche||""}|${it.title}`;
+}
+window.toggleAgendaItem = (key) => {
+  if(!key) return;
+  S.agendaExpanded = S.agendaExpanded || {};
+  S.agendaExpanded[key] = !S.agendaExpanded[key];
+  render();
+};
+// One calendar row.
+//
+// COLLAPSED BY DEFAULT. A row shows only what's needed to scan it - date,
+// title, and one quiet meta line. The category, the full description and the
+// row's own action all stay hidden until the row is tapped, which is what was
+// asked for: a clean summary first, the details on demand, instead of every
+// row dumping its whole description the moment the calendar opens.
 function renderAgendaItem(it){
   const isPost = it.type === "post";
   const isMajor = it.importance === "major";
-  const badge = isPost ? "" : isMajor ? "🔥 " : it.importance === "relevant" ? "📌 " : "🗓 ";
   const cls = isPost ? "agenda-item-post" : isMajor ? "agenda-item-major" : "agenda-item-event";
   const dt = new Date(it.date);
   const timeStr = isPost && it.date.includes("T") ? dt.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) : null;
   const payload = JSON.stringify({title:it.title, desc:it.desc, niche:it.niche, date:it.date}).replace(/'/g,"&#39;");
-  // Every item now carries an actual image-shaped tile instead of a small
-  // inline emoji floating in the text  a real photo per seeded event isn't
-  // something I can source here, but this gives every agenda row a
-  // consistent visual thumbnail to scan by, the way the request asked for.
+  const itemKey = agendaItemKey(it);
+  const expanded = !!S.agendaExpanded[itemKey];
+  // The single line of context that stays visible while collapsed.
+  const meta = isPost ? `Scheduled${timeStr ? ' \u00b7 '+timeStr : ''}` : esc(it.niche||"");
   const thumbIcon = isPost ? "\u270d\ufe0f" : isMajor ? "\ud83d\udd25" : it.importance === "relevant" ? "\ud83d\udccc" : "\ud83d\uddd3";
-  // Real photo per event via the same stock-photo lookup story cards
-  // already use  scoped to major/relevant events only (not every plain
-  // seasonal filler item, and not user posts) so this stays cheap even
-  // once the dataset grows to ~100 events/niche. Falls back to the icon
-  // tile if the fetch fails or an event just isn't worth the API call.
-  // Every niche event gets a real photo, not only the "major"/"relevant" ones.
-  // The old filter left most rows as plain icon tiles - in several niches ALL
-  // events are "seasonal" - which read as "the photos are broken".
+  // Real photo per event via the same stock-photo lookup story cards already
+  // use. Every niche event is eligible, not only the "major"/"relevant" ones:
+  // in several niches ALL events are "seasonal", so the narrower filter left
+  // whole sections as plain icon tiles, which read as "the photos are broken".
   const wantsPhoto = !isPost;
   const evKey = wantsPhoto ? `${it.niche||""}|${it.title}` : null;
   const evQuery = wantsPhoto ? `${it.niche||""} ${it.title}`.trim() : null;
   const cachedUrl = evKey ? (S.eventPhoto||{})[evKey] : null;
   const thumbStyle = cachedUrl ? ` style="background-image:url('${esc(cachedUrl)}');background-size:cover;background-position:center"` : "";
   const thumb = `<div class="agenda-item-thumb ${cls}${cachedUrl?' has-photo':''}"${wantsPhoto?` data-ev-key="${esc(evKey)}" data-ev-query="${esc(evQuery)}"`:""}${thumbStyle}>${cachedUrl?"":thumbIcon}</div>`;
-  return `<div class="agenda-item ${cls}">
+  return `<div class="agenda-item ${cls}${expanded?' expanded':''}" data-item-key="${esc(itemKey)}" role="button" tabindex="0" aria-expanded="${expanded?'true':'false'}">
     ${thumb}
     <div class="agenda-item-date"><div class="m">${M_SHORT[dt.getMonth()]}</div><div class="d">${dt.getDate()}</div></div>
     <div class="agenda-item-body">
-      <div class="agenda-item-title">${esc(it.title)}</div>
-      ${it.niche?`<div class="agenda-item-niche">${esc(it.niche)}${isPost?' \u00b7 Scheduled'+(timeStr?' \u00b7 '+timeStr:''):''}</div>`:''}
-      ${it.desc && !isPost ?`<div class="agenda-item-desc">${esc(it.desc)}</div>`:''}
+      <div class="agenda-item-head">
+        <span class="agenda-item-title">${esc(it.title)}</span>
+        ${meta?`<span class="agenda-item-meta">${meta}</span>`:""}
+        <span class="agenda-item-chevron" aria-hidden="true">\u203a</span>
+      </div>
+      <div class="agenda-item-detail">
+        ${it.niche?`<div class="agenda-item-niche">${esc(it.niche)}${isPost?' \u00b7 Scheduled'+(timeStr?' \u00b7 '+timeStr:''):''}</div>`:''}
+        ${it.desc && !isPost ?`<div class="agenda-item-desc">${esc(it.desc)}</div>`:''}
+        <div class="agenda-item-actions">
+          ${isPost
+            ? `<button class="iconbtn tipbtn" data-tip="Remove" title="Remove" aria-label="Remove ${esc(it.title)}" onclick="event.stopPropagation();deleteScheduleItem('${it.id}')">${I.trash}</button>`
+            : `<button class="tiny-copy" onclick='event.stopPropagation();createFromEvent(${payload})'>Create</button>`
+          }
+        </div>
+      </div>
     </div>
-    ${isPost
-      ? `<button class="iconbtn tipbtn" data-tip="Remove" title="Remove" aria-label="Remove ${esc(it.title)}" onclick="deleteScheduleItem('${it.id}')">${I.trash}</button>`
-      : `<button class="tiny-copy" onclick='createFromEvent(${payload})'>Create</button>`
-    }
   </div>`;
 }
 function renderAgendaView(){
@@ -1877,10 +1954,10 @@ function renderScheduleSheet(){
       <div class="sheet-h"><h3>Schedule a post</h3><button class="sheet-close" onclick="closeScheduleSheet()">×</button></div>
       <div class="field"><label>What are you doing</label><input class="input" placeholder="Go live · Post reel · Record podcast" value="${esc(asch.title)}" oninput="S.addSched.title=this.value" autofocus/></div>
       <div style="display:flex;gap:8px">
-        <div class="field" style="flex:1"><label>Every</label><select class="input" onchange="S.addSched.weekday=this.value">${["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"].map(d=>`<option value="${d.toLowerCase()}" ${asch.weekday===d.toLowerCase()?'selected':''}>${d}</option>`).join("")}</select></div>
+        <div class="field" style="flex:1"><label>Date</label><input class="input" type="date" value="${esc(asch.date)}" oninput="S.addSched.date=this.value"/></div>
         <div class="field" style="flex:1"><label>Time</label><input class="input" type="time" value="${esc(asch.time)}" oninput="S.addSched.time=this.value"/></div>
       </div>
-      <button class="btn bp" style="width:100%;padding:12px;justify-content:center" onclick="addRecurring()">${I.plus} Add for next 12 months</button>
+      <button class="btn bp" style="width:100%;padding:12px;justify-content:center" onclick="addScheduledPost()">${I.plus} Schedule for this date</button>
     </div>
   </div>`;
 }
@@ -1911,7 +1988,7 @@ function pageCalendar(){
       <button class="cal-view-btn ${view==='month'?'active':''}" onclick="setCalView('month')">Month</button>
     </div>
     ${view==='agenda' ? renderAgendaView() : view==='week' ? renderWeekView() : renderMonthView()}
-    <button class="btn bo" style="width:100%;padding:13px;justify-content:center;margin-top:16px" onclick="openScheduleSheet()">${I.plus} Schedule Post</button>
+    <button class="btn bo cal-schedule-btn" onclick="openScheduleSheet()">${I.plus} Schedule Post</button>
     ${renderScheduleSheet()}
   </main>`;
 }
