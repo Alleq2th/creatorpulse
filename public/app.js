@@ -4,34 +4,119 @@
 // change this one line if a different address should be used instead.
 const SUPPORT_EMAIL = "sportsguycollabs@gmail.com";
 
-// ─── FLOATING AI COACH ─────────────────────────────────────────────────────
+// ─── PULSE AI — CONVERSATIONAL CREATIVE WORKSPACE ──────────────────────────
+const PULSE_AI_ACTIONS = [
+  { id: "create",  label: "Create Content",   prompt: "I want to create new content. Help me build it from scratch.", action: "create" },
+  { id: "ideas",   label: "Generate Ideas",   prompt: "Give me fresh, high-impact content ideas for my niche.", action: "ideas" },
+  { id: "script",  label: "Write a Script",   prompt: "Write me a camera-ready short-form script.", action: "script" },
+  { id: "analyze", label: "Analyze My Content", prompt: "Analyze my recent content and tell me what is working and what is not.", action: "analyze" },
+  { id: "post",    label: "What Should I Post?", prompt: "What should I post today? Give me 3 tactical options.", action: "what_to_post" },
+  { id: "hooks",   label: "Improve My Hook",  prompt: "Make my hook stronger and scroll-stopping.", action: "hooks" },
+  { id: "calendar",label: "Build Content Plan", prompt: "Build me a 7-day content plan.", action: "calendar" },
+  { id: "repurpose",label: "Repurpose Content", prompt: "Repurpose my existing content into new formats.", action: "repurpose" }
+];
+
+const PULSE_AI_GOALS = ["views", "engagement", "followers", "authority", "leads", "sales", "consistency"];
+
+function pulseAiDetectScript(text){
+  return /TITLE:\s*[^\n]+/i.test(text) && /\[HOOK/i.test(text);
+}
+
+function pulseAiRenderMsgContent(text){
+  // Lightweight markdown-style rendering: bold, italics, headers, bullets.
+  let html = esc(text);
+  html = html.replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+  html = html.replace(/(^|\n)###?\s*([^\n]+)/g, `$1<div class=\"pa-h\">$2</div>`);
+  html = html.replace(/(^|\n)\s*[-•]\s*/g, "$1• ");
+  html = html.replace(/\n/g, "<br>");
+  return html;
+}
+
 function renderFloatingCoach(){
   if(S.mode !== "app") return "";
-  const open = !!S.coachOpen;
-  return `<button id="fab-coach" class="fab-coach" onclick="S.coachOpen=true;render()" aria-label="AI Coach">${I.sparkle}<span>Coach</span></button>
-    ${open ? `<div class="sheet-overlay open" onclick="if(event.target===this){S.coachOpen=false;render()}">
-      <div class="sheet"><div class="sheet-grip"></div>
-        <div class="sheet-h"><h3>AI Coach</h3><button class="sheet-close" onclick="S.coachOpen=false;render()">×</button></div>
-        <div style="font-size:12px;color:var(--mu);margin-bottom:14px;line-height:1.55">Connect your socials or upload analytics. Coach learns you and tells you what actually to do next.</div>
-        <div class="field"><label>Platform</label><select class="input" onchange="S.coachPlatform=this.value">${["instagram","tiktok","youtube","twitter"].map(p=>`<option value="${p}" ${S.coachPlatform===p?'selected':''}>${p[0].toUpperCase()+p.slice(1)}</option>`).join("")}</select></div>
-        <div class="field"><label>Your handle</label><input class="input" placeholder="@yourhandle" value="${esc(S.coachHandle)}" oninput="S.coachHandle=this.value"/></div>
-        <div class="field"><label>Recent analytics (paste numbers or upload a screenshot)</label>
-          <textarea class="input" rows="4" placeholder="Last 5 posts: 12k, 8k, 45k, 6k, 22k views. Followers: 4,200. Avg watch: 18s." oninput="S.coachMetrics=this.value">${esc(S.coachMetrics)}</textarea>
-          <input type="file" accept="image/*" onchange="coachUploadScreenshot(event)" style="margin-top:8px;font-size:11px;color:var(--mu)"/>
-        </div>
-        <button class="btn bp" style="width:100%;padding:12px;justify-content:center" ${S.coachLoading?'disabled':''} onclick="runCoach()">${S.coachLoading?'<span class="sp"></span> Reading you…':'Get my read'}</button>
-        ${S.coachLoading?skTextBlock(3):""}
-        ${(S.errors&&S.errors.coach)?errCard(S.errors.coach, "runCoach()", "coach"):""}
-        ${S.coachAnswer?`<div class="coach-msg">${esc(S.coachAnswer)}</div>`:""}
+  const P = S.pulseAi || (S.pulseAi = { open:false, messages:[], loading:false, platform:"tiktok", goal:"views", niche:"", brandVoice:"", input:"", activeAction:"chat" });
+  const open = !!P.open;
+  const hasMessages = P.messages && P.messages.length > 0;
+
+  const fab = `<button id="fab-coach" class="fab-coach" onclick="openPulseAi()" aria-label="Pulse AI">${I.sparkle}<span>Pulse AI</span></button>`;
+
+  if(!open) return fab;
+
+  const quickChips = !hasMessages ? PULSE_AI_ACTIONS.map(a => `<button class="pa-chip" onclick="sendPulseAiMessage('${a.prompt.replace(/['\\]/g, '')}', '${a.action}')">${a.label}</button>`).join("") : "";
+
+  const messagesHtml = hasMessages ? P.messages.map(m => {
+    if(m.role === "user"){
+      return `<div class="pa-msg pa-msg-user"><div class="pa-bubble pa-bubble-user">${esc(m.content).replace(/\n/g, "<br>")}</div></div>`;
+    }
+    const isScript = pulseAiDetectScript(m.content);
+    return `<div class="pa-msg pa-msg-ai">
+      <div class="pa-bubble pa-bubble-ai">${pulseAiRenderMsgContent(m.content)}</div>
+      <div class="pa-msg-actions">
+        ${isScript ? `<button class="pa-act pa-act-primary" onclick="pulseAiShootScript('${m.id}')">🎬 Shoot in Studio</button>` : ""}
+        <button class="pa-act" onclick="pulseAiSaveScript('${m.id}')">💾 Save</button>
+        <button class="pa-act" onclick="window.copyTxt(S.pulseAi.messages.find(m2=>m2.id==='${m.id}').content);toast('Copied')">📋 Copy</button>
       </div>
-    </div>`:""}`;
+    </div>`;
+  }).join("") : `
+    <div class="pa-welcome">
+      <div class="pa-welcome-icon">${I.sparkle}</div>
+      <h4>Your AI Creative Partner</h4>
+      <p>I help you think, create, analyze, improve and grow. Bring an idea, a script, a stuck moment — or just ask what to post.</p>
+    </div>
+    <div class="pa-chips">${quickChips}</div>`;
+
+  return `${fab}
+  <div class="sheet-overlay open" onclick="if(event.target===this){closePulseAi()}">
+    <div class="sheet pulse-ai-sheet">
+      <div class="sheet-grip"></div>
+      <div class="sheet-h">
+        <div class="pa-header">
+          <div class="pa-logo">${I.sparkle}</div>
+          <div>
+            <h3>Pulse AI</h3>
+            <div class="pa-sub">Your creator co-pilot</div>
+          </div>
+        </div>
+        <div class="pa-header-actions">
+          ${hasMessages ? `<button class="pa-icon-act" title="New chat" onclick="resetPulseAiConversation()">${I.refresh}</button>` : ""}
+          <button class="sheet-close" onclick="closePulseAi()">×</button>
+        </div>
+      </div>
+
+      <div class="pa-context">
+        <select class="pa-select" onchange="S.pulseAi.platform=this.value;render()">
+          ${["tiktok","instagram","youtube","twitter","facebook","linkedin"].map(p => `<option value="${p}" ${P.platform===p?'selected':''}>${p[0].toUpperCase()+p.slice(1)}</option>`).join("")}
+        </select>
+        <select class="pa-select" onchange="S.pulseAi.goal=this.value;render()">
+          ${PULSE_AI_GOALS.map(g => `<option value="${g}" ${P.goal===g?'selected':''}>${g[0].toUpperCase()+g.slice(1)}</option>`).join("")}
+        </select>
+      </div>
+
+      <div class="pa-chat" id="pulse-chat-messages">
+        ${messagesHtml}
+        ${P.loading ? `<div class="pa-msg pa-msg-ai"><div class="pa-bubble pa-bubble-ai pa-typing"><span></span><span></span><span></span></div></div>` : ""}
+        ${(S.errors && S.errors.pulseAi) ? errCard(S.errors.pulseAi, "sendPulseAiMessage()", "pulseAi") : ""}
+      </div>
+
+      <div class="pa-inputbar">
+        <textarea id="pulse-input" class="pa-input" rows="1" placeholder="Ask Pulse AI anything — 'I have an idea…', 'Give me 5 hooks'"
+          oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px';S.pulseAi.input=this.value"
+          onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();sendPulseAiMessage();}">${esc(P.input||"")}</textarea>
+        <button class="pa-send" onclick="sendPulseAiMessage()" ${P.loading?"disabled":""} aria-label="Send">${I.bolt}</button>
+      </div>
+    </div>
+  </div>`;
 }
+
 window.coachUploadScreenshot = (e) => {
   const f = e.target.files?.[0]; if(!f) return;
-  toast("Screenshot attached — Coach will describe what it sees.");
+  toast("Screenshot attached — Pulse AI will use it for context.");
   S.coachMetrics = (S.coachMetrics||"") + `\n[Uploaded analytics screenshot: ${f.name} (${Math.round(f.size/1024)}KB)]`;
   render();
 };
+
+// legacy — kept for any other calls but not used in tab bar anymore
+function pageCoach(){ return ""; }
 
 // legacy — kept for any other calls but not used in tab bar anymore
 function pageCoach(){ return ""; }
@@ -958,7 +1043,7 @@ else if (kind === "terms" || kind === "privacy" || kind === "cookies" || kind ==
           "<b>Hooks</b> — 50+ proven opening lines adapted to your niche.",
           "<b>Calendar</b> — plan and schedule your content, optionally synced to Google Calendar.",
           "<b>Create Studio</b> — generate scripts, thumbnails, and carousel ideas.",
-          "<b>AI Coach</b> — personalized advice based on your niches and platforms."
+          "<b>Pulse AI</b> — your creative partner, scriptwriter, and growth assistant."
         ]),
         H("Why we built it"),
         P("Every creator loses hours a day scrolling to find what to post. " + OP + " does that scrolling for you and gives you a shortlist that's actually relevant."),

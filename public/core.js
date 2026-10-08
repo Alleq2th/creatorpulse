@@ -98,7 +98,18 @@ const S = {
   // Agenda at once, instead of needing the same fix three separate times
   // in three separate places.
   pendingSchedule: [],
-  coachHandle: "", coachPlatform: "instagram", coachMetrics: "", coachAnswer: "", coachLoading: false,
+  coachHandle: "", coachPlatform: "tiktok", coachMetrics: "", coachAnswer: "", coachLoading: false,
+    pulseAi: {
+      open: false,
+      messages: [],
+      loading: false,
+      platform: "tiktok",
+      goal: "views",
+      niche: "",
+      brandVoice: "",
+      input: "",
+      activeAction: "chat"
+    },
   addSched: { title:"", date:"", time:"20:00", notes:"" },
   quickAdd: null, // { date: "YYYY-MM-DD", title: "" } — set when a specific calendar day is tapped
   hooksNiche: null, hooksSearch: "", hooksCache: {}, uqCheck: { text:"", loading:false, result:null },
@@ -1158,21 +1169,194 @@ window.delSaved = async (id) => {
   if(d.success){ toast("Deleted"); loadSaved(); loadSchedule(); }
 };
 
-// ─── COACH ──────────────────────────────────────────────────────────────────
-window.runCoach = async () => {
-  S.coachLoading = true; S.coachAnswer = ""; delete S.errors.coach; render();
+// ─── PULSE AI (INTELLIGENT CREATOR PARTNER) ─────────────────────────────────
+window.openPulseAi = (initialPrompt, initialAction) => {
+  if (!S.pulseAi) S.pulseAi = { open: false, messages: [], loading: false, platform: "tiktok", goal: "views", niche: "", brandVoice: "", input: "" };
+  S.pulseAi.open = true;
+  S.coachOpen = true; // backward compatibility
+  if (!S.pulseAi.niche && S.user?.niches?.[0]) S.pulseAi.niche = S.user.niches[0];
+  if (!S.pulseAi.platform && (S.coachPlatform || S.user?.primaryPlatform)) S.pulseAi.platform = S.coachPlatform || S.user?.primaryPlatform || "tiktok";
+
+  if (!S.pulseAi.messages || S.pulseAi.messages.length === 0) {
+    try {
+      const stored = localStorage.getItem("cp_pulse_ai_messages");
+      if (stored) S.pulseAi.messages = JSON.parse(stored);
+    } catch(e){}
+  }
+
+  render();
+
+  if (initialPrompt) {
+    window.sendPulseAiMessage(initialPrompt, initialAction);
+  } else {
+    setTimeout(() => {
+      const el = document.getElementById("pulse-input");
+      if (el) el.focus();
+    }, 120);
+  }
+};
+
+window.closePulseAi = () => {
+  if (S.pulseAi) S.pulseAi.open = false;
+  S.coachOpen = false;
+  render();
+};
+
+window.resetPulseAiConversation = () => {
+  if (S.pulseAi?.messages?.length > 0 && !confirm("Start a fresh conversation with Pulse AI?")) return;
+  if (S.pulseAi) {
+    S.pulseAi.messages = [];
+    S.pulseAi.loading = false;
+    S.pulseAi.input = "";
+  }
+  S.coachAnswer = "";
+  try { localStorage.removeItem("cp_pulse_ai_messages"); } catch(e){}
+  render();
+  toast("Started fresh chat");
+};
+
+function scrollPulseAiToBottom(){
+  setTimeout(() => {
+    const list = document.getElementById("pulse-chat-messages");
+    if (list) list.scrollTop = list.scrollHeight;
+  }, 60);
+}
+window.scrollPulseAiToBottom = scrollPulseAiToBottom;
+
+window.sendPulseAiMessage = async (customText, actionType) => {
+  if (!S.pulseAi) S.pulseAi = { open: true, messages: [], loading: false, platform: "tiktok", goal: "views", niche: "", input: "" };
+  const inputEl = document.getElementById("pulse-input");
+  const text = (customText !== undefined ? customText : (inputEl ? inputEl.value : (S.pulseAi.input || ""))).trim();
+  if (!text) return;
+
+  if (inputEl) { inputEl.value = ""; inputEl.style.height = "auto"; }
+  S.pulseAi.input = "";
+
+  const userMsg = {
+    id: "msg_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
+    role: "user",
+    content: text,
+    timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    action: actionType || "chat"
+  };
+
+  S.pulseAi.messages.push(userMsg);
+  S.pulseAi.loading = true;
+  S.coachLoading = true;
+  delete S.errors.pulseAi;
+  delete S.errors.coach;
+  render();
+  scrollPulseAiToBottom();
+
   try {
-    const conns = Object.entries(S.connections||{}).map(([k,v])=>`${k}: ${v.handle||"(connected)"}`).join(", ");
-    const savedRecent = (S.saved||[]).slice(0,10).map(p=>`${p.content_type} on ${p.platform} for ${p.niche}: ${p.headline}`).join("\n");
-    const context = `Connected accounts: ${conns||"none"}\nRecent picks the creator saved:\n${savedRecent||"(nothing yet)"}\nCreator-provided analytics:\n${S.coachMetrics||"(not shared yet)"}`;
-    const d = await api("/api/coach", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
-      handle: S.coachHandle, platform: S.coachPlatform, niche: S.user?.niches?.[0], recentMetrics: context
-    })});
-    if(d.error) throw new Error(d.error);
-    S.coachAnswer = d.text || "No response";
-    delete S.errors.coach;
-  } catch(e){ S.coachAnswer = ""; S.errors.coach = "Something went wrong — try again."; }
-  S.coachLoading = false; render();
+    const conns = Object.entries(S.connections || {}).map(([k, v]) => `${k}: ${v.handle || "(connected)"}`).join(", ");
+    const savedRecent = (S.saved || []).slice(0, 6).map(p => `${p.content_type} on ${p.platform} for ${p.niche}: ${p.headline}`).join("\n");
+    const payload = {
+      messages: S.pulseAi.messages.map(m => ({ role: m.role, content: m.content })),
+      action: actionType || "chat",
+      context: {
+        handle: S.coachHandle || S.user?.handle || S.user?.name || "creator",
+        platform: S.pulseAi.platform || S.coachPlatform || "tiktok",
+        niche: S.pulseAi.niche || S.user?.niches?.[0] || "general",
+        goal: S.pulseAi.goal || "views",
+        brandVoice: S.pulseAi.brandVoice || "",
+        recentMetrics: S.coachMetrics || "",
+        recentPosts: savedRecent || "",
+        connections: conns || ""
+      }
+    };
+
+    const d = await api("/api/pulse-ai", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    if (d.error) throw new Error(d.error);
+
+    const assistantMsg = {
+      id: "msg_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
+      role: "assistant",
+      content: d.text || "No response generated.",
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      action: d.action || actionType
+    };
+
+    S.pulseAi.messages.push(assistantMsg);
+    S.coachAnswer = assistantMsg.content;
+
+    try {
+      localStorage.setItem("cp_pulse_ai_messages", JSON.stringify(S.pulseAi.messages.slice(-30)));
+    } catch(e){}
+
+  } catch (err) {
+    S.errors.pulseAi = "Pulse AI is temporarily unavailable. Check your connection or try again.";
+    S.errors.coach = S.errors.pulseAi;
+    toast("Pulse AI error — try again");
+  } finally {
+    S.pulseAi.loading = false;
+    S.coachLoading = false;
+    render();
+    scrollPulseAiToBottom();
+  }
+};
+
+window.pulseAiShootScript = (msgId) => {
+  const msg = S.pulseAi?.messages?.find(m => m.id === msgId);
+  if (!msg) return;
+  const text = msg.content;
+  const title = (text.match(/TITLE:\s*([^\n]+)/i)?.[1] || `Pulse AI Script (${S.pulseAi.platform || "Short-form"})`).trim();
+
+  window.closePulseAi();
+
+  if (typeof window.svOpenWithScript === "function") {
+    window.svOpenWithScript(text, title);
+  } else {
+    S.tab = "create";
+    render();
+    setTimeout(() => {
+      if (typeof window.svOpenWithScript === "function") {
+        window.svOpenWithScript(text, title);
+      } else {
+        window.copyTxt(text);
+        toast("Copied script! Open Studio to record.");
+      }
+    }, 150);
+  }
+};
+
+window.pulseAiSaveScript = async (msgId) => {
+  const msg = S.pulseAi?.messages?.find(m => m.id === msgId);
+  if (!msg) return;
+  const title = (msg.content.match(/TITLE:\s*([^\n]+)/i)?.[1] || msg.content.slice(0, 45) + "...").trim();
+  const today = new Date();
+  const sd = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
+  try {
+    const res = await api("/api/user-schedule", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        token: S.token,
+        title: title,
+        platform: S.pulseAi.platform || "tiktok",
+        contentType: "Script",
+        scheduledDate: sd,
+        notes: msg.content
+      })
+    });
+    if (res.error) throw new Error(res.error);
+    toast("Saved to your Calendar & Library!");
+    loadSaved();
+    loadSchedule();
+  } catch(e) {
+    window.copyTxt(msg.content);
+    toast("Copied to clipboard!");
+  }
+};
+
+// Backward-compatible coach runner
+window.runCoach = async () => {
+  window.openPulseAi(S.coachMetrics ? `Analyze my performance with these metrics:\n${S.coachMetrics}` : "Give me a weekly creator audit — what is working, what to fix, and 3 experiments to try.", "coach");
 };
 
 // ─── SCHEDULE ADD ───────────────────────────────────────────────────────────
@@ -1516,6 +1700,7 @@ function topBar(kicker, backTo, showRefresh){
   // or Discover. Now it only shows where the caller asks for it.
   return `<div class="topbar">${backTo ? `<button class="iconbtn tipbtn" data-tip="Back" title="Back" aria-label="Back" onclick="setTab('${backTo}')" style="margin-right:8px">${I.back}</button>` : ""}<div class="brand"><img src="/logo-64.png" class="brand-mark" alt="CreatorPulse"/><div class="brand-name">CreatorPulse</div></div>
     <div class="topbar-right">
+      <button class="iconbtn tipbtn pulse-ai-topbar-btn" data-tip="Pulse AI" title="Pulse AI" aria-label="Pulse AI" onclick="openPulseAi()" style="color:var(--tint-tx);font-weight:700">${I.sparkle}</button>
       ${showRefresh ? `<button class="iconbtn tipbtn" data-tip="Refresh trends" title="Refresh trends" aria-label="Refresh trends" onclick="loadTrends();loadNotifs();toast('Refreshing')">${I.refresh}</button>` : ""}
       <div class="bell-wrap">
         <button class="iconbtn tipbtn" data-tip="Notifications" title="Notifications" aria-label="Notifications" onclick="toggleBell(event)">${I.bell}</button>

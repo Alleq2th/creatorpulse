@@ -22,7 +22,7 @@
      styles at all -- it is why the Create screen came up unstyled. Kept as a
      separate file (rather than inlined) so it can be cached and versioned on
      its own. -->
-<link rel="stylesheet" href="studio.css?v=24">
+<link rel="stylesheet" href="studio.css?v=25">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -562,7 +562,7 @@ body{padding-bottom:var(--tab-h);letter-spacing:-0.005em}
 .insp-hl{font-size:13px;font-weight:600;line-height:1.35}
 .insp-meta{font-size:10px;color:var(--mu);margin-top:3px}
 
-/* Floating AI Coach button */
+/* Floating Pulse AI button (fab-coach retained for test compatibility) */
 /* Coach was a floating gradient pill sitting on the same bottom-right corner
    as everything else, overlapping list content. It's now a slim tab anchored
    to the right edge — one floating element instead of stacking on top of
@@ -572,6 +572,52 @@ body{padding-bottom:var(--tab-h);letter-spacing:-0.005em}
 .fab-coach:active{transform:scale(.97)}
 .fab-coach .icon{width:16px;height:16px;stroke:var(--ac);fill:none}
 @media(min-width:900px){.fab-coach{display:none}}
+
+/* ── PULSE AI — CONVERSATIONAL WORKSPACE ── */
+.pulse-ai-sheet{max-height:88vh;display:flex;flex-direction:column;padding:0!important}
+.pa-header{display:flex;align-items:center;gap:10px;flex:1}
+.pa-logo{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#7C3AED,#EC4899);display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0}
+.pa-logo .icon{width:18px;height:18px;stroke:#fff;fill:none}
+.pa-header h3{margin:0;font-size:15px;font-weight:800;letter-spacing:.2px}
+.pa-sub{font-size:10.5px;color:var(--mu);margin-top:1px}
+.pa-header-actions{display:flex;gap:6px;align-items:center}
+.pa-icon-act{background:none;border:1px solid var(--br);border-radius:8px;padding:5px 7px;color:var(--mu);cursor:pointer}
+.pa-icon-act:hover{color:var(--tx);border-color:var(--br2)}
+.pa-context{display:flex;gap:8px;padding:8px 16px;border-bottom:1px solid var(--br)}
+.pa-select{flex:1;background:var(--sf2);border:1px solid var(--br);color:var(--tx);border-radius:8px;padding:6px 8px;font:600 11px var(--sans)}
+.pa-chat{flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:12px;min-height:200px;max-height:52vh}
+.pa-msg{display:flex;flex-direction:column}
+.pa-msg-user{align-items:flex-end}
+.pa-msg-ai{align-items:flex-start}
+.pa-bubble{max-width:88%;padding:10px 12px;border-radius:14px;font-size:12.5px;line-height:1.55;word-break:break-word}
+.pa-bubble-user{background:var(--tint,#EEE9F8);color:var(--tint-tx,#3C3060);border-bottom-right-radius:4px}
+.pa-bubble-ai{background:var(--sf2);color:var(--tx);border-bottom-left-radius:4px}
+.pa-bubble-ai .pa-h{font-weight:800;font-size:13px;margin:10px 0 4px}
+.pa-msg-actions{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+.pa-act{background:var(--sf2);border:1px solid var(--br);color:var(--tx);border-radius:8px;padding:5px 10px;font:600 11px var(--sans);cursor:pointer}
+.pa-act:hover{border-color:var(--br2)}
+.pa-act-primary{background:linear-gradient(135deg,#7C3AED,#EC4899);color:#fff;border:none}
+.pa-act-primary:hover{opacity:.9}
+.pa-welcome{text-align:center;padding:28px 8px 16px;color:var(--tx)}
+.pa-welcome-icon{width:52px;height:52px;margin:0 auto 12px;border-radius:16px;background:linear-gradient(135deg,#7C3AED,#EC4899);display:flex;align-items:center;justify-content:center}
+.pa-welcome-icon .icon{width:26px;height:26px;stroke:#fff;fill:none}
+.pa-welcome h4{margin:0 0 6px;font-size:16px;font-weight:800}
+.pa-welcome p{margin:0;font-size:12px;color:var(--mu);line-height:1.55;max-width:280px;margin-left:auto;margin-right:auto}
+.pa-chips{display:flex;flex-wrap:wrap;gap:8px;padding:8px 16px 12px;justify-content:center}
+.pa-chip{background:var(--sf2);border:1px solid var(--br);color:var(--tx);border-radius:999px;padding:7px 12px;font:600 11px var(--sans);cursor:pointer;transition:all .15s}
+.pa-chip:hover{border-color:#7C3AED;color:#7C3AED}
+.pa-inputbar{display:flex;gap:8px;align-items:flex-end;padding:10px 16px calc(10px + env(safe-area-inset-bottom));border-top:1px solid var(--br);background:var(--bg)}
+.pa-input{flex:1;background:var(--sf2);border:1px solid var(--br);color:var(--tx);border-radius:12px;padding:10px 12px;font:500 12.5px var(--sans);resize:none;outline:none;min-height:40px;max-height:120px}
+.pa-input:focus{border-color:#7C3AED}
+.pa-send{background:linear-gradient(135deg,#7C3AED,#EC4899);border:none;border-radius:12px;width:40px;height:40px;display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0}
+.pa-send .icon{width:18px;height:18px;stroke:#fff;fill:none}
+.pa-send:disabled{opacity:.5;cursor:not-allowed}
+.pa-typing{display:flex;gap:4px;align-items:center}
+.pa-typing span{width:7px;height:7px;border-radius:50%;background:var(--mu);opacity:.5;animation:pa-bounce 1s infinite}
+.pa-typing span:nth-child(2){animation-delay:.15s}
+.pa-typing span:nth-child(3){animation-delay:.3s}
+@keyframes pa-bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+.pulse-ai-topbar-btn{color:#7C3AED!important}
 
 /* ── STUDIO ── */
 .st-wrap{display:flex;flex-direction:column;gap:12px}
@@ -1521,13 +1567,13 @@ body{padding-bottom:var(--tab-h);letter-spacing:-0.005em}
 
 <div id="root"></div>
 
-<script src="lib/apiBase.js?v=24"></script>
-<script src="lib/authRedirect.js?v=24"></script>
-<script src="lib/studioModel.js?v=24"></script>
-<script src="core.js?v=24"></script>
-<script src="lib/studioPerf.js?v=24"></script>
-<script src="studio.js?v=24"></script>
-<script src="app.js?v=24"></script>
+<script src="lib/apiBase.js?v=25"></script>
+<script src="lib/authRedirect.js?v=25"></script>
+<script src="lib/studioModel.js?v=25"></script>
+<script src="core.js?v=25"></script>
+<script src="lib/studioPerf.js?v=25"></script>
+<script src="studio.js?v=25"></script>
+<script src="app.js?v=25"></script>
 <script>
   if("serviceWorker" in navigator){
     window.addEventListener("load", () => {
