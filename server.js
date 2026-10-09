@@ -1950,28 +1950,277 @@ app.post("/api/user-schedule", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── AI COACH — analyse creator's stated metrics/handle ──────────────────────
+// ── PULSE AI — Intelligent Creator Creative Partner & Strategist ───────────
+function buildPulseAiSystemPrompt(context = {}, action = "chat") {
+  const platform = context.platform || "TikTok & Reels";
+  const niche = context.niche || "creator content";
+  const goal = context.goal || "audience growth & viral reach";
+  const handle = context.handle ? ("@" + String(context.handle).replace(/^@/, "")) : "creator";
+  const brandVoice = context.brandVoice || "authentic, tactical, punchy, high-energy";
+  const recentMetrics = context.recentMetrics ? ("\nRecent metrics: " + context.recentMetrics) : "";
+  const recentPosts = context.recentPosts ? ("\nRecent saved content context: " + context.recentPosts) : "";
+  const connections = context.connections ? ("\nConnected handles: " + context.connections) : "";
+
+  let actionDirective = "";
+  if (action === "script" || action === "idea_to_script") {
+    actionDirective = `
+FORMAT REQUIREMENT (CAMERA-READY STUDIO SCRIPT):
+Always format scripts cleanly so creators can send them directly to the CreatorPulse teleprompter:
+
+TITLE: [Working Title]
+PLATFORM: ${platform} | RUNTIME: 30-45s | GOAL: ${goal}
+
+[HOOK - 0 to 3s]:
+(Visual): [Specific camera angle, dynamic movement, or text overlay]
+(Spoken): "[The exact opening sentence that arrests the scroll and creates curiosity]"
+
+[BODY - 4 to 35s]:
+(Visual): [Cut to B-Roll, demo, or face-to-camera punch in]
+(Spoken): "[First critical insight or narrative turning point]"
+
+(Visual): [Screen demonstration or gesture cue]
+(Spoken): "[Second insight or practical breakthrough]"
+
+[PAYOFF & CTA - Final 5s]:
+(Visual): [Direct eye contact, save/share prompt graphic]
+(Spoken): "[Memorable punchline and clear conversational CTA]"
+
+PRODUCTION NOTES:
+- B-Roll & Visual Assets: 2-3 specific visual recommendations.
+- Captions / Text on screen: The 2 key phrases that must be highlighted.`;
+  } else if (action === "hooks") {
+    actionDirective = `
+FORMAT REQUIREMENT (HOOK LAB):
+Provide 5-7 high-converting scroll-stopping hooks tailored for ${niche} on ${platform}:
+1. [The Curiosity Gap]: Hook + (Visual cue)
+2. [The Contrarian Hot-Take]: Hook + (Visual cue)
+3. [The Negative Reality / Mistake]: Hook + (Visual cue)
+4. [The Story In Medias Res]: Hook + (Visual cue)
+5. [The Step-by-Step Blueprint]: Hook + (Visual cue)
+For each, explain in 1 sentence why it stops the viewer.`;
+  } else if (action === "what_to_post") {
+    actionDirective = `
+FORMAT REQUIREMENT (WHAT SHOULD I POST TODAY?):
+Provide 3 distinct, high-impact options ready to film today:
+Option 1 — High-Growth Top-of-Funnel (Broad viral reach)
+- Working Title & Hook
+- 30-second premise & visual angle
+- Why it works today
+
+Option 2 — High-Retention Authority (Saves & Shares)
+- Working Title & Hook
+- Tactical lesson or framework
+- Why it works today
+
+Option 3 — Community & Discussion (High Comments)
+- Hot take or debate angle
+- Question prompt
+- Why it works today`;
+  } else if (action === "calendar") {
+    actionDirective = `
+FORMAT REQUIREMENT (7-DAY CONTENT CALENDAR):
+Provide a practical, high-velocity 7-day schedule for ${niche}:
+Day 1 (${platform}) — [Format: Video] | Goal: Reach | Hook & Concept
+Day 2 (${platform}) — [Format: Carousel/Breakdown] | Goal: Saves | Hook & Concept
+Day 3 (${platform}) — [Format: Story/Short] | Goal: Engagement | Hook & Concept
+Day 4 (${platform}) — [Format: Opinion/Rant] | Goal: Comments | Hook & Concept
+Day 5 (${platform}) — [Format: Tutorial] | Goal: Shares | Hook & Concept
+Day 6 (${platform}) — [Format: Personal/Behind-the-Scenes] | Goal: Trust | Hook & Concept
+Day 7 (${platform}) — [Format: Weekly Recap/Challenge] | Goal: Community | Hook & Concept`;
+  } else if (action === "repurpose") {
+    actionDirective = `
+FORMAT REQUIREMENT (CONTENT MULTIPLIER):
+Turn the core concept into 5 platform assets:
+1. TikTok / Reels / Shorts 30s Script
+2. Instagram Carousel (5-slide breakdown with slide copy)
+3. X / Twitter Hook & Thread
+4. LinkedIn Post (Story + lesson + takeaway)
+5. YouTube Community or Newsletter Blurb`;
+  } else if (action === "coach" || action === "analyze") {
+    actionDirective = `
+FORMAT REQUIREMENT (CREATOR AUDIT & STRATEGY):
+Give candid, senior creator manager coaching:
+- What is working (strengths to double down on)
+- What is hurting retention (weak hooks, pacing drags, vague CTAs)
+- 3 immediate, tactical experiments to run this week`;
+  } else {
+    actionDirective = `
+CREATIVE COLLABORATOR GUIDELINES:
+- Act as an intelligent, proactive creative partner.
+- If the user shares an idea, do not just say "great idea" — expand it with hooks, angles, and camera-ready scripts.
+- If an idea has flaws, constructively suggest a higher-retention pivot.
+- Format scripts with [HOOK], [BODY], and [CTA] whenever video content is discussed.`;
+  }
+
+  return `You are Pulse AI — the dedicated AI creative partner, content strategist, script director, and growth assistant inside Creators Pulse.
+You are NOT a generic chatbot. Never start with "Certainly!", "As an AI...", or canned filler. Speak like an elite creator director: knowledgeable, fast, punchy, honest, and hyper-tactical.
+
+CREATOR IDENTITY & CONTEXT:
+- Creator: ${handle}
+- Niche: ${niche}
+- Primary Platform: ${platform}
+- Core Goal: ${goal}
+- Brand Voice: ${brandVoice}${recentMetrics}${recentPosts}${connections}
+${actionDirective}`;
+}
+
+function generatePulseAiFallback(action, context = {}, userPrompt = "") {
+  const niche = context.niche || "your niche";
+  const platform = context.platform || "TikTok";
+  const goal = context.goal || "views";
+
+  if (action === "hooks" || userPrompt.toLowerCase().includes("hook")) {
+    return `Here are 5 high-retention hooks engineered for ${niche} on ${platform}:
+
+1. **The Curiosity Gap**: "Almost everyone in ${niche} is doing this backwards, and here is why..."
+   *(Visual cue: Hold up phone or whiteboard, shake head slowly)*
+
+2. **The Contrarian Reality**: "Stop wasting time on conventional ${niche} advice. Here is what actually moved the needle for me."
+   *(Visual cue: Push past a stack of notes or snap fingers close to lens)*
+
+3. **The Urgent Warning**: "If you do not fix this one habit in the next 30 days, your growth will stay flat."
+   *(Visual cue: Direct stare, whisper delivery, sharp zoom)*
+
+4. **The Direct Breakdown**: "Here is the exact 3-step formula I use to achieve ${goal} without burnout."
+   *(Visual cue: Hold up 3 fingers, cut directly to demonstration)*
+
+5. **The Unpopular Truth**: "You do not need a huge budget or team to dominate ${niche}. You just need this."
+   *(Visual cue: Step towards camera, casual authentic delivery)*`;
+  }
+
+  if (action === "what_to_post" || userPrompt.toLowerCase().includes("what should i post")) {
+    return `Here are 3 high-impact content options you can record today for ${niche}:
+
+**Option 1: Top-of-Funnel Reach (Short-Form Video)**
+- **Hook**: "The single biggest mistake people make in ${niche} before they see results."
+- **Angle**: Point out an unspoken friction point in your niche and explain the 20-second fix.
+- **Why today**: Great for quick algorithmic distribution and new profile visits.
+
+**Option 2: High-Save Authority Piece (Step-by-Step Breakdown)**
+- **Hook**: "Save this before you plan your next ${niche} project. Here is the master checklist."
+- **Angle**: 3 rapid-fire actionable steps with on-screen text graphics.
+- **Why today**: High save-to-like ratio signals quality to the ${platform} algorithm.
+
+**Option 3: High-Comment Hot Take (Discussion Starter)**
+- **Hook**: "I might get hate for this, but someone had to say it..."
+- **Angle**: Share an authentic opinion on a current debate or popular myth in ${niche}.
+- **Why today**: Promotes healthy comment debates which spike engagement velocity.`;
+  }
+
+  if (action === "calendar" || userPrompt.toLowerCase().includes("calendar") || userPrompt.toLowerCase().includes("plan")) {
+    return `Here is your 7-Day Content Roadmap for ${niche} on ${platform}:
+
+- **Day 1**: *The Common Mistake* (30s Video) — Goal: Broad Reach
+  *Hook*: "Stop doing this in ${niche} if you want real results."
+- **Day 2**: *The Step-by-Step Blueprint* (Carousel / Breakdown) — Goal: High Saves
+  *Hook*: "The 3 rules I follow every week."
+- **Day 3**: *Personal Behind-The-Scenes / Story* (Short Reel) — Goal: Audience Trust
+  *Hook*: "What nobody tells you about starting in ${niche}."
+- **Day 4**: *The Contrarian Hot Take* (Video Discussion) — Goal: High Comments
+  *Hook*: "Unpopular opinion: this standard advice is hurting you."
+- **Day 5**: *The Rapid-Fire Hack / Tool* (20s Video) — Goal: Shares & Viral
+  *Hook*: "The fastest shortcut I found for ${goal}."
+- **Day 6**: *Q&A / Audience Response* (Casual Camera) — Goal: Community
+  *Hook*: "Replying to the most asked question this month..."
+- **Day 7**: *Weekly Reflection & Next Target* (Story or Short) — Goal: Retention
+  *Hook*: "One thing I learned this week that changed my workflow."`;
+  }
+
+  // Default camera-ready script
+  return `TITLE: The ${niche} Breakthrough Formula
+PLATFORM: ${platform} | RUNTIME: 35s | GOAL: ${goal}
+
+[HOOK - 0 to 3s]:
+(Visual): Sharp camera zoom or sudden object reveal, direct eye contact.
+(Spoken): "If you are struggling with ${niche}, stop scrolling — because this changes everything."
+
+[BODY - 4 to 28s]:
+(Visual): Cut to B-Roll or on-screen demonstration.
+(Spoken): "Most creators spend hours doing the hard way. But here is the secret: you only need two core adjustments. First, stop trying to please everyone and speak directly to the viewer who needs this today."
+
+(Visual): Face-to-camera punch in, point to screen.
+(Spoken): "Second, eliminate the fluff in the first 3 seconds. The moment you give immediate value, your watch time doubles."
+
+[PAYOFF & CTA - Final 7s]:
+(Visual): Direct eye contact, tap on screen graphic.
+(Spoken): "Try this on your next post. Tap save so you do not lose this, and drop your questions in the comments below."
+
+PRODUCTION TIPS:
+- Energy: Keep pacing brisk with zero dead air.
+- Text Overlays: Flash "2 Core Adjustments" at 0:08 and "Immediate Value" at 0:20.`;
+}
+
+async function handlePulseAi(req, res) {
+  const { messages, message, prompt, action = "chat", context = {} } = req.body || {};
+  const userText = message || prompt || (Array.isArray(messages) && messages.filter(m => m && m.role === "user").slice(-1)[0]?.content) || "Help me brainstorm content for my niche.";
+  const systemPrompt = buildPulseAiSystemPrompt(context, action);
+
+  let chatHistory = [];
+  if (Array.isArray(messages) && messages.length > 0) {
+    chatHistory = messages
+      .filter(m => m && (m.role === "user" || m.role === "assistant"))
+      .slice(-10)
+      .map(m => ({ role: m.role, content: String(m.content || "") }));
+  } else {
+    chatHistory = [{ role: "user", content: userText }];
+  }
+
+  if (!chatHistory.some(m => m.role === "user")) {
+    chatHistory.push({ role: "user", content: userText });
+  }
+
+  if (GROQ_KEY) {
+    const modelsToTry = ["openai/gpt-oss-120b", "llama-3.3-70b-versatile", "llama-3.1-8b-instant"];
+    for (const model of modelsToTry) {
+      try {
+        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "Authorization": "Bearer " + GROQ_KEY },
+          body: JSON.stringify({
+            model,
+            messages: [{ role: "system", content: systemPrompt }, ...chatHistory],
+            max_tokens: 1600,
+            temperature: 0.7
+          })
+        });
+
+        if (response.status === 429) {
+          await new Promise(r => setTimeout(r, 1200));
+          continue;
+        }
+
+        if (response.ok) {
+          const data = await response.json();
+          const content = data.choices?.[0]?.message?.content;
+          if (content) {
+            return res.json({ text: content, action, model, success: true });
+          }
+        }
+      } catch (err) {
+        console.warn("[pulse-ai] Groq error with " + model + ":", err.message);
+      }
+    }
+  }
+
+  // Resilient fallback engine
+  const fallback = generatePulseAiFallback(action, context, userText);
+  return res.json({ text: fallback, action, model: "pulse-ai-engine", success: true });
+}
+
+// ── PULSE AI ENDPOINT ───────────────────────────────────────────────────────
+app.post("/api/pulse-ai", handlePulseAi);
+
+// ── BACKWARD-COMPATIBLE COACH ENDPOINT ──────────────────────────────────────
 app.post("/api/coach", async (req, res) => {
-  const { handle, platform, niche, recentMetrics, question } = req.body;
-  const system = `You are CreatorPulse Coach — a straight-talking creator strategist. Give specific, tactical, kind but blunt feedback. No filler, no motivational fluff. Use short paragraphs and clear numbered actions.`;
-  const user = `Platform: ${platform || "unspecified"}. Handle: ${handle || "n/a"}. Niche: ${niche || "n/a"}.
-Recent metrics (creator-provided): ${recentMetrics || "not shared"}.
-Coaching question: ${question || "Give me a weekly report — 3 things working, 3 to fix, 3 experiments to try."}`;
-  try {
-    const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${GROQ_KEY}` },
-      body: JSON.stringify({
-        model: "openai/gpt-oss-120b",
-        messages: [{ role: "system", content: system }, { role: "user", content: user }],
-        max_tokens: 900, temperature: 0.6
-      })
-    });
-    const d = await r.json();
-    if (d.error) return res.status(500).json({ error: d.error.message || "Groq error" });
-    res.json({ text: d.choices?.[0]?.message?.content || "" });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  const { handle, platform, niche, recentMetrics, question } = req.body || {};
+  req.body = {
+    action: "coach",
+    context: { handle, platform, niche, recentMetrics },
+    message: question || "Give me a weekly audit — 3 things working, 3 to fix, 3 experiments to try."
+  };
+  return handlePulseAi(req, res);
 });
+
 
 // ── GOOGLE CALENDAR OAUTH (unchanged) ───────────────────────────────────────
 app.get("/api/google-auth-url", (_req, res) => {
@@ -2758,7 +3007,7 @@ app.get("/api/legal/privacy", (_req, res) => {
     text: [
       "Videos recorded in Create Studio never leave your device. Camera + mic run locally in your browser.",
       "Account data (email, niches, saved posts) is stored securely for your account only.",
-      "Connected social handles are stored so the AI Coach can personalize advice. We never post on your behalf.",
+      "Connected social handles are stored so Pulse AI can personalize advice. We never post on your behalf.",
       "Anonymous analytics events are collected (which tabs used, feature drop-off). No content bodies are logged.",
       "You can export or wipe your data any time from Profile → Data & Privacy.",
       "Contact: support@creatorpulse.app to request deletion.",
