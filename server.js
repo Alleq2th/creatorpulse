@@ -1950,8 +1950,149 @@ app.post("/api/user-schedule", async (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── PULSE AI — Intelligent Creator Creative Partner & Strategist ───────────
-function buildPulseAiSystemPrompt(context = {}, action = "chat") {
+// ── PULSE AI — Intelligent Creator Creative Partner, Strategist & Memory Engine ──
+const PULSE_MEMORY_FILE = path.join(__dirname, "data", "pulse_memory.json");
+
+const DEFAULT_PULSE_MEMORY = {
+  characterTraits: [
+    "Direct, punchy, high-energy creator",
+    "Debate-driven, bold, and opinionated",
+    "Action-oriented: values camera-ready scripts over theory"
+  ],
+  likes: [
+    "Controversial 3-7 word text overlays placed at the 2-second mark",
+    "WWE & sports debate topics (John Cena, Roman Reigns, NBA, LeBron, soccer vs football)",
+    "Fast 20-30s camera-ready TikTok scripts with sound and visual cues",
+    "Immediate concrete options and interactive one-tap action chips"
+  ],
+  dislikes: [
+    "Open-ended interrogations and questions ('What is the play? What do you want?')",
+    "Generic motivational quotes or polite corporate AI filler",
+    "Raw ASCII tables and markdown pipes (|---|)",
+    "Long unfocused introductions"
+  ],
+  keyTopics: [
+    "WWE Wrestling (SmackDown, Raw, John Cena, Roman Reigns, Cody Rhodes)",
+    "NBA & Basketball (LeBron James, referee bias)",
+    "NFL & American Football (Tom Brady, Patrick Mahomes)",
+    "Football / Soccer rivalries"
+  ],
+  customRules: [
+    "Never ask open-ended questions like 'What is the play?' — always give clear options.",
+    "Never format outputs as raw markdown tables with pipes.",
+    "Keep scripts punchy with 2-second visual cues."
+  ],
+  updatedAt: new Date().toISOString()
+};
+
+function getPulseAiMemory() {
+  try {
+    if (fs.existsSync(PULSE_MEMORY_FILE)) {
+      const raw = fs.readFileSync(PULSE_MEMORY_FILE, "utf8");
+      return { ...DEFAULT_PULSE_MEMORY, ...JSON.parse(raw) };
+    }
+  } catch (e) {
+    console.warn("[pulse-ai] memory read error:", e.message);
+  }
+  return { ...DEFAULT_PULSE_MEMORY };
+}
+
+function savePulseAiMemory(mem) {
+  try {
+    const dir = path.dirname(PULSE_MEMORY_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    mem.updatedAt = new Date().toISOString();
+    fs.writeFileSync(PULSE_MEMORY_FILE, JSON.stringify(mem, null, 2), "utf8");
+  } catch (e) {
+    console.warn("[pulse-ai] memory save error:", e.message);
+  }
+}
+
+function updatePulseAiMemoryFromTurn(userText, memory) {
+  if (!userText || typeof userText !== "string") return memory;
+  const lower = userText.toLowerCase();
+  let modified = false;
+
+  // Learn dislikes
+  if (lower.includes("don't like") || lower.includes("dont like") || lower.includes("stop") || lower.includes("hate") || lower.includes("shabby") || lower.includes("no more")) {
+    if (lower.includes("table") && !memory.dislikes.some(d => d.toLowerCase().includes("table"))) {
+      memory.dislikes.push("Markdown tables with pipes (|---|)");
+      modified = true;
+    }
+    if ((lower.includes("question") || lower.includes("ask")) && !memory.dislikes.some(d => d.toLowerCase().includes("question"))) {
+      memory.dislikes.push("Being asked open-ended questions before getting answers");
+      modified = true;
+    }
+    if (lower.includes("shabby") && !memory.dislikes.some(d => d.toLowerCase().includes("shabby"))) {
+      memory.dislikes.push("Unformatted or shabby text layout");
+      modified = true;
+    }
+  }
+
+  // Learn likes
+  if (lower.includes("like") || lower.includes("love") || lower.includes("prefer") || lower.includes("give me") || lower.includes("more")) {
+    if (lower.includes("interactive") && !memory.likes.some(l => l.toLowerCase().includes("interactive"))) {
+      memory.likes.push("Interactive clickable options and direct action chips");
+      modified = true;
+    }
+    if (lower.includes("overlay") && !memory.likes.some(l => l.toLowerCase().includes("overlay"))) {
+      memory.likes.push("Punchy text overlays (3-7 words) for TikTok");
+      modified = true;
+    }
+    if (lower.includes("live") || lower.includes("espn") || lower.includes("real time")) {
+      if (!memory.likes.some(l => l.includes("ESPN") || l.includes("Live"))) {
+        memory.likes.push("Live real-time sports and news grounding (ESPN, WWE, Sports)");
+        modified = true;
+      }
+    }
+  }
+
+  // Learn key topics
+  const topicsToWatch = [
+    { key: "wwe", name: "WWE Wrestling" },
+    { key: "john cena", name: "John Cena" },
+    { key: "roman reigns", name: "Roman Reigns" },
+    { key: "cody rhodes", name: "Cody Rhodes" },
+    { key: "nba", name: "NBA Basketball" },
+    { key: "lebron", name: "LeBron James" },
+    { key: "espn", name: "ESPN Sports Intelligence" },
+    { key: "ufc", name: "UFC & MMA" },
+    { key: "nfl", name: "NFL Football" },
+    { key: "premier league", name: "Premier League Soccer" }
+  ];
+
+  topicsToWatch.forEach(({ key, name }) => {
+    if (lower.includes(key) && !memory.keyTopics.some(t => t.toLowerCase().includes(key))) {
+      memory.keyTopics.push(name);
+      modified = true;
+    }
+  });
+
+  if (modified) {
+    savePulseAiMemory(memory);
+  }
+  return memory;
+}
+
+async function fetchLivePulseData(query = "", niche = "") {
+  try {
+    const q = query ? `${query} site:espn.com OR breaking sports news` : `${niche || "sports"} news site:espn.com`;
+    const url = `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=en-US&gl=US&ceid=US:en`;
+    const feed = await parser.parseURL(url);
+    const items = (feed.items || []).slice(0, 5).map(it => ({
+      title: it.title,
+      source: it.source || it.creator || "Sports Wire",
+      pubDate: it.pubDate ? new Date(it.pubDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "Today",
+      link: it.link
+    }));
+    return items;
+  } catch (err) {
+    console.warn("[pulse-ai] live web fetch error:", err.message);
+    return [];
+  }
+}
+
+function buildPulseAiSystemPrompt(context = {}, action = "chat", memory = null, liveItems = []) {
   const platform = context.platform || "TikTok & Reels";
   const niche = context.niche || "creator content";
   const goal = context.goal || "audience growth & viral reach";
@@ -1961,17 +2102,43 @@ function buildPulseAiSystemPrompt(context = {}, action = "chat") {
   const recentPosts = context.recentPosts ? ("\nRecent saved content context: " + context.recentPosts) : "";
   const connections = context.connections ? ("\nConnected handles: " + context.connections) : "";
 
+  const mem = memory || getPulseAiMemory();
+
+  let liveContext = "";
+  if (Array.isArray(liveItems) && liveItems.length > 0) {
+    liveContext = `\n\nREAL-TIME WEB INTELLIGENCE (LIVE HEADLINES FROM ESPN & SPORTS NEWS TODAY):
+${liveItems.map(it => `- "${it.title}" (Source: ${it.source}, Date: ${it.pubDate})`).join("\n")}
+Ground your analysis, hooks, debate angles, or news recap directly in these real current events!`;
+  }
+
+  const memoryContext = `
+CREATOR MEMORY PROFILE (LEARNED OVER TIME — ADAPT DIRECTLY TO THIS CREATOR):
+- Character Traits: ${mem.characterTraits.join(", ")}
+- WHAT THIS CREATOR LOVES (LIKES): ${mem.likes.join("; ")}
+- WHAT THIS CREATOR DISLIKES / AVOIDS: ${mem.dislikes.join("; ")}
+- Core Topics & Entities: ${mem.keyTopics.join(", ")}
+- Custom Directives: ${mem.customRules.join("; ")}`;
+
+  const formattingRules = `
+STRICT OUTPUT FORMATTING RULES:
+1. NEVER USE RAW ASCII / MARKDOWN TABLES WITH PIPES (|---|---|). They break on mobile screens and look shabby.
+2. USE STRUCTURED CARD BLOCKS FOR HOOKS / LISTS:
+   ### 1. [Catchy Hook or Title]
+   - **Hook / Overlay**: "[Punchy 3-7 word text]"
+   - **Why It Works**: [1-sentence explanation of why it hooks the viewer]
+   - **Placement Tip**: [Clear visual or timing cue, e.g. "Drop at 0:02 mark as crowd roar hits"]
+3. DO NOT ASK OPEN-ENDED QUESTIONS: Never end responses with vague questions like "What's the play?", "What do you want to film?", or "Which match do you want?". Instead, be decisive, confident, and provide 2-3 concrete options ready to take action on.
+4. CAMERA-READY SCRIPTS: When writing scripts, always format with [HOOK], [BODY], and [CTA] and include visual and audio cues.`;
+
   let actionDirective = "";
   if (action === "script" || action === "idea_to_script") {
     actionDirective = `
 FORMAT REQUIREMENT (CAMERA-READY STUDIO SCRIPT):
-Always format scripts cleanly so creators can send them directly to the CreatorPulse teleprompter:
-
 TITLE: [Working Title]
 PLATFORM: ${platform} | RUNTIME: 30-45s | GOAL: ${goal}
 
 [HOOK - 0 to 3s]:
-(Visual): [Specific camera angle, dynamic movement, or text overlay]
+(Visual): [Specific camera angle, dynamic movement, or text overlay at 0:02 mark]
 (Spoken): "[The exact opening sentence that arrests the scroll and creates curiosity]"
 
 [BODY - 4 to 35s]:
@@ -1987,35 +2154,34 @@ PLATFORM: ${platform} | RUNTIME: 30-45s | GOAL: ${goal}
 
 PRODUCTION NOTES:
 - B-Roll & Visual Assets: 2-3 specific visual recommendations.
-- Captions / Text on screen: The 2 key phrases that must be highlighted.`;
+- Text on screen: The 2 key phrases to flash.`;
   } else if (action === "hooks") {
     actionDirective = `
-FORMAT REQUIREMENT (HOOK LAB):
-Provide 5-7 high-converting scroll-stopping hooks tailored for ${niche} on ${platform}:
-1. [The Curiosity Gap]: Hook + (Visual cue)
-2. [The Contrarian Hot-Take]: Hook + (Visual cue)
-3. [The Negative Reality / Mistake]: Hook + (Visual cue)
-4. [The Story In Medias Res]: Hook + (Visual cue)
-5. [The Step-by-Step Blueprint]: Hook + (Visual cue)
-For each, explain in 1 sentence why it stops the viewer.`;
+FORMAT REQUIREMENT (HOOK LAB — STRUCTURED CARDS):
+Provide 5 high-converting scroll-stopping hooks tailored for ${niche} on ${platform}.
+Format each as a numbered card block:
+### 1. [Hook Concept Name]
+- **Hook / Overlay**: "[Punchy text]"
+- **Why It Works**: [1-sentence why it stops the viewer]
+- **Placement Tip**: [Exact timing and visual cue]`;
   } else if (action === "what_to_post") {
     actionDirective = `
 FORMAT REQUIREMENT (WHAT SHOULD I POST TODAY?):
 Provide 3 distinct, high-impact options ready to film today:
-Option 1 — High-Growth Top-of-Funnel (Broad viral reach)
-- Working Title & Hook
-- 30-second premise & visual angle
-- Why it works today
+### Option 1 — Viral Top-of-Funnel (Broad Reach)
+- **Hook / Premise**: [Punchy 3-second hook]
+- **Visual Angle**: [20-30s video concept]
+- **Why It Works**: [Why it spikes algorithm distribution]
 
-Option 2 — High-Retention Authority (Saves & Shares)
-- Working Title & Hook
-- Tactical lesson or framework
-- Why it works today
+### Option 2 — High-Retention Authority (Saves & Shares)
+- **Hook / Premise**: [Value-packed breakdown]
+- **Framework**: [Step-by-step angle]
+- **Why It Works**: [Why people save it]
 
-Option 3 — Community & Discussion (High Comments)
-- Hot take or debate angle
-- Question prompt
-- Why it works today`;
+### Option 3 — Hot Take / Debate (500+ Comments)
+- **Hook / Premise**: [Controversial opinion]
+- **Debate Angle**: [The polarizing question]
+- **Why It Works**: [Why fans will fight in comments]`;
   } else if (action === "calendar") {
     actionDirective = `
 FORMAT REQUIREMENT (7-DAY CONTENT CALENDAR):
@@ -2061,99 +2227,150 @@ CREATOR IDENTITY & CONTEXT:
 - Primary Platform: ${platform}
 - Core Goal: ${goal}
 - Brand Voice: ${brandVoice}${recentMetrics}${recentPosts}${connections}
+${memoryContext}
+${formattingRules}
+${liveContext}
 ${actionDirective}`;
 }
 
-function generatePulseAiFallback(action, context = {}, userPrompt = "") {
+function generatePulseAiFallback(action, context = {}, userPrompt = "", liveItems = []) {
   const niche = context.niche || "your niche";
   const platform = context.platform || "TikTok";
   const goal = context.goal || "views";
 
-  if (action === "hooks" || userPrompt.toLowerCase().includes("hook")) {
-    return `Here are 5 high-retention hooks engineered for ${niche} on ${platform}:
+  if (action === "hooks" || userPrompt.toLowerCase().includes("hook") || userPrompt.toLowerCase().includes("overlay")) {
+    return `Here are 5 high-retention text-overlay hooks engineered for ${niche} on ${platform}:
 
-1. **The Curiosity Gap**: "Almost everyone in ${niche} is doing this backwards, and here is why..."
-   *(Visual cue: Hold up phone or whiteboard, shake head slowly)*
+### 1. The Real Reason John Cena Never Wins
+- **Hook / Overlay**: "The REAL Reason John Cena Never Wins"
+- **Why It Works**: Sparks immediate debate—fans rush to defend or critique in the comments.
+- **Placement Tip**: Drop at the 0:02 mark right as the crowd roar hits.
 
-2. **The Contrarian Reality**: "Stop wasting time on conventional ${niche} advice. Here is what actually moved the needle for me."
-   *(Visual cue: Push past a stack of notes or snap fingers close to lens)*
+### 2. Roman Reigns = WWE Biggest Mistake
+- **Hook / Overlay**: "Roman Reigns = WWE's Biggest Mistake"
+- **Why It Works**: Instantly polarizes the Bloodline fandom and drives comment wars.
+- **Placement Tip**: Flash at 0:01 over a slow-motion spear clip.
 
-3. **The Urgent Warning**: "If you do not fix this one habit in the next 30 days, your growth will stay flat."
-   *(Visual cue: Direct stare, whisper delivery, sharp zoom)*
+### 3. The Unspoken Locker Room Rule
+- **Hook / Overlay**: "The Locker Room Rule Nobody Mentions"
+- **Why It Works**: High curiosity gap—viewer stays to discover the insider secret.
+- **Placement Tip**: Center screen with bold contrast font, 0:00 to 0:03.
 
-4. **The Direct Breakdown**: "Here is the exact 3-step formula I use to achieve ${goal} without burnout."
-   *(Visual cue: Hold up 3 fingers, cut directly to demonstration)*
+### 4. Why Fans Are Turning On The Champion
+- **Hook / Overlay**: "Why Fans Just Turned On The Champ"
+- **Why It Works**: Plays on current crowd psychology and controversial booking.
+- **Placement Tip**: Fade in at 0:02 over a split-screen reaction.
 
-5. **The Unpopular Truth**: "You do not need a huge budget or team to dominate ${niche}. You just need this."
-   *(Visual cue: Step towards camera, casual authentic delivery)*`;
+### 5. Stop Saying This Was A Clean Finish
+- **Hook / Overlay**: "Stop Saying This Was Clean"
+- **Why It Works**: Challenges viewer perception and forces them to watch the replay.
+- **Placement Tip**: Drop at 0:01 with a referee slow-mo replay.`;
   }
 
-  if (action === "what_to_post" || userPrompt.toLowerCase().includes("what should i post")) {
-    return `Here are 3 high-impact content options you can record today for ${niche}:
+  if (action === "what_to_post" || userPrompt.toLowerCase().includes("what should i post") || action === "news") {
+    let liveNote = "";
+    if (Array.isArray(liveItems) && liveItems.length > 0) {
+      liveNote = `\n\n*Live ESPN/Sports Wire:* "${liveItems[0].title}"`;
+    }
+    return `Here are 3 high-impact content options you can record today for ${niche}:${liveNote}
 
-**Option 1: Top-of-Funnel Reach (Short-Form Video)**
-- **Hook**: "The single biggest mistake people make in ${niche} before they see results."
-- **Angle**: Point out an unspoken friction point in your niche and explain the 20-second fix.
-- **Why today**: Great for quick algorithmic distribution and new profile visits.
+### Option 1 — Viral Top-of-Funnel (Broad Reach)
+- **Hook / Premise**: "The single biggest mistake people make in ${niche} before they see results."
+- **Visual Angle**: 25-second fast breakdown showing the mistake vs the fix.
+- **Why Today**: High algorithmic distribution and rapid profile visits.
 
-**Option 2: High-Save Authority Piece (Step-by-Step Breakdown)**
-- **Hook**: "Save this before you plan your next ${niche} project. Here is the master checklist."
-- **Angle**: 3 rapid-fire actionable steps with on-screen text graphics.
-- **Why today**: High save-to-like ratio signals quality to the ${platform} algorithm.
+### Option 2 — High-Retention Authority (Saves & Shares)
+- **Hook / Premise**: "Save this before your next ${niche} debate: here is the master proof."
+- **Framework**: 3 undeniable statistics or historical moments.
+- **Why Today**: High save-to-like ratio signals quality to the ${platform} algorithm.
 
-**Option 3: High-Comment Hot Take (Discussion Starter)**
-- **Hook**: "I might get hate for this, but someone had to say it..."
-- **Angle**: Share an authentic opinion on a current debate or popular myth in ${niche}.
-- **Why today**: Promotes healthy comment debates which spike engagement velocity.`;
+### Option 3 — Hot Take / Debate (500+ Comments)
+- **Hook / Premise**: "I might get hate for this, but someone had to say it..."
+- **Debate Angle**: Challenge the consensus opinion on recent storylines or matches.
+- **Why Today**: Promotes heated comment debates which spike engagement velocity.`;
   }
 
   if (action === "calendar" || userPrompt.toLowerCase().includes("calendar") || userPrompt.toLowerCase().includes("plan")) {
-    return `Here is your 7-Day Content Roadmap for ${niche} on ${platform}:
+    return `Here is your 7-Day High-Growth Content Roadmap for ${niche} on ${platform}:
 
-- **Day 1**: *The Common Mistake* (30s Video) — Goal: Broad Reach
-  *Hook*: "Stop doing this in ${niche} if you want real results."
-- **Day 2**: *The Step-by-Step Blueprint* (Carousel / Breakdown) — Goal: High Saves
-  *Hook*: "The 3 rules I follow every week."
-- **Day 3**: *Personal Behind-The-Scenes / Story* (Short Reel) — Goal: Audience Trust
-  *Hook*: "What nobody tells you about starting in ${niche}."
-- **Day 4**: *The Contrarian Hot Take* (Video Discussion) — Goal: High Comments
-  *Hook*: "Unpopular opinion: this standard advice is hurting you."
-- **Day 5**: *The Rapid-Fire Hack / Tool* (20s Video) — Goal: Shares & Viral
-  *Hook*: "The fastest shortcut I found for ${goal}."
-- **Day 6**: *Q&A / Audience Response* (Casual Camera) — Goal: Community
-  *Hook*: "Replying to the most asked question this month..."
-- **Day 7**: *Weekly Reflection & Next Target* (Story or Short) — Goal: Retention
-  *Hook*: "One thing I learned this week that changed my workflow."`;
+### Day 1 — The Common Mistake (30s Video)
+- **Goal**: Broad Reach
+- **Hook**: "Stop doing this in ${niche} if you want real results."
+
+### Day 2 — The Step-by-Step Blueprint (Carousel / Breakdown)
+- **Goal**: High Saves
+- **Hook**: "The 3 rules I follow every week."
+
+### Day 3 — Personal Behind-The-Scenes / Story (Short Reel)
+- **Goal**: Audience Trust
+- **Hook**: "What nobody tells you about starting in ${niche}."
+
+### Day 4 — The Contrarian Hot Take (Video Discussion)
+- **Goal**: High Comments
+- **Hook**: "Unpopular opinion: this standard advice is hurting you."
+
+### Day 5 — The Rapid-Fire Breakdown (20s Video)
+- **Goal**: Shares & Viral Reach
+- **Hook**: "The fastest shortcut I found for ${goal}."
+
+### Day 6 — Q&A / Audience Response (Casual Camera)
+- **Goal**: Community
+- **Hook**: "Replying to the most asked question this month..."
+
+### Day 7 — Weekly Reflection & Next Target (Story or Short)
+- **Goal**: Retention & Loyalty
+- **Hook**: "One thing I learned this week that changed my workflow."`;
   }
 
-  // Default camera-ready script
   return `TITLE: The ${niche} Breakthrough Formula
-PLATFORM: ${platform} | RUNTIME: 35s | GOAL: ${goal}
+PLATFORM: ${platform} | RUNTIME: 30s | GOAL: ${goal}
 
 [HOOK - 0 to 3s]:
-(Visual): Sharp camera zoom or sudden object reveal, direct eye contact.
-(Spoken): "If you are struggling with ${niche}, stop scrolling — because this changes everything."
+(Visual): Sharp camera zoom or sudden object reveal, direct eye contact. Text overlay: "Stop Scrolling — Watch This".
+(Spoken): "If you are following ${niche}, stop scrolling — because this changes everything."
 
-[BODY - 4 to 28s]:
+[BODY - 4 to 25s]:
 (Visual): Cut to B-Roll or on-screen demonstration.
-(Spoken): "Most creators spend hours doing the hard way. But here is the secret: you only need two core adjustments. First, stop trying to please everyone and speak directly to the viewer who needs this today."
+(Spoken): "Most people look at this backwards. Here is the single adjustment: stop trying to please everyone and speak directly to the passionate fans."
 
 (Visual): Face-to-camera punch in, point to screen.
-(Spoken): "Second, eliminate the fluff in the first 3 seconds. The moment you give immediate value, your watch time doubles."
+(Spoken): "Eliminate the fluff in the first 2 seconds. The moment you give immediate heat, your watch time doubles."
 
-[PAYOFF & CTA - Final 7s]:
+[PAYOFF & CTA - Final 5s]:
 (Visual): Direct eye contact, tap on screen graphic.
-(Spoken): "Try this on your next post. Tap save so you do not lose this, and drop your questions in the comments below."
+(Spoken): "Try this on your next post. Tap save so you do not lose this, and drop your take in the comments below."
 
 PRODUCTION TIPS:
 - Energy: Keep pacing brisk with zero dead air.
-- Text Overlays: Flash "2 Core Adjustments" at 0:08 and "Immediate Value" at 0:20.`;
+- Text Overlays: Flash "The Big Adjustment" at 0:06 and "Immediate Heat" at 0:18.`;
 }
 
 async function handlePulseAi(req, res) {
   const { messages, message, prompt, action = "chat", context = {} } = req.body || {};
   const userText = message || prompt || (Array.isArray(messages) && messages.filter(m => m && m.role === "user").slice(-1)[0]?.content) || "Help me brainstorm content for my niche.";
-  const systemPrompt = buildPulseAiSystemPrompt(context, action);
+
+  // 1. Fetch & update creator memory
+  let memory = getPulseAiMemory();
+  memory = updatePulseAiMemoryFromTurn(userText, memory);
+
+  // 2. Detect if live web / sports data is needed
+  const lowerPrompt = String(userText).toLowerCase();
+  const needsLiveData = lowerPrompt.includes("espn") || 
+                        lowerPrompt.includes("live") || 
+                        lowerPrompt.includes("news") || 
+                        lowerPrompt.includes("today") || 
+                        lowerPrompt.includes("score") || 
+                        lowerPrompt.includes("match") || 
+                        lowerPrompt.includes("game") || 
+                        lowerPrompt.includes("breaking") ||
+                        action === "news";
+
+  let liveItems = [];
+  if (needsLiveData) {
+    liveItems = await fetchLivePulseData(userText, context.niche);
+  }
+
+  const systemPrompt = buildPulseAiSystemPrompt(context, action, memory, liveItems);
 
   let chatHistory = [];
   if (Array.isArray(messages) && messages.length > 0) {
@@ -2193,7 +2410,7 @@ async function handlePulseAi(req, res) {
           const data = await response.json();
           const content = data.choices?.[0]?.message?.content;
           if (content) {
-            return res.json({ text: content, action, model, success: true });
+            return res.json({ text: content, action, model, success: true, memory, liveItems });
           }
         }
       } catch (err) {
@@ -2203,12 +2420,42 @@ async function handlePulseAi(req, res) {
   }
 
   // Resilient fallback engine
-  const fallback = generatePulseAiFallback(action, context, userText);
-  return res.json({ text: fallback, action, model: "pulse-ai-engine", success: true });
+  const fallback = generatePulseAiFallback(action, context, userText, liveItems);
+  return res.json({ text: fallback, action, model: "pulse-ai-engine", success: true, memory, liveItems });
 }
 
-// ── PULSE AI ENDPOINT ───────────────────────────────────────────────────────
+// ── PULSE AI ENDPOINTS ──────────────────────────────────────────────────────
 app.post("/api/pulse-ai", handlePulseAi);
+
+// ── PULSE AI CREATOR MEMORY ENDPOINTS ───────────────────────────────────────
+app.get("/api/pulse-ai/memory", (_req, res) => {
+  res.json({ success: true, memory: getPulseAiMemory() });
+});
+
+app.post("/api/pulse-ai/memory", (req, res) => {
+  const { rule, like, dislike, topic, trait } = req.body || {};
+  let mem = getPulseAiMemory();
+  if (rule && !mem.customRules.includes(rule)) mem.customRules.push(String(rule).trim());
+  if (like && !mem.likes.includes(like)) mem.likes.push(String(like).trim());
+  if (dislike && !mem.dislikes.includes(dislike)) mem.dislikes.push(String(dislike).trim());
+  if (topic && !mem.keyTopics.includes(topic)) mem.keyTopics.push(String(topic).trim());
+  if (trait && !mem.characterTraits.includes(trait)) mem.characterTraits.push(String(trait).trim());
+  savePulseAiMemory(mem);
+  res.json({ success: true, memory: mem });
+});
+
+app.delete("/api/pulse-ai/memory", (_req, res) => {
+  try {
+    if (fs.existsSync(PULSE_MEMORY_FILE)) fs.unlinkSync(PULSE_MEMORY_FILE);
+  } catch (_) {}
+  res.json({ success: true, memory: getPulseAiMemory() });
+});
+
+app.get("/api/pulse-ai/live-news", async (req, res) => {
+  const q = req.query.q || "sports ESPN";
+  const items = await fetchLivePulseData(q, req.query.niche);
+  res.json({ success: true, items });
+});
 
 // ── BACKWARD-COMPATIBLE COACH ENDPOINT ──────────────────────────────────────
 app.post("/api/coach", async (req, res) => {
