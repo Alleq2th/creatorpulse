@@ -1169,10 +1169,81 @@ window.delSaved = async (id) => {
   if(d.success){ toast("Deleted"); loadSaved(); loadSchedule(); }
 };
 
-// ─── PULSE AI (INTELLIGENT CREATOR PARTNER) ─────────────────────────────────
+// ─── PULSE AI (INTELLIGENT CREATOR PARTNER & MEMORY ENGINE) ─────────────────
+window.loadPulseAiMemory = async () => {
+  try {
+    const cached = localStorage.getItem("cp_pulse_ai_memory");
+    if (cached) {
+      if (!S.pulseAi) S.pulseAi = {};
+      S.pulseAi.memory = JSON.parse(cached);
+    }
+  } catch(_) {}
+
+  try {
+    const res = await api("/api/pulse-ai/memory");
+    if (res.memory) {
+      if (!S.pulseAi) S.pulseAi = {};
+      S.pulseAi.memory = res.memory;
+      localStorage.setItem("cp_pulse_ai_memory", JSON.stringify(res.memory));
+      render();
+    }
+  } catch(_) {}
+};
+
+window.togglePulseAiMemory = (e) => {
+  if (e) {
+    if (typeof e.preventDefault === "function") e.preventDefault();
+    if (typeof e.stopPropagation === "function") e.stopPropagation();
+  }
+  if (!S.pulseAi) S.pulseAi = {};
+  S.pulseAi.showMemory = !S.pulseAi.showMemory;
+  if (S.pulseAi.showMemory && !S.pulseAi.memory) {
+    window.loadPulseAiMemory();
+  }
+  render();
+};
+
+window.addPulseAiCustomRule = async () => {
+  const input = document.getElementById("pa-custom-rule-input");
+  const rule = (input?.value || "").trim();
+  if (!rule) return;
+  input.value = "";
+  try {
+    const res = await api("/api/pulse-ai/memory", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rule })
+    });
+    if (res.memory) {
+      S.pulseAi.memory = res.memory;
+      localStorage.setItem("cp_pulse_ai_memory", JSON.stringify(res.memory));
+      toast("Added directive to Pulse AI memory");
+      render();
+    }
+  } catch(e) {
+    toast("Failed to save memory directive");
+  }
+};
+
+window.resetPulseAiMemory = async () => {
+  if (!confirm("Reset Pulse AI memory back to defaults?")) return;
+  try {
+    const res = await api("/api/pulse-ai/memory", { method: "DELETE" });
+    if (res.memory) {
+      S.pulseAi.memory = res.memory;
+      localStorage.setItem("cp_pulse_ai_memory", JSON.stringify(res.memory));
+      toast("Memory reset to default");
+      render();
+    }
+  } catch(e) {
+    toast("Failed to reset memory");
+  }
+};
+
 window.openPulseAi = (initialPrompt, initialAction) => {
-  if (!S.pulseAi) S.pulseAi = { open: false, messages: [], loading: false, platform: "tiktok", goal: "views", niche: "", brandVoice: "", input: "" };
+  if (!S.pulseAi) S.pulseAi = { open: false, messages: [], loading: false, platform: "tiktok", goal: "views", niche: "", brandVoice: "", input: "", showMemory: false, memory: null };
   S.pulseAi.open = true;
+  S.pulseAi.showMemory = false;
   S.coachOpen = true; // backward compatibility
   if (!S.pulseAi.niche && S.user?.niches?.[0]) S.pulseAi.niche = S.user.niches[0];
   if (!S.pulseAi.platform && (S.coachPlatform || S.user?.primaryPlatform)) S.pulseAi.platform = S.coachPlatform || S.user?.primaryPlatform || "tiktok";
@@ -1184,6 +1255,7 @@ window.openPulseAi = (initialPrompt, initialAction) => {
     } catch(e){}
   }
 
+  window.loadPulseAiMemory();
   render();
 
   if (initialPrompt) {
@@ -1197,7 +1269,10 @@ window.openPulseAi = (initialPrompt, initialAction) => {
 };
 
 window.closePulseAi = () => {
-  if (S.pulseAi) S.pulseAi.open = false;
+  if (S.pulseAi) {
+    S.pulseAi.open = false;
+    S.pulseAi.showMemory = false;
+  }
   S.coachOpen = false;
   render();
 };
@@ -1208,6 +1283,7 @@ window.resetPulseAiConversation = () => {
     S.pulseAi.messages = [];
     S.pulseAi.loading = false;
     S.pulseAi.input = "";
+    S.pulseAi.showMemory = false;
   }
   S.coachAnswer = "";
   try { localStorage.removeItem("cp_pulse_ai_messages"); } catch(e){}
@@ -1224,7 +1300,8 @@ function scrollPulseAiToBottom(){
 window.scrollPulseAiToBottom = scrollPulseAiToBottom;
 
 window.sendPulseAiMessage = async (customText, actionType) => {
-  if (!S.pulseAi) S.pulseAi = { open: true, messages: [], loading: false, platform: "tiktok", goal: "views", niche: "", input: "" };
+  if (!S.pulseAi) S.pulseAi = { open: true, messages: [], loading: false, platform: "tiktok", goal: "views", niche: "", input: "", showMemory: false };
+  S.pulseAi.showMemory = false;
   const inputEl = document.getElementById("pulse-input");
   const text = (customText !== undefined ? customText : (inputEl ? inputEl.value : (S.pulseAi.input || ""))).trim();
   if (!text) return;
@@ -1274,6 +1351,11 @@ window.sendPulseAiMessage = async (customText, actionType) => {
 
     if (d.error) throw new Error(d.error);
 
+    if (d.memory) {
+      S.pulseAi.memory = d.memory;
+      try { localStorage.setItem("cp_pulse_ai_memory", JSON.stringify(d.memory)); } catch(_) {}
+    }
+
     const assistantMsg = {
       id: "msg_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
       role: "assistant",
@@ -1300,6 +1382,7 @@ window.sendPulseAiMessage = async (customText, actionType) => {
     scrollPulseAiToBottom();
   }
 };
+
 
 window.pulseAiShootScript = (msgId) => {
   const msg = S.pulseAi?.messages?.find(m => m.id === msgId);

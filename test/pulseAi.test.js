@@ -43,3 +43,27 @@ test("floating elements maintain correct z-index hierarchy below sheet overlay",
   assert.ok(coachMatch, "fab-coach must declare z-index");
   assert.ok(Number(coachMatch[1]) < sheetZ, "fab-coach must sit below sheet-overlay");
 });
+
+test("server.js exposes /api/pulse-ai/memory and /api/pulse-ai/live-news endpoints", () => {
+  assert.match(SERVER_JS, /\/api\/pulse-ai\/memory/, "server.js must expose /api/pulse-ai/memory");
+  assert.match(SERVER_JS, /\/api\/pulse-ai\/live-news/, "server.js must expose /api/pulse-ai/live-news");
+});
+
+test("core.js defines Pulse AI memory management functions", () => {
+  assert.match(CORE_JS, /window\.loadPulseAiMemory\s*=/, "core.js must export window.loadPulseAiMemory");
+  assert.match(CORE_JS, /window\.togglePulseAiMemory\s*=/, "core.js must export window.togglePulseAiMemory");
+  assert.match(CORE_JS, /window\.addPulseAiCustomRule\s*=/, "core.js must export window.addPulseAiCustomRule");
+  assert.match(CORE_JS, /window\.resetPulseAiMemory\s*=/, "core.js must export window.resetPulseAiMemory");
+});
+
+test("app.js defines table-to-card parsing and interactive follow-ups", () => {
+  assert.match(APP_JS, /pulseAiParseTablesToCards/, "app.js must define pulseAiParseTablesToCards");
+  assert.match(APP_JS, /pulseAiGetFollowupChips/, "app.js must define pulseAiGetFollowupChips");
+  assert.match(APP_JS, /renderPulseAiMemoryDrawer/, "app.js must define renderPulseAiMemoryDrawer");
+});
+
+test("index.html defines styles for interactive cards, memory drawer, and follow-ups", () => {
+  assert.match(INDEX_HTML, /\.pa-card\s*\{/, "index.html must style .pa-card");
+  assert.match(INDEX_HTML, /\.pa-mem-drawer\s*\{/, "index.html must style .pa-mem-drawer");
+  assert.match(INDEX_HTML, /\.pa-followups\s*\{/, "index.html must style .pa-followups");
+});

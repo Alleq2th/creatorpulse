@@ -22,7 +22,7 @@
      styles at all -- it is why the Create screen came up unstyled. Kept as a
      separate file (rather than inlined) so it can be cached and versioned on
      its own. -->
-<link rel="stylesheet" href="studio.css?v=25">
+<link rel="stylesheet" href="studio.css?v=26">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -589,7 +589,7 @@ body{padding-bottom:var(--tab-h);letter-spacing:-0.005em}
 .pa-msg{display:flex;flex-direction:column}
 .pa-msg-user{align-items:flex-end}
 .pa-msg-ai{align-items:flex-start}
-.pa-bubble{max-width:88%;padding:10px 12px;border-radius:14px;font-size:12.5px;line-height:1.55;word-break:break-word}
+.pa-bubble{max-width:92%;padding:10px 12px;border-radius:14px;font-size:12.5px;line-height:1.55;word-break:break-word}
 .pa-bubble-user{background:var(--tint,#EEE9F8);color:var(--tint-tx,#3C3060);border-bottom-right-radius:4px}
 .pa-bubble-ai{background:var(--sf2);color:var(--tx);border-bottom-left-radius:4px}
 .pa-bubble-ai .pa-h{font-weight:800;font-size:13px;margin:10px 0 4px}
@@ -598,11 +598,11 @@ body{padding-bottom:var(--tab-h);letter-spacing:-0.005em}
 .pa-act:hover{border-color:var(--br2)}
 .pa-act-primary{background:linear-gradient(135deg,#7C3AED,#EC4899);color:#fff;border:none}
 .pa-act-primary:hover{opacity:.9}
-.pa-welcome{text-align:center;padding:28px 8px 16px;color:var(--tx)}
-.pa-welcome-icon{width:52px;height:52px;margin:0 auto 12px;border-radius:16px;background:linear-gradient(135deg,#7C3AED,#EC4899);display:flex;align-items:center;justify-content:center}
-.pa-welcome-icon .icon{width:26px;height:26px;stroke:#fff;fill:none}
+.pa-welcome{text-align:center;padding:24px 8px 14px;color:var(--tx)}
+.pa-welcome-icon{width:50px;height:50px;margin:0 auto 10px;border-radius:16px;background:linear-gradient(135deg,#7C3AED,#EC4899);display:flex;align-items:center;justify-content:center}
+.pa-welcome-icon .icon{width:24px;height:24px;stroke:#fff;fill:none}
 .pa-welcome h4{margin:0 0 6px;font-size:16px;font-weight:800}
-.pa-welcome p{margin:0;font-size:12px;color:var(--mu);line-height:1.55;max-width:280px;margin-left:auto;margin-right:auto}
+.pa-welcome p{margin:0;font-size:12px;color:var(--mu);line-height:1.55;max-width:300px;margin-left:auto;margin-right:auto}
 .pa-chips{display:flex;flex-wrap:wrap;gap:8px;padding:8px 16px 12px;justify-content:center}
 .pa-chip{background:var(--sf2);border:1px solid var(--br);color:var(--tx);border-radius:999px;padding:7px 12px;font:600 11px var(--sans);cursor:pointer;transition:all .15s}
 .pa-chip:hover{border-color:#7C3AED;color:#7C3AED}
@@ -618,6 +618,55 @@ body{padding-bottom:var(--tab-h);letter-spacing:-0.005em}
 .pa-typing span:nth-child(3){animation-delay:.3s}
 @keyframes pa-bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
 .pulse-ai-topbar-btn{color:#7C3AED!important}
+
+/* ── PULSE AI INTERACTIVE CARDS & MEMORY ── */
+.pa-mem-pill{background:var(--sf2);border:1px solid var(--br);border-radius:999px;padding:4px 9px;font:700 11px var(--sans);color:var(--tx);display:flex;align-items:center;gap:4px;cursor:pointer;transition:all .15s}
+.pa-mem-pill:hover{border-color:#7C3AED;color:#7C3AED}
+.pa-mem-drawer{padding:14px;background:var(--sf2);border-radius:14px;margin:4px 0 10px;border:1px solid var(--br)}
+.pa-mem-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.pa-mem-title{font-size:13.5px;font-weight:800;color:var(--tx)}
+.pa-mem-close{background:none;border:none;font-size:18px;color:var(--mu);cursor:pointer;line-height:1}
+.pa-mem-desc{font-size:11px;color:var(--mu);line-height:1.45;margin:0 0 10px}
+.pa-mem-sec{margin:8px 0}
+.pa-mem-sec-title{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:var(--mu);margin-bottom:5px}
+.pa-mem-tags{display:flex;flex-wrap:wrap;gap:5px}
+.pa-mem-tag{font-size:11px;font-weight:600;padding:3px 8px;border-radius:6px;display:inline-flex;align-items:center}
+.pa-mem-tag-trait{background:rgba(124,58,237,.12);color:#7C3AED}
+.pa-mem-tag-like{background:rgba(16,185,129,.12);color:#10B981}
+.pa-mem-tag-dislike{background:rgba(239,68,68,.12);color:#EF4444}
+.pa-mem-tag-topic{background:rgba(59,130,246,.12);color:#3B82F6}
+.pa-mem-tag-rule{background:rgba(245,158,11,.12);color:#D97706}
+.pa-mem-add-row{display:flex;gap:6px;margin-top:12px}
+.pa-mem-input{flex:1;background:var(--bg);border:1px solid var(--br);border-radius:8px;padding:6px 10px;font:500 11.5px var(--sans);color:var(--tx);outline:none}
+.pa-mem-input:focus{border-color:#7C3AED}
+.pa-mem-btn{background:linear-gradient(135deg,#7C3AED,#EC4899);border:none;border-radius:8px;color:#fff;font:700 11px var(--sans);padding:0 12px;cursor:pointer}
+.pa-mem-footer{margin-top:10px;text-align:center}
+.pa-mem-reset-btn{background:none;border:none;color:var(--mu);font-size:10.5px;text-decoration:underline;cursor:pointer}
+
+.pa-cards-grid{display:flex;flex-direction:column;gap:10px;margin:8px 0}
+.pa-card{background:var(--sf);border:1px solid var(--br);border-radius:12px;padding:11px 13px;box-shadow:0 2px 8px rgba(0,0,0,.04);transition:border-color .15s}
+.pa-card:hover{border-color:var(--br2)}
+.pa-card-top{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.pa-badge{background:linear-gradient(135deg,#7C3AED,#EC4899);color:#fff;font-size:10.5px;font-weight:800;padding:2px 7px;border-radius:6px;flex-shrink:0}
+.pa-card-title{font-weight:800;font-size:13px;color:var(--tx);line-height:1.35}
+.pa-card-body{font-size:11.5px;line-height:1.5;color:var(--mu);margin-bottom:8px}
+.pa-card-row{margin:3px 0}
+.pa-card-lbl{font-weight:700;color:var(--tx)}
+.pa-card-val{color:var(--tx)}
+.pa-card-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.pa-chip-mini{background:var(--sf2);border:1px solid var(--br);color:var(--tx);border-radius:6px;padding:4px 9px;font:600 10.5px var(--sans);cursor:pointer;transition:all .15s}
+.pa-chip-mini:hover{border-color:#7C3AED;color:#7C3AED}
+
+.pa-cue-badge{display:inline-block;font-size:10px;font-weight:800;padding:3px 8px;border-radius:6px;margin:8px 0 4px;letter-spacing:.3px;text-transform:uppercase}
+.pa-cue-hook{background:rgba(236,72,153,.15);color:#EC4899;border:1px solid rgba(236,72,153,.3)}
+.pa-cue-body{background:rgba(124,58,237,.15);color:#7C3AED;border:1px solid rgba(124,58,237,.3)}
+.pa-cue-cta{background:rgba(16,185,129,.15);color:#10B981;border:1px solid rgba(16,185,129,.3)}
+
+.pa-followups{margin-top:10px;padding-top:8px;border-top:1px dashed var(--br)}
+.pa-follow-lbl{font-size:10px;font-weight:800;color:var(--mu);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px}
+.pa-follow-chips{display:flex;gap:6px;flex-wrap:wrap}
+.pa-follow-chip{background:var(--tint,#EEE9F8);color:var(--tint-tx,#3C3060);border:1px solid rgba(124,58,237,.2);border-radius:999px;padding:5px 10px;font:600 11px var(--sans);cursor:pointer;transition:all .15s}
+.pa-follow-chip:hover{background:#7C3AED;color:#fff}
 
 /* ── STUDIO ── */
 .st-wrap{display:flex;flex-direction:column;gap:12px}
@@ -1567,13 +1616,13 @@ body{padding-bottom:var(--tab-h);letter-spacing:-0.005em}
 
 <div id="root"></div>
 
-<script src="lib/apiBase.js?v=25"></script>
-<script src="lib/authRedirect.js?v=25"></script>
-<script src="lib/studioModel.js?v=25"></script>
-<script src="core.js?v=25"></script>
-<script src="lib/studioPerf.js?v=25"></script>
-<script src="studio.js?v=25"></script>
-<script src="app.js?v=25"></script>
+<script src="lib/apiBase.js?v=26"></script>
+<script src="lib/authRedirect.js?v=26"></script>
+<script src="lib/studioModel.js?v=26"></script>
+<script src="core.js?v=26"></script>
+<script src="lib/studioPerf.js?v=26"></script>
+<script src="studio.js?v=26"></script>
+<script src="app.js?v=26"></script>
 <script>
   if("serviceWorker" in navigator){
     window.addEventListener("load", () => {
