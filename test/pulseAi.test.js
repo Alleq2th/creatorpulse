@@ -67,3 +67,23 @@ test("index.html defines styles for interactive cards, memory drawer, and follow
   assert.match(INDEX_HTML, /\.pa-mem-drawer\s*\{/, "index.html must style .pa-mem-drawer");
   assert.match(INDEX_HTML, /\.pa-followups\s*\{/, "index.html must style .pa-followups");
 });
+
+test("core.js defines multi-thread conversation management functions", () => {
+  assert.match(CORE_JS, /window\.loadPulseAiThreads\s*=/, "core.js must export window.loadPulseAiThreads");
+  assert.match(CORE_JS, /window\.switchPulseAiThread\s*=/, "core.js must export window.switchPulseAiThread");
+  assert.match(CORE_JS, /window\.newPulseAiThread\s*=/, "core.js must export window.newPulseAiThread");
+  assert.match(CORE_JS, /window\.deletePulseAiThread\s*=/, "core.js must export window.deletePulseAiThread");
+  assert.match(CORE_JS, /window\.togglePulseAiThreads\s*=/, "core.js must export window.togglePulseAiThreads");
+  assert.match(CORE_JS, /window\.saveContentCard\s*=/, "core.js must export window.saveContentCard");
+});
+
+test("app.js defines Static Content Card parsing and multi-thread drawer", () => {
+  assert.match(APP_JS, /pulseAiParseContentCards/, "app.js must define pulseAiParseContentCards");
+  assert.match(APP_JS, /renderPulseAiThreadsDrawer/, "app.js must define renderPulseAiThreadsDrawer");
+});
+
+test("index.html defines styles for Static Content Cards and Threads drawer", () => {
+  assert.match(INDEX_HTML, /\.pa-content-card\s*\{/, "index.html must style .pa-content-card");
+  assert.match(INDEX_HTML, /\.pa-threads-drawer\s*\{/, "index.html must style .pa-threads-drawer");
+  assert.match(INDEX_HTML, /\.pa-cc-hook-box\s*\{/, "index.html must style .pa-cc-hook-box");
+});

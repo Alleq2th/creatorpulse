@@ -22,7 +22,7 @@
      styles at all -- it is why the Create screen came up unstyled. Kept as a
      separate file (rather than inlined) so it can be cached and versioned on
      its own. -->
-<link rel="stylesheet" href="studio.css?v=26">
+<link rel="stylesheet" href="studio.css?v=27">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -620,8 +620,40 @@ body{padding-bottom:var(--tab-h);letter-spacing:-0.005em}
 .pulse-ai-topbar-btn{color:#7C3AED!important}
 
 /* ── PULSE AI INTERACTIVE CARDS & MEMORY ── */
+.pa-head-btn{background:var(--sf2);border:1px solid var(--br);border-radius:999px;padding:5px 10px;font:700 11px var(--sans);color:var(--tx);display:flex;align-items:center;gap:4px;cursor:pointer;transition:all .15s}
+.pa-head-btn:hover{border-color:#7C3AED;color:#7C3AED}
+.pa-head-btn-active{background:rgba(124,58,237,.15);border-color:#7C3AED;color:#7C3AED}
 .pa-mem-pill{background:var(--sf2);border:1px solid var(--br);border-radius:999px;padding:4px 9px;font:700 11px var(--sans);color:var(--tx);display:flex;align-items:center;gap:4px;cursor:pointer;transition:all .15s}
 .pa-mem-pill:hover{border-color:#7C3AED;color:#7C3AED}
+
+.pa-context-bar{display:flex;align-items:center;gap:6px;padding:6px 14px 4px;background:var(--sf);border-bottom:1px solid var(--br);overflow-x:auto}
+.pa-context-pill{font-size:10.5px;font-weight:700;color:var(--mu);background:var(--sf2);padding:2px 8px;border-radius:6px;border:1px solid var(--br);white-space:nowrap}
+
+.pa-modes-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:4px 14px 10px}
+.pa-mode-card{background:var(--sf2);border:1px solid var(--br);border-radius:12px;padding:10px 12px;cursor:pointer;transition:all .15s;text-align:left}
+.pa-mode-card:hover{border-color:#7C3AED;transform:translateY(-1px);box-shadow:0 4px 12px rgba(124,58,237,.12)}
+.pa-mode-badge{font-size:9.5px;font-weight:800;color:#7C3AED;text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px}
+.pa-mode-title{font-size:12px;font-weight:800;color:var(--tx);margin-bottom:3px}
+.pa-mode-desc{font-size:10.5px;color:var(--mu);line-height:1.35}
+
+/* Multi-Thread Conversation Drawer */
+.pa-threads-drawer{padding:14px;background:var(--sf2);border-radius:14px;margin:4px 0 10px;border:1px solid var(--br)}
+.pa-threads-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.pa-threads-title{font-size:13.5px;font-weight:800;color:var(--tx)}
+.pa-threads-head-actions{display:flex;align-items:center;gap:6px}
+.pa-threads-list{display:flex;flex-direction:column;gap:6px;max-height:42vh;overflow-y:auto;margin-top:8px}
+.pa-thread-item{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;background:var(--sf);border:1px solid var(--br);border-radius:10px;cursor:pointer;transition:all .15s}
+.pa-thread-item:hover{border-color:#7C3AED}
+.pa-thread-active{border-color:#7C3AED;background:rgba(124,58,237,.06)}
+.pa-thread-info{overflow:hidden;padding-right:8px}
+.pa-thread-title{font-size:12px;font-weight:700;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pa-thread-meta{font-size:10px;color:var(--mu);margin-top:2px}
+.pa-thread-actions{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.pa-thread-curr-pill{font-size:9.5px;font-weight:800;background:#7C3AED;color:#fff;padding:2px 6px;border-radius:4px}
+.pa-thread-del{background:none;border:none;font-size:12px;color:var(--mu);cursor:pointer;padding:3px;border-radius:4px;transition:color .15s}
+.pa-thread-del:hover{color:#EF4444}
+
+/* Memory Drawer */
 .pa-mem-drawer{padding:14px;background:var(--sf2);border-radius:14px;margin:4px 0 10px;border:1px solid var(--br)}
 .pa-mem-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
 .pa-mem-title{font-size:13.5px;font-weight:800;color:var(--tx)}
@@ -643,6 +675,34 @@ body{padding-bottom:var(--tab-h);letter-spacing:-0.005em}
 .pa-mem-footer{margin-top:10px;text-align:center}
 .pa-mem-reset-btn{background:none;border:none;color:var(--mu);font-size:10.5px;text-decoration:underline;cursor:pointer}
 
+/* Static Content Cards */
+.pa-content-cards-wrap{display:flex;flex-direction:column;gap:12px;margin:8px 0}
+.pa-content-card{background:var(--sf);border:1px solid var(--br);border-top:3px solid #7C3AED;border-radius:14px;padding:14px;box-shadow:0 3px 12px rgba(0,0,0,.05);transition:border-color .15s}
+.pa-content-card:hover{border-color:#7C3AED}
+.pa-cc-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:6px}
+.pa-cc-badge-wrap{display:flex;align-items:center;gap:6px}
+.pa-cc-num{background:linear-gradient(135deg,#7C3AED,#EC4899);color:#fff;font-size:10.5px;font-weight:800;padding:2px 7px;border-radius:6px}
+.pa-cc-type{font-size:10.5px;font-weight:800;color:#7C3AED;text-transform:uppercase;letter-spacing:.3px}
+.pa-cc-fmt{font-size:11px;font-weight:700;color:var(--mu);background:var(--sf2);padding:2px 7px;border-radius:6px;border:1px solid var(--br)}
+.pa-cc-title{font-size:14.5px;font-weight:800;color:var(--tx);line-height:1.35;margin-bottom:10px}
+.pa-cc-hook-box{background:rgba(236,72,153,.08);border:1px solid rgba(236,72,153,.25);border-radius:10px;padding:10px 12px;margin-bottom:10px}
+.pa-cc-hook-lbl{font-size:10px;font-weight:800;color:#EC4899;letter-spacing:.4px;text-transform:uppercase;margin-bottom:3px}
+.pa-cc-hook-quote{font-size:12.5px;font-weight:700;color:var(--tx);line-height:1.4}
+.pa-cc-row{font-size:12px;line-height:1.45;margin-bottom:8px}
+.pa-cc-lbl{font-weight:700;color:var(--tx);margin-right:4px}
+.pa-cc-val{color:var(--mu)}
+.pa-struct-list{display:flex;flex-direction:column;gap:5px;margin-top:6px}
+.pa-struct-step{display:flex;align-items:baseline;gap:6px;font-size:11.5px;color:var(--tx)}
+.pa-step-num{background:var(--sf2);border:1px solid var(--br);color:#7C3AED;font-weight:800;font-size:10px;width:18px;height:18px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+.pa-cc-cta-row{background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.25);border-radius:8px;padding:7px 10px;margin-top:6px;font-size:11.5px}
+.pa-cc-cta-val{font-weight:700;color:#059669}
+.pa-cc-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;padding-top:10px;border-top:1px solid var(--br)}
+.pa-chip-primary{background:linear-gradient(135deg,#7C3AED,#EC4899)!important;color:#fff!important;border:none!important}
+.pa-chip-primary:hover{opacity:.9}
+.pa-chip-action{background:rgba(124,58,237,.08);color:#7C3AED;border:1px solid rgba(124,58,237,.2)}
+.pa-chip-action:hover{background:#7C3AED;color:#fff}
+
+/* Standard cards & lists */
 .pa-cards-grid{display:flex;flex-direction:column;gap:10px;margin:8px 0}
 .pa-card{background:var(--sf);border:1px solid var(--br);border-radius:12px;padding:11px 13px;box-shadow:0 2px 8px rgba(0,0,0,.04);transition:border-color .15s}
 .pa-card:hover{border-color:var(--br2)}
@@ -654,7 +714,7 @@ body{padding-bottom:var(--tab-h);letter-spacing:-0.005em}
 .pa-card-lbl{font-weight:700;color:var(--tx)}
 .pa-card-val{color:var(--tx)}
 .pa-card-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
-.pa-chip-mini{background:var(--sf2);border:1px solid var(--br);color:var(--tx);border-radius:6px;padding:4px 9px;font:600 10.5px var(--sans);cursor:pointer;transition:all .15s}
+.pa-chip-mini{background:var(--sf2);border:1px solid var(--br);color:var(--tx);border-radius:6px;padding:5px 9px;font:600 10.5px var(--sans);cursor:pointer;transition:all .15s}
 .pa-chip-mini:hover{border-color:#7C3AED;color:#7C3AED}
 
 .pa-cue-badge{display:inline-block;font-size:10px;font-weight:800;padding:3px 8px;border-radius:6px;margin:8px 0 4px;letter-spacing:.3px;text-transform:uppercase}
@@ -1616,13 +1676,13 @@ body{padding-bottom:var(--tab-h);letter-spacing:-0.005em}
 
 <div id="root"></div>
 
-<script src="lib/apiBase.js?v=26"></script>
-<script src="lib/authRedirect.js?v=26"></script>
-<script src="lib/studioModel.js?v=26"></script>
-<script src="core.js?v=26"></script>
-<script src="lib/studioPerf.js?v=26"></script>
-<script src="studio.js?v=26"></script>
-<script src="app.js?v=26"></script>
+<script src="lib/apiBase.js?v=27"></script>
+<script src="lib/authRedirect.js?v=27"></script>
+<script src="lib/studioModel.js?v=27"></script>
+<script src="core.js?v=27"></script>
+<script src="lib/studioPerf.js?v=27"></script>
+<script src="studio.js?v=27"></script>
+<script src="app.js?v=27"></script>
 <script>
   if("serviceWorker" in navigator){
     window.addEventListener("load", () => {
