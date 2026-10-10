@@ -87,3 +87,39 @@ test("index.html defines styles for Static Content Cards and Threads drawer", ()
   assert.match(INDEX_HTML, /\.pa-threads-drawer\s*\{/, "index.html must style .pa-threads-drawer");
   assert.match(INDEX_HTML, /\.pa-cc-hook-box\s*\{/, "index.html must style .pa-cc-hook-box");
 });
+
+test("server.js defines /api/pulse-ai/stat-card and /api/pulse-ai/live-sources", () => {
+  assert.match(SERVER_JS, /\/api\/pulse-ai\/stat-card/, "server.js must expose /api/pulse-ai/stat-card");
+  assert.match(SERVER_JS, /\/api\/pulse-ai\/live-sources/, "server.js must expose /api/pulse-ai/live-sources");
+});
+
+test("core.js defines stat card generation and format switching helpers", () => {
+  assert.match(CORE_JS, /window\.generatePulseStatCard\s*=/, "core.js must export window.generatePulseStatCard");
+  assert.match(CORE_JS, /window\.switchStatCardFormat\s*=/, "core.js must export window.switchStatCardFormat");
+  assert.match(CORE_JS, /window\.downloadPulseSlide\s*=/, "core.js must export window.downloadPulseSlide");
+  assert.match(CORE_JS, /window\.downloadPulseAllSlides\s*=/, "core.js must export window.downloadPulseAllSlides");
+  assert.match(CORE_JS, /window\.savePulseStatCardToLibrary\s*=/, "core.js must export window.savePulseStatCardToLibrary");
+});
+
+test("app.js defines pulseAiRenderStatCard for interactive visual carousels", () => {
+  assert.match(APP_JS, /function pulseAiRenderStatCard\s*\(/, "app.js must define pulseAiRenderStatCard");
+});
+
+test("index.html defines styles for .pa-statcard-box and carousel track", () => {
+  assert.match(INDEX_HTML, /\.pa-statcard-box\s*\{/, "index.html must style .pa-statcard-box");
+  assert.match(INDEX_HTML, /\.pa-sc-slides-track\s*\{/, "index.html must style .pa-sc-slides-track");
+});
+
+test("liveIntelligence.js exports catalog and retrieval methods", () => {
+  const intel = require("../services/liveIntelligence");
+  assert.ok(Array.isArray(intel.LIVE_SOURCES_CATALOG), "LIVE_SOURCES_CATALOG must be an array");
+  assert.ok(intel.LIVE_SOURCES_CATALOG.length >= 60, "Catalog must have at least 60 authoritative sources");
+  assert.equal(typeof intel.fetchWikipediaKnowledge, "function");
+  assert.equal(typeof intel.findLiveImage, "function");
+  assert.equal(typeof intel.fetchMultiSourceLiveData, "function");
+});
+
+test("routes/cards.js defines /pulse-ai-stat-card route", () => {
+  const CARDS_JS = fs.readFileSync(path.join(ROOT, "routes", "cards.js"), "utf8");
+  assert.match(CARDS_JS, /\/pulse-ai-stat-card/, "routes/cards.js must expose /pulse-ai-stat-card");
+});

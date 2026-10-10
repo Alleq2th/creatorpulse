@@ -1,3 +1,51 @@
+function pulseAiRenderStatCard(sc, msgId) {
+  if (!sc || !Array.isArray(sc.images) || !sc.images.length) return "";
+  const isTikTok = sc.format === "tiktok";
+  const imgs = sc.images;
+  const slideCount = imgs.length;
+  const topic = sc.topic || "Topic Breakdown";
+  const credit = sc.imageCredit || (sc.imageUrl ? "Verified Live Photo" : null);
+
+  const slidesHtml = imgs.map((img, idx) => {
+    return '<div class="pa-sc-slide" style="flex:0 0 ' + (slideCount > 1 ? "82%" : "100%") + ';min-width:240px;max-width:320px;">' +
+      '<div class="pa-sc-img-wrap">' +
+        '<img loading="lazy" decoding="async" src="' + img + '" alt="Slide ' + (idx + 1) + '" style="width:100%;aspect-ratio:' + (isTikTok ? "9/16" : "4/5") + ';object-fit:cover;border-radius:12px;border:1px solid var(--br);box-shadow:0 8px 24px rgba(0,0,0,0.3);">' +
+      '</div>' +
+      '<div class="pa-sc-slide-bar">' +
+        '<span class="pa-sc-num">Slide ' + (idx + 1) + ' of ' + slideCount + '</span>' +
+        '<button class="pa-chip-mini" onclick="downloadPulseSlide(\'' + msgId + '\',' + idx + ')">⬇ Download</button>' +
+      '</div>' +
+    '</div>';
+  }).join("");
+
+  const dlAllBtn = slideCount > 1
+    ? '<button class="pa-act" onclick="downloadPulseAllSlides(\'' + msgId + '\')">⬇ Download All</button>'
+    : "";
+
+  const toggleFormatBtn = isTikTok
+    ? '<button class="pa-act pa-act-primary" onclick="switchStatCardFormat(\'' + msgId + '\',\'instagram\')">📸 Convert to Instagram (4:5)</button>'
+    : '<button class="pa-act pa-act-primary" onclick="switchStatCardFormat(\'' + msgId + '\',\'tiktok\')">📱 Convert to TikTok (9:16)</button>';
+
+  return '<div class="pa-statcard-box">' +
+    '<div class="pa-sc-head">' +
+      '<div class="pa-sc-title-wrap">' +
+        '<span class="pa-sc-badge">' + (isTikTok ? "📱 TikTok (9:16)" : "📸 Instagram Carousel (4:5)") + '</span>' +
+        '<div class="pa-sc-title">' + esc(topic) + '</div>' +
+      '</div>' +
+      (credit ? '<div class="pa-sc-credit"><span>✓</span> ' + esc(credit) + '</div>' : "") +
+    '</div>' +
+    '<div class="pa-sc-slides-track">' +
+      slidesHtml +
+    '</div>' +
+    '<div class="pa-sc-toolbar">' +
+      toggleFormatBtn +
+      dlAllBtn +
+      '<button class="pa-act" onclick="savePulseStatCardToLibrary(\'' + msgId + '\')">💾 Save</button>'
+    '</div>' +
+    (sc._loading ? '<div class="pa-sc-loading-scrim"><span>Regenerating format…</span></div>' : "") +
+  '</div>';
+}
+
 // One place to change the support contact address — used for the
 // account-deletion request link on Profile. Defaulting to the collabs
 // address since it reads as the more official/business contact point;
@@ -143,7 +191,9 @@ function pulseAiParseTablesToCards(raw) {
         </div>
         ${details.length ? `<div class="pa-card-body">${details.join("")}</div>` : ""}
         <div class="pa-card-actions">
-          <button class="pa-chip-mini" onclick="sendPulseAiMessage('Turn this into a 30s TikTok script: ${cleanTitle}', 'script')">🎬 Turn into Script</button>
+          <button class="pa-chip-mini" onclick="window.generatePulseStatCard('${cleanTitle}', 'instagram')">📸 Instagram Post</button>
+          <button class="pa-chip-mini" onclick="window.generatePulseStatCard('${cleanTitle}', 'tiktok')">📱 TikTok Post</button>
+          <button class="pa-chip-mini" onclick="sendPulseAiMessage('Turn this into a 30s TikTok script: ${cleanTitle}', 'script')">🎬 Script</button>
           <button class="pa-chip-mini" onclick="window.copyTxt('${cleanTitle}');toast('Copied')">📋 Copy</button>
         </div>
       </div>`;
@@ -213,6 +263,8 @@ function pulseAiGetFollowupChips(text, action) {
   } else if (lower.includes("hook") || lower.includes("overlay") || action === "hooks") {
     chips.push({ label: "⚡ 5 More Controversial Hooks", prompt: "Give me 5 more controversial text-overlay hooks for TikTok.", action: "hooks" });
     chips.push({ label: "🎬 Turn #1 into Script", prompt: "Turn hook #1 into a camera-ready 30-second TikTok script with 2s visual cues.", action: "script" });
+    chips.push({ label: "📸 Turn into Instagram Stat Card", prompt: "Change this into an Instagram post stat card with dilemma comparison and real photo.", action: "stat_card" });
+    chips.push({ label: "📱 Turn into TikTok Post", prompt: "Change this into a TikTok post with real background photo and dilemma breakdown.", action: "tiktok_post" });
     chips.push({ label: "🗂️ Generate Content Cards", prompt: "Generate 3 static content cards for these hooks.", action: "card" });
   } else if (lower.includes("title:") || lower.includes("[hook") || action === "script") {
     chips.push({ label: "🔥 Make Hook More Controversial", prompt: "Make the hook of this script 10x more controversial and punchy.", action: "hooks" });
@@ -378,7 +430,9 @@ function renderFloatingCoach(){
       </div>
     </div>` : "";
 
+    const statCardHtml = m.statCard ? pulseAiRenderStatCard(m.statCard, m.id) : "";
     return `<div class="pa-msg pa-msg-ai">
+      ${statCardHtml}
       <div class="pa-bubble pa-bubble-ai">${pulseAiRenderMsgContent(m.content, m.id, m.action)}</div>
       <div class="pa-msg-actions">
         ${isScript ? `<button class="pa-act pa-act-primary" onclick="pulseAiShootScript('${m.id}')">🎬 Shoot in Studio</button>` : ""}
@@ -394,6 +448,11 @@ function renderFloatingCoach(){
       <p>Brainstorm bold angles, develop your own ideas into camera-ready scripts, or generate static content cards.</p>
     </div>
     <div class="pa-modes-grid">
+      <div class="pa-mode-card" onclick="sendPulseAiMessage('Generate an Instagram post stat card with dilemma comparison and real photo for: United States Marines', 'stat_card')">
+        <div class="pa-mode-badge" style="background:var(--ac);color:#000;">MODE C</div>
+        <div class="pa-mode-title">📸 Stat Cards &amp; Posts</div>
+        <div class="pa-mode-desc">Instagram 4:5 carousels &amp; TikTok 9:16 posts with real Wikipedia photos.</div>
+      </div>
       <div class="pa-mode-card" onclick="sendPulseAiMessage('I have an idea for a video. Help me develop it into 3 strong creative angles.', 'ideas')">
         <div class="pa-mode-badge">MODE B</div>
         <div class="pa-mode-title">💡 Bring Your Own Idea</div>

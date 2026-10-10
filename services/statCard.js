@@ -715,7 +715,7 @@ async function renderStatCard(slide, category, paletteKey, format, imageUrl) {
   // per slide so a carousel doesn't reuse the same image 6 times) →
   // Mode A gradient + decorative texture.
   let cover = slide.customImage ? await coverFromBase64(slide.customImage, f.w, f.h) : null;
-  if (!cover && type === "hook") cover = await fetchCoverImage(imageUrl, f.w, f.h);
+  if (!cover && (type === "hook" || slide.useCover || slide.imageUrl)) cover = await fetchCoverImage(slide.imageUrl || imageUrl, f.w, f.h);
   if (!cover) {
     const localPath = pickLocalBackground(cat.slug, type);
     if (localPath) cover = await coverFromLocalFile(localPath, f.w, f.h);

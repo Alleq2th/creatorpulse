@@ -24,6 +24,8 @@ process.on("uncaughtException", (err) => { noteError(err); console.error("[uncau
 
 const path = require("path");
 const express = require("express");
+const { LIVE_SOURCES_CATALOG, fetchMultiSourceLiveData, findLiveImage, fetchWikipediaKnowledge } = require("./services/liveIntelligence");
+const { renderCardSet } = require("./services/statCard");
 const cors = require("cors");
 const fetch = require("node-fetch");
 
@@ -2076,16 +2078,8 @@ function updatePulseAiMemoryFromTurn(userText, memory) {
 
 async function fetchLivePulseData(query = "", niche = "") {
   try {
-    const q = query ? `${query} site:espn.com OR breaking sports news` : `${niche || "sports"} news site:espn.com`;
-    const url = `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=en-US&gl=US&ceid=US:en`;
-    const feed = await parser.parseURL(url);
-    const items = (feed.items || []).slice(0, 5).map(it => ({
-      title: it.title,
-      source: it.source || it.creator || "Sports Wire",
-      pubDate: it.pubDate ? new Date(it.pubDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "Today",
-      link: it.link
-    }));
-    return items;
+    const live = await fetchMultiSourceLiveData(query, niche);
+    return live.items || [];
   } catch (err) {
     console.warn("[pulse-ai] live web fetch error:", err.message);
     return [];
@@ -2392,6 +2386,46 @@ app.delete("/api/pulse-ai/memory", (_req, res) => {
     if (fs.existsSync(PULSE_MEMORY_FILE)) fs.unlinkSync(PULSE_MEMORY_FILE);
   } catch (_) {}
   res.json({ success: true, memory: getPulseAiMemory() });
+});
+
+app.get("/api/pulse-ai/live-sources", (_req, res) => {
+  res.json({ success: true, total: LIVE_SOURCES_CATALOG.length, sources: LIVE_SOURCES_CATALOG });
+});
+
+app.post("/api/pulse-ai/stat-card", async (req, res) => {
+  try {
+    const { topic = "Trending Topic", format = "instagram", palette = "noir_orange", category, slides, imageUrl, niche } = req.body || {};
+    let imgInfo = null;
+    let finalImageUrl = imageUrl;
+    if (!finalImageUrl) {
+      imgInfo = await findLiveImage(topic, niche || category?.displayName || "");
+      if (imgInfo?.url) finalImageUrl = imgInfo.url;
+    }
+
+    let wikiData = null;
+    let finalSlides = slides;
+    if (!finalSlides || !finalSlides.length) {
+      wikiData = await fetchWikipediaKnowledge(topic);
+      finalSlides = buildDefaultStatCardSlides(topic, format, wikiData, imgInfo);
+    }
+
+    const catObj = typeof category === "string" ? { displayName: category, slug: "default" } : (category || { displayName: topic.slice(0, 24), slug: "default" });
+    const images = await renderCardSet(finalSlides, catObj, palette, format, finalImageUrl);
+
+    res.json({
+      success: true,
+      images,
+      slides: finalSlides,
+      format,
+      palette,
+      category: catObj,
+      imageUrl: finalImageUrl,
+      imageCredit: imgInfo?.credit || (finalImageUrl ? "Verified Photo" : null),
+      topic
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get("/api/pulse-ai/live-news", async (req, res) => {
