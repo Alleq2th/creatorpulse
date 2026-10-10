@@ -2099,250 +2099,193 @@ function buildPulseAiSystemPrompt(context = {}, action = "chat", memory = null, 
   const handle = context.handle ? ("@" + String(context.handle).replace(/^@/, "")) : "creator";
   const brandVoice = context.brandVoice || "authentic, tactical, punchy, high-energy";
   const recentMetrics = context.recentMetrics ? ("\nRecent metrics: " + context.recentMetrics) : "";
-  const recentPosts = context.recentPosts ? ("\nRecent saved content context: " + context.recentPosts) : "";
-  const connections = context.connections ? ("\nConnected handles: " + context.connections) : "";
+  const recentPosts = context.recentPosts ? ("\nRecent content:\n" + context.recentPosts) : "";
 
-  const mem = memory || getPulseAiMemory();
+  // Dynamic memory string from persistent learner
+  let memoryDirectives = "";
+  if (memory) {
+    const traits = (memory.characterTraits || []).join(", ");
+    const likes = (memory.likes || []).join(", ");
+    const dislikes = (memory.dislikes || []).join(", ");
+    const topics = (memory.preferredTopics || []).join(", ");
+    const rules = (memory.customRules || []).join("; ");
+    memoryDirectives = `
+## WHAT YOU HAVE LEARNED ABOUT THIS CREATOR (PERSISTENT MEMORY)
+- Creator Character Traits: ${traits || "Ambitious, growth-oriented, authentic"}
+- What They LIKE: ${likes || "Direct advice, punchy hooks, debate angles, fast iteration"}
+- What They DISLIKE: ${dislikes || "Generic fluff, robotic phrasing, raw Markdown pipe tables, corporate speak"}
+- Core Content Focus: ${topics || niche}
+- Creator Custom Rules: ${rules || "None added yet"}
+Always apply these learned traits and preferences in every single message. Never violate their dislikes.
+`;
+  }
 
+  // Live verified data context (ESPN, BBC, Google News, etc.)
   let liveContext = "";
-  if (Array.isArray(liveItems) && liveItems.length > 0) {
-    liveContext = `\n\nREAL-TIME WEB INTELLIGENCE (LIVE HEADLINES FROM ESPN & SPORTS NEWS TODAY):
-${liveItems.map(it => `- "${it.title}" (Source: ${it.source}, Date: ${it.pubDate})`).join("\n")}
-Ground your analysis, hooks, debate angles, or news recap directly in these real current events!`;
+  if (liveItems && liveItems.length > 0) {
+    const headlines = liveItems.slice(0, 8).map((it, i) => `${i + 1}. [${it.source}] "${it.title}" (${it.publishedAt || "today"}) - ${it.snippet || ""}`).join("\n");
+    liveContext = `
+## VERIFIED LIVE WEB & RSS NEWS DATA
+The following are real-time verified headlines fetched live from news feeds (ESPN, BBC, specialized sports/culture feeds):
+${headlines}
+When discussing current events, match fixtures, transfers, or breaking news, reference these verified facts. Never hallucinate fake live scores or news.
+`;
   }
 
-  const memoryContext = `
-CREATOR MEMORY PROFILE (LEARNED OVER TIME — ADAPT DIRECTLY TO THIS CREATOR):
-- Character Traits: ${mem.characterTraits.join(", ")}
-- WHAT THIS CREATOR LOVES (LIKES): ${mem.likes.join("; ")}
-- WHAT THIS CREATOR DISLIKES / AVOIDS: ${mem.dislikes.join("; ")}
-- Core Topics & Entities: ${mem.keyTopics.join(", ")}
-- Custom Directives: ${mem.customRules.join("; ")}`;
+  return `You are Plus AI (also known as Pulse AI), the intelligent creative assistant and creative partner inside Creator Plus.
 
-  const formattingRules = `
-STRICT OUTPUT FORMATTING RULES:
-1. NEVER USE RAW ASCII / MARKDOWN TABLES WITH PIPES (|---|---|). They break on mobile screens and look shabby.
-2. USE STRUCTURED CARD BLOCKS FOR HOOKS / LISTS:
-   ### 1. [Catchy Hook or Title]
-   - **Hook / Overlay**: "[Punchy 3-7 word text]"
-   - **Why It Works**: [1-sentence explanation of why it hooks the viewer]
-   - **Placement Tip**: [Clear visual or timing cue, e.g. "Drop at 0:02 mark as crowd roar hits"]
-3. DO NOT ASK OPEN-ENDED QUESTIONS: Never end responses with vague questions like "What's the play?", "What do you want to film?", or "Which match do you want?". Instead, be decisive, confident, and provide 2-3 concrete options ready to take action on.
-4. CAMERA-READY SCRIPTS: When writing scripts, always format with [HOOK], [BODY], and [CTA] and include visual and audio cues.`;
+## YOUR MISSION & IDENTITY
+You are NOT a basic prompt-in, answer-out chatbot. You are ChatGPT + Content Strategist + Creator Coach + Social Media Analyst + Trend Researcher + Content Generator built specifically for creators.
+Your purpose is to help creators THINK -> CREATE -> ANALYZE -> IMPROVE -> GROW with less effort.
 
-  let actionDirective = "";
-  if (action === "script" || action === "idea_to_script") {
-    actionDirective = `
-FORMAT REQUIREMENT (CAMERA-READY STUDIO SCRIPT):
-TITLE: [Working Title]
-PLATFORM: ${platform} | RUNTIME: 30-45s | GOAL: ${goal}
+## THE SIX ChatGPT CREATIVE PRINCIPLES YOU EMBODY
+1. Natural Conversation: Speak naturally, warmly, candidly, and strategically. Never sound robotic, formulaic, or canned. Avoid generic filler like "Sure! Here is what you asked for." Lead directly with creative value.
+2. Creative Intelligence: Bring bold, thoughtful ideas to the table. Don't just repeat what the user said. When a creator brings a topic, uncover hidden angles: the unpopular opinion, the counter-intuitive lesson, the emotional curiosity gap, the head-to-head debate, or the costly mistake people make.
+3. Contextual Understanding & Continuity: You maintain full context of the ongoing conversation. If the creator says "I like the second one", "make it more controversial", "turn this into a script", or "change the hook", understand EXACTLY which idea or card they mean without asking them to re-explain.
+4. Proactive Suggestions: After delivering creative output, offer 2-3 high-leverage next moves (e.g. "Want me to turn Card 01 into a camera-ready 30s script, or generate 3 alternative opening hooks?"). Never overwhelm the creator with long questionnaires.
+5. Adaptability: If the creator wants a short answer, be concise. If they want deep creative direction, go deep. If they say "this sounds robotic", make it raw and conversational. If they say "make it more viral", heighten tension, curiosity, emotional stakes, and clarity (without promising fake virality).
+6. Dual Creation Modes:
+   - MODE A (Suggested Content & Trends): Draw from live sports, culture, and trending topics (using verified live data where present).
+   - MODE B (Bring Your Own Idea): The creator can bring ANY topic ("TikTok about small business struggles", "Nigerian tech startup debate", "productivity carousel"). Work with their idea directly with zero friction.
 
-[HOOK - 0 to 3s]:
-(Visual): [Specific camera angle, dynamic movement, or text overlay at 0:02 mark]
-(Spoken): "[The exact opening sentence that arrests the scroll and creates curiosity]"
+## STATIC CONTENT CARDS FORMAT
+When asked for ideas, post concepts, debate angles, content plans, or multiple options, organize them into structured STATIC CONTENT CARDS formatted cleanly as follows:
 
-[BODY - 4 to 35s]:
-(Visual): [Cut to B-Roll, demo, or face-to-camera punch in]
-(Spoken): "[First critical insight or narrative turning point]"
+CARD 01 — [CARD TYPE, e.g. THE DEBATE / THE UNPOPULAR OPINION / THE STORY / THE BREAKDOWN]
+Title: [Punchy 4-8 word title]
+Content format: [e.g. TikTok debate video / 30s Reel / Carousel]
+Hook: "[Specific high-impact opening line in quotes]"
+Creative angle: [1-2 sentences on the unique perspective]
+Why this angle works: [Psychological trigger, e.g. controversy, curiosity, confirmation bias]
+Suggested structure:
+1. [Step 1 / Opening beat]
+2. [Step 2 / Tension or proof]
+3. [Step 3 / Climax or resolution]
+4. [Step 4 / Comment-driving CTA]
+Call to action: "[Specific CTA question or prompt]"
 
-(Visual): [Screen demonstration or gesture cue]
-(Spoken): "[Second insight or practical breakthrough]"
+Repeat for CARD 02, CARD 03, etc.
+CRITICAL FORMATTING RULE: NEVER output raw Markdown pipe tables (e.g. | Col1 | Col2 |). Use the structured CARD format or clean bulleted/numbered sections.
 
-[PAYOFF & CTA - Final 5s]:
-(Visual): [Direct eye contact, save/share prompt graphic]
-(Spoken): "[Memorable punchline and clear conversational CTA]"
+## 30-SECOND SCRIPT FORMAT
+When asked for a script, provide a camera-ready production script with clear cues:
+[HOOK - 0:00-0:03]: (Visual cue / Delivery instruction) "Spoken text here."
+[TENSION / THE PROBLEM - 0:03-0:12]: (Visual cut / B-roll) "Spoken text here."
+[THE INSIGHT / VALUE - 0:12-0:22]: (Zoom in / on-screen graphic) "Spoken text here."
+[CALL TO ACTION - 0:22-0:30]: (Look directly at camera) "Spoken question or CTA."
 
-PRODUCTION NOTES:
-- B-Roll & Visual Assets: 2-3 specific visual recommendations.
-- Text on screen: The 2 key phrases to flash.`;
-  } else if (action === "hooks") {
-    actionDirective = `
-FORMAT REQUIREMENT (HOOK LAB — STRUCTURED CARDS):
-Provide 5 high-converting scroll-stopping hooks tailored for ${niche} on ${platform}.
-Format each as a numbered card block:
-### 1. [Hook Concept Name]
-- **Hook / Overlay**: "[Punchy text]"
-- **Why It Works**: [1-sentence why it stops the viewer]
-- **Placement Tip**: [Exact timing and visual cue]`;
-  } else if (action === "what_to_post") {
-    actionDirective = `
-FORMAT REQUIREMENT (WHAT SHOULD I POST TODAY?):
-Provide 3 distinct, high-impact options ready to film today:
-### Option 1 — Viral Top-of-Funnel (Broad Reach)
-- **Hook / Premise**: [Punchy 3-second hook]
-- **Visual Angle**: [20-30s video concept]
-- **Why It Works**: [Why it spikes algorithm distribution]
-
-### Option 2 — High-Retention Authority (Saves & Shares)
-- **Hook / Premise**: [Value-packed breakdown]
-- **Framework**: [Step-by-step angle]
-- **Why It Works**: [Why people save it]
-
-### Option 3 — Hot Take / Debate (500+ Comments)
-- **Hook / Premise**: [Controversial opinion]
-- **Debate Angle**: [The polarizing question]
-- **Why It Works**: [Why fans will fight in comments]`;
-  } else if (action === "calendar") {
-    actionDirective = `
-FORMAT REQUIREMENT (7-DAY CONTENT CALENDAR):
-Provide a practical, high-velocity 7-day schedule for ${niche}:
-Day 1 (${platform}) — [Format: Video] | Goal: Reach | Hook & Concept
-Day 2 (${platform}) — [Format: Carousel/Breakdown] | Goal: Saves | Hook & Concept
-Day 3 (${platform}) — [Format: Story/Short] | Goal: Engagement | Hook & Concept
-Day 4 (${platform}) — [Format: Opinion/Rant] | Goal: Comments | Hook & Concept
-Day 5 (${platform}) — [Format: Tutorial] | Goal: Shares | Hook & Concept
-Day 6 (${platform}) — [Format: Personal/Behind-the-Scenes] | Goal: Trust | Hook & Concept
-Day 7 (${platform}) — [Format: Weekly Recap/Challenge] | Goal: Community | Hook & Concept`;
-  } else if (action === "repurpose") {
-    actionDirective = `
-FORMAT REQUIREMENT (CONTENT MULTIPLIER):
-Turn the core concept into 5 platform assets:
-1. TikTok / Reels / Shorts 30s Script
-2. Instagram Carousel (5-slide breakdown with slide copy)
-3. X / Twitter Hook & Thread
-4. LinkedIn Post (Story + lesson + takeaway)
-5. YouTube Community or Newsletter Blurb`;
-  } else if (action === "coach" || action === "analyze") {
-    actionDirective = `
-FORMAT REQUIREMENT (CREATOR AUDIT & STRATEGY):
-Give candid, senior creator manager coaching:
-- What is working (strengths to double down on)
-- What is hurting retention (weak hooks, pacing drags, vague CTAs)
-- 3 immediate, tactical experiments to run this week`;
-  } else {
-    actionDirective = `
-CREATIVE COLLABORATOR GUIDELINES:
-- Act as an intelligent, proactive creative partner.
-- If the user shares an idea, do not just say "great idea" — expand it with hooks, angles, and camera-ready scripts.
-- If an idea has flaws, constructively suggest a higher-retention pivot.
-- Format scripts with [HOOK], [BODY], and [CTA] whenever video content is discussed.`;
-  }
-
-  return `You are Pulse AI — the dedicated AI creative partner, content strategist, script director, and growth assistant inside Creators Pulse.
-You are NOT a generic chatbot. Never start with "Certainly!", "As an AI...", or canned filler. Speak like an elite creator director: knowledgeable, fast, punchy, honest, and hyper-tactical.
-
-CREATOR IDENTITY & CONTEXT:
-- Creator: ${handle}
-- Niche: ${niche}
+## CREATOR PROFILE & CONTEXT
 - Primary Platform: ${platform}
-- Core Goal: ${goal}
-- Brand Voice: ${brandVoice}${recentMetrics}${recentPosts}${connections}
-${memoryContext}
-${formattingRules}
+- Creator Niche: ${niche}
+- Growth Goal: ${goal}
+- Brand Voice: ${brandVoice}
+- Handle: ${handle}
+${recentMetrics}${recentPosts}
+${memoryDirectives}
 ${liveContext}
-${actionDirective}`;
+`;
 }
 
 function generatePulseAiFallback(action, context = {}, userPrompt = "", liveItems = []) {
   const niche = context.niche || "your niche";
   const platform = context.platform || "TikTok";
   const goal = context.goal || "views";
+  const lower = userPrompt.toLowerCase();
 
-  if (action === "hooks" || userPrompt.toLowerCase().includes("hook") || userPrompt.toLowerCase().includes("overlay")) {
-    return `Here are 5 high-retention text-overlay hooks engineered for ${niche} on ${platform}:
+  if (action === "card" || action === "ideas" || action === "create" || lower.includes("card") || lower.includes("idea") || lower.includes("angle") || lower.includes("debate") || lower.includes("develop")) {
+    let cleanTopic = userPrompt.replace(/^(give me|generate|help me with|create|ideas for|cards for|tell me about)\s*/i, "").trim() || (niche + " content");
+    if (cleanTopic.length > 60) cleanTopic = cleanTopic.substring(0, 60);
 
-### 1. The Real Reason John Cena Never Wins
-- **Hook / Overlay**: "The REAL Reason John Cena Never Wins"
-- **Why It Works**: Sparks immediate debate—fans rush to defend or critique in the comments.
-- **Placement Tip**: Drop at the 0:02 mark right as the crowd roar hits.
+    return `I developed three high-impact creative angles for "${cleanTopic}". Each angle is engineered with a different viral retention trigger:
 
-### 2. Roman Reigns = WWE Biggest Mistake
-- **Hook / Overlay**: "Roman Reigns = WWE's Biggest Mistake"
-- **Why It Works**: Instantly polarizes the Bloodline fandom and drives comment wars.
-- **Placement Tip**: Flash at 0:01 over a slow-motion spear clip.
+CARD 01 — THE DEBATE
+Title: The Biggest Controversy in ${niche}
+Content format: ${platform} debate video
+Hook: "One performance completely changes this whole debate."
+Creative angle: Challenge the consensus opinion and compare the two biggest sides head-to-head.
+Why this angle works: It creates instant disagreement and forces viewers to take a stand in the comments.
+Suggested structure:
+1. Open with a provocative claim that challenges conventional wisdom.
+2. Present the evidence that nobody is talking about.
+3. Contrast it with the popular opposing view.
+4. End by asking fans which side they stand on.
+Call to action: "Who is right here, and what is your strongest argument?"
 
-### 3. The Unspoken Locker Room Rule
-- **Hook / Overlay**: "The Locker Room Rule Nobody Mentions"
-- **Why It Works**: High curiosity gap—viewer stays to discover the insider secret.
-- **Placement Tip**: Center screen with bold contrast font, 0:00 to 0:03.
+CARD 02 — THE UNPOPULAR OPINION
+Title: Why Most People Fail at ${niche}
+Content format: Short-form breakdown (25s)
+Hook: "Stop doing this if you actually want results."
+Creative angle: Expose the common bad advice that everyone repeats without thinking.
+Why this angle works: Relieves audience anxiety and positions you as a trusted truth-teller.
+Suggested structure:
+1. Call out the tired advice directly.
+2. Explain the hidden flaw in the common method.
+3. Reveal the high-leverage alternative.
+4. Tell them to save this before their next post.
+Call to action: "Save this video and tell me in the comments if you agree."
 
-### 4. Why Fans Are Turning On The Champion
-- **Hook / Overlay**: "Why Fans Just Turned On The Champ"
-- **Why It Works**: Plays on current crowd psychology and controversial booking.
-- **Placement Tip**: Fade in at 0:02 over a split-screen reaction.
+CARD 03 — THE CURIOSITY GAP
+Title: The Hidden Rule Nobody Mentions
+Content format: Story-driven Reel / TikTok
+Hook: "There is one unspoken rule that changes everything."
+Creative angle: Behind-the-scenes breakdown revealing an insider secret.
+Why this angle works: High curiosity retention — viewers stay until the end to discover the payoff.
+Suggested structure:
+1. Tease the hidden factor in the first 2 seconds.
+2. Show why ordinary approaches miss it.
+3. Reveal the breakthrough moment.
+4. Quick summary takeaway.
+Call to action: "Drop a comment if you knew this already."
 
-### 5. Stop Saying This Was A Clean Finish
-- **Hook / Overlay**: "Stop Saying This Was Clean"
-- **Why It Works**: Challenges viewer perception and forces them to watch the replay.
-- **Placement Tip**: Drop at 0:01 with a referee slow-mo replay.`;
+Which card do you want to develop further, or should we turn one into a 30-second camera-ready script?`;
   }
 
-  if (action === "what_to_post" || userPrompt.toLowerCase().includes("what should i post") || action === "news") {
-    let liveNote = "";
-    if (Array.isArray(liveItems) && liveItems.length > 0) {
-      liveNote = `\n\n*Live ESPN/Sports Wire:* "${liveItems[0].title}"`;
-    }
-    return `Here are 3 high-impact content options you can record today for ${niche}:${liveNote}
+  if (action === "hooks" || lower.includes("hook") || lower.includes("overlay")) {
+    return `Here are 5 high-retention text-overlay hooks engineered for ${platform} in ${niche}:
 
-### Option 1 — Viral Top-of-Funnel (Broad Reach)
-- **Hook / Premise**: "The single biggest mistake people make in ${niche} before they see results."
-- **Visual Angle**: 25-second fast breakdown showing the mistake vs the fix.
-- **Why Today**: High algorithmic distribution and rapid profile visits.
+1. "Most creators in ${niche} won't tell you this..."
+2. "I tested this for 30 days so you don't have to."
+3. "The single reason your ${niche} videos stop getting views at 200."
+4. "Unpopular opinion: this is ruining your engagement."
+5. "Stop scrolling if you care about ${goal}."
 
-### Option 2 — High-Retention Authority (Saves & Shares)
-- **Hook / Premise**: "Save this before your next ${niche} debate: here is the master proof."
-- **Framework**: 3 undeniable statistics or historical moments.
-- **Why Today**: High save-to-like ratio signals quality to the ${platform} algorithm.
-
-### Option 3 — Hot Take / Debate (500+ Comments)
-- **Hook / Premise**: "I might get hate for this, but someone had to say it..."
-- **Debate Angle**: Challenge the consensus opinion on recent storylines or matches.
-- **Why Today**: Promotes heated comment debates which spike engagement velocity.`;
+Next step: Want me to turn any of these into a full 30-second script?`;
   }
 
-  if (action === "calendar" || userPrompt.toLowerCase().includes("calendar") || userPrompt.toLowerCase().includes("plan")) {
-    return `Here is your 7-Day High-Growth Content Roadmap for ${niche} on ${platform}:
+  if (action === "script" || lower.includes("script")) {
+    return `Here is a camera-ready 30-second script for ${platform}:
 
-### Day 1 — The Common Mistake (30s Video)
-- **Goal**: Broad Reach
-- **Hook**: "Stop doing this in ${niche} if you want real results."
+[HOOK - 0:00-0:03]: (Zoom in fast / Point at text) "If you are struggling with ${niche}, you need to hear this right now."
 
-### Day 2 — The Step-by-Step Blueprint (Carousel / Breakdown)
-- **Goal**: High Saves
-- **Hook**: "The 3 rules I follow every week."
+[THE REALITY - 0:03-0:10]: (B-roll or split screen) "Most people tell you to just post more. But posting bad content 5 times a day just burns you out."
 
-### Day 3 — Personal Behind-The-Scenes / Story (Short Reel)
-- **Goal**: Audience Trust
-- **Hook**: "What nobody tells you about starting in ${niche}."
+[THE SHIFT - 0:10-0:20]: (Look straight at camera, drop your voice) "Here is the exact shift that actually moves the needle for ${goal}: focus on the first 2 seconds of curiosity."
 
-### Day 4 — The Contrarian Hot Take (Video Discussion)
-- **Goal**: High Comments
-- **Hook**: "Unpopular opinion: this standard advice is hurting you."
+[CALL TO ACTION - 0:20-0:30]: (Point down) "Try this on your next post and comment your results below."
 
-### Day 5 — The Rapid-Fire Breakdown (20s Video)
-- **Goal**: Shares & Viral Reach
-- **Hook**: "The fastest shortcut I found for ${goal}."
-
-### Day 6 — Q&A / Audience Response (Casual Camera)
-- **Goal**: Community
-- **Hook**: "Replying to the most asked question this month..."
-
-### Day 7 — Weekly Reflection & Next Target (Story or Short)
-- **Goal**: Retention & Loyalty
-- **Hook**: "One thing I learned this week that changed my workflow."`;
+You can tap "Shoot in Studio" below to load this into your teleprompter with auto-captions and timer!`;
   }
 
-  return `TITLE: The ${niche} Breakthrough Formula
-PLATFORM: ${platform} | RUNTIME: 30s | GOAL: ${goal}
+  if (action === "news" || liveItems.length > 0) {
+    const top = liveItems[0] || { title: `Breaking developments in ${niche}`, source: "Live Feeds" };
+    return `Based on live trends around "${top.title}" [${top.source}]:
 
-[HOOK - 0 to 3s]:
-(Visual): Sharp camera zoom or sudden object reveal, direct eye contact. Text overlay: "Stop Scrolling — Watch This".
-(Spoken): "If you are following ${niche}, stop scrolling — because this changes everything."
+The story offers a prime debate opportunity for ${platform}:
+- The Angle: Fans and creators are split on whether this changes the whole landscape.
+- The Opening Hook: "Everyone is talking about this news, but they are completely missing the real point."
+- Strategy: Address the controversy early, present your perspective in 20 seconds, and ask the audience for their take.
 
-[BODY - 4 to 25s]:
-(Visual): Cut to B-Roll or on-screen demonstration.
-(Spoken): "Most people look at this backwards. Here is the single adjustment: stop trying to please everyone and speak directly to the passionate fans."
+Want me to generate three static content cards for this topic?`;
+  }
 
-(Visual): Face-to-camera punch in, point to screen.
-(Spoken): "Eliminate the fluff in the first 2 seconds. The moment you give immediate heat, your watch time doubles."
+  return `I analyzed your creative focus in ${niche} for ${platform}.
 
-[PAYOFF & CTA - Final 5s]:
-(Visual): Direct eye contact, tap on screen graphic.
-(Spoken): "Try this on your next post. Tap save so you do not lose this, and drop your take in the comments below."
+To maximize ${goal}, here are three tactical approaches:
+1. The High-Tension Hook: Open with a counter-intuitive observation in the first 2 seconds.
+2. The Audience Debate: Ask a direct question that forces viewers to defend their opinion in the comments.
+3. The Actionable Blueprint: Give viewers one concrete tactic they can test today.
 
-PRODUCTION TIPS:
-- Energy: Keep pacing brisk with zero dead air.
-- Text Overlays: Flash "The Big Adjustment" at 0:06 and "Immediate Heat" at 0:18.`;
+You can bring your own idea or ask for live trending topics. What would you like to create right now?`;
 }
 
 async function handlePulseAi(req, res) {

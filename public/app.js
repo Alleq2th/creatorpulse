@@ -4,24 +4,109 @@
 // change this one line if a different address should be used instead.
 const SUPPORT_EMAIL = "sportsguycollabs@gmail.com";
 
-// ─── PULSE AI — CONVERSATIONAL CREATIVE WORKSPACE & MEMORY UI ──────────────
+// ─── PULSE AI — CONVERSATIONAL CREATIVE WORKSPACE, CARDS & THREADS ─────────
 const PULSE_AI_ACTIONS = [
-  { id: "create",    label: "Create Content",     prompt: "I want to create new content. Help me build it from scratch.", action: "create" },
-  { id: "ideas",     label: "Generate Ideas",     prompt: "Give me fresh, high-impact content ideas for my niche.", action: "ideas" },
-  { id: "script",    label: "Write a Script",     prompt: "Write me a camera-ready short-form script.", action: "script" },
-  { id: "overlays",  label: "🔥 Text Overlays",   prompt: "Give me 5 controversial 3-7 word text overlays for TikTok with 2-second cues.", action: "hooks" },
-  { id: "espn",      label: "🌐 Live ESPN & Sports", prompt: "Fetch today's breaking ESPN sports headlines and give me 3 viral debate angles.", action: "news" },
-  { id: "post",      label: "What Should I Post?", prompt: "What should I post today? Give me 3 tactical options.", action: "what_to_post" },
-  { id: "hooks",     label: "Improve My Hook",    prompt: "Make my hook stronger, punchier and scroll-stopping.", action: "hooks" },
-  { id: "analyze",   label: "Analyze My Content", prompt: "Analyze my recent content and tell me what is working and what is not.", action: "analyze" },
-  { id: "calendar",  label: "Build Content Plan", prompt: "Build me a 7-day high-growth content plan.", action: "calendar" },
-  { id: "repurpose", label: "Repurpose Content",  prompt: "Repurpose my existing content into new formats.", action: "repurpose" }
+  { id: "develop",   label: "💡 Develop My Idea",  prompt: "I have an idea for a video. Help me develop it into 3 strong creative angles.", action: "ideas" },
+  { id: "script",    label: "🎬 Write a Script",   prompt: "Turn my idea into a 30-second camera-ready TikTok script.", action: "script" },
+  { id: "overlays",  label: "🔥 Text Overlays",    prompt: "Give me 5 controversial 3-7 word text overlays for TikTok with 2-second cues.", action: "hooks" },
+  { id: "espn",      label: "🌐 Live ESPN News",   prompt: "Fetch today's breaking ESPN sports headlines and give me 3 viral debate angles.", action: "news" },
+  { id: "post",      label: "What to Post Today?", prompt: "What should I post today? Give me 3 tactical options.", action: "what_to_post" },
+  { id: "hooks",     label: "⚡ Stronger Hooks",    prompt: "Make my hook punchier, more controversial, and scroll-stopping.", action: "hooks" },
+  { id: "cards",     label: "🗂️ Content Cards",   prompt: "Generate three structured static content cards for this topic.", action: "card" },
+  { id: "calendar",  label: "📅 7-Day Plan",       prompt: "Build me a 7-day high-growth content plan.", action: "calendar" }
 ];
 
 const PULSE_AI_GOALS = ["views", "engagement", "followers", "authority", "leads", "sales", "consistency"];
+const PULSE_AI_PLATFORMS = ["tiktok", "instagram", "youtube", "x", "facebook", "linkedin"];
 
 function pulseAiDetectScript(text){
   return /TITLE:\s*[^\n]+/i.test(text) && /\[HOOK/i.test(text);
+}
+
+function pulseAiParseContentCards(text) {
+  if (!text || !/(?:CARD|Card)\s*\d+/i.test(text)) return null;
+
+  // Regex matches CARD 01 — THE DEBATE up until the next CARD or end
+  const cardRegex = /(?:^|\n)(?:CARD|Card)\s*(\d+)?\s*[-—:]*\s*([^\n]+)?\n([\s\S]*?)(?=(?:\n(?:CARD|Card)\s*\d+|$))/gi;
+  let matches = [];
+  let m;
+  while ((m = cardRegex.exec(text)) !== null) {
+    matches.push(m);
+  }
+  if (!matches.length) return null;
+
+  // Extract surrounding text
+  const firstCardStart = matches[0].index;
+  const preText = text.substring(0, firstCardStart).trim();
+
+  let lastCard = matches[matches.length - 1];
+  const lastCardEnd = lastCard.index + lastCard[0].length;
+  const postText = text.substring(lastCardEnd).trim();
+
+  const getField = (body, name) => {
+    const r = new RegExp(`(?:^|\n)\s*(?:\*\*)?${name}(?:\*\*)?\s*:\s*([\s\S]*?)(?=(?:\n\s*(?:\*\*)?[A-Z][a-zA-Z\s/&]+(?:\*\*)?\s*:|$))`, "i");
+    const found = body.match(r);
+    return found ? found[1].trim() : "";
+  };
+
+  const cardsHtml = matches.map((match, idx) => {
+    const cardNum = match[1] || String(idx + 1).padStart(2, "0");
+    const badge = (match[2] || "CREATIVE ANGLE").trim().replace(/^[-—:]+\s*/, "");
+    const body = match[3];
+
+    const title = getField(body, "Title") || getField(body, "Topic") || "Content Concept";
+    const format = getField(body, "Content format") || getField(body, "Format") || "Short-form video";
+    const hook = getField(body, "Hook") || getField(body, "Opening hook");
+    const angle = getField(body, "Creative angle") || getField(body, "Angle");
+    const why = getField(body, "Why this angle works") || getField(body, "Why it works");
+    const structure = getField(body, "Suggested structure") || getField(body, "Structure");
+    const cta = getField(body, "Call to action") || getField(body, "CTA");
+
+    const cleanTitle = esc(title).replace(/['\\]/g, "");
+    const cleanHook = esc(hook).replace(/['\\]/g, "");
+
+    // Format structure steps
+    let structHtml = "";
+    if (structure) {
+      const steps = structure.split(/\n\s*\d+\.\s*/).map(s => s.trim()).filter(Boolean);
+      if (steps.length > 1) {
+        structHtml = `<div class="pa-struct-list">${steps.map((st, i) => `<div class="pa-struct-step"><span class="pa-step-num">${i+1}</span> <span>${esc(st)}</span></div>`).join("")}</div>`;
+      } else {
+        structHtml = `<div class="pa-card-val">${esc(structure).replace(/\n/g, "<br>")}</div>`;
+      }
+    }
+
+    return `<div class="pa-content-card">
+      <div class="pa-cc-head">
+        <div class="pa-cc-badge-wrap">
+          <span class="pa-cc-num">CARD ${esc(cardNum)}</span>
+          <span class="pa-cc-type">${esc(badge)}</span>
+        </div>
+        <div class="pa-cc-fmt">📱 ${esc(format)}</div>
+      </div>
+      <div class="pa-cc-title">${esc(title)}</div>
+
+      ${hook ? `<div class="pa-cc-hook-box">
+        <div class="pa-cc-hook-lbl">🎬 HOOK</div>
+        <div class="pa-cc-hook-quote">"${esc(hook.replace(/^["'\s]+|["'\s]+$/g, ""))}"</div>
+      </div>` : ""}
+
+      ${angle ? `<div class="pa-cc-row"><span class="pa-cc-lbl">Creative Angle:</span> <span class="pa-cc-val">${esc(angle)}</span></div>` : ""}
+      ${why ? `<div class="pa-cc-row"><span class="pa-cc-lbl">Why This Works:</span> <span class="pa-cc-val">${esc(why)}</span></div>` : ""}
+      ${structHtml ? `<div class="pa-cc-row pa-cc-struct"><span class="pa-cc-lbl">Suggested Structure:</span>${structHtml}</div>` : ""}
+      ${cta ? `<div class="pa-cc-cta-row"><span class="pa-cc-lbl">CTA:</span> <span class="pa-cc-cta-val">"${esc(cta.replace(/^["'\s]+|["'\s]+$/g, ""))}"</span></div>` : ""}
+
+      <div class="pa-cc-actions">
+        <button class="pa-chip-mini pa-chip-action" onclick="sendPulseAiMessage('Refine Card #${cardNum}: ${cleanTitle}', 'card')">🎯 Refine Card</button>
+        <button class="pa-chip-mini pa-chip-action" onclick="sendPulseAiMessage('Make Card #${cardNum} more controversial: ${cleanTitle}', 'card')">🔥 More Controversial</button>
+        <button class="pa-chip-mini pa-chip-primary" onclick="sendPulseAiMessage('Turn Card #${cardNum} into a 30s camera-ready TikTok script: ${cleanTitle}', 'script')">🎬 Turn into Script</button>
+        <button class="pa-chip-mini" onclick="saveContentCard('${cleanTitle}', '${cleanHook}', '${esc(format)}', '${esc(angle)}')">💾 Save</button>
+        <button class="pa-chip-mini" onclick="window.copyTxt('${cleanTitle}\nHook: ${cleanHook}\nFormat: ${esc(format)}\nCTA: ${esc(cta)}');toast('Copied Card')">📋 Copy</button>
+      </div>
+    </div>`;
+  }).join("");
+
+  return { preText, cardsHtml, postText };
 }
 
 function pulseAiParseTablesToCards(raw) {
@@ -121,28 +206,39 @@ function pulseAiGetFollowupChips(text, action) {
   const lower = String(text || "").toLowerCase();
   const chips = [];
 
-  if (lower.includes("hook") || lower.includes("overlay") || action === "hooks") {
-    chips.push({ label: "⚡ 5 More Controversial Hooks", prompt: "Give me 5 more controversial text-overlay hooks for WWE / sports TikTok.", action: "hooks" });
+  if (lower.includes("card 01") || lower.includes("creative angle") || action === "card") {
+    chips.push({ label: "🎬 Turn Card #1 into Script", prompt: "Turn Card #1 into a camera-ready 30-second TikTok script with visual cues.", action: "script" });
+    chips.push({ label: "🔥 Make Cards More Controversial", prompt: "Make these angles more controversial and debate-heavy to trigger 500+ comments.", action: "card" });
+    chips.push({ label: "⚡ 3 Alternative Hooks", prompt: "Give me 3 alternative scroll-stopping hooks for Card #1.", action: "hooks" });
+  } else if (lower.includes("hook") || lower.includes("overlay") || action === "hooks") {
+    chips.push({ label: "⚡ 5 More Controversial Hooks", prompt: "Give me 5 more controversial text-overlay hooks for TikTok.", action: "hooks" });
     chips.push({ label: "🎬 Turn #1 into Script", prompt: "Turn hook #1 into a camera-ready 30-second TikTok script with 2s visual cues.", action: "script" });
-    chips.push({ label: "🔥 3 Hot Takes for Comments", prompt: "Give me 3 controversial debate angles designed to drive 500+ comments.", action: "chat" });
+    chips.push({ label: "🗂️ Generate Content Cards", prompt: "Generate 3 static content cards for these hooks.", action: "card" });
   } else if (lower.includes("title:") || lower.includes("[hook") || action === "script") {
     chips.push({ label: "🔥 Make Hook More Controversial", prompt: "Make the hook of this script 10x more controversial and punchy.", action: "hooks" });
     chips.push({ label: "⚡ Shorten to 20s High-Velocity", prompt: "Cut this script down to a super fast 20-second high-retention version.", action: "script" });
-    chips.push({ label: "📝 3 Instagram Captions & CTAs", prompt: "Write 3 punchy captions with high-converting CTAs for this video.", action: "chat" });
+    chips.push({ label: "📝 3 Captions & CTAs", prompt: "Write 3 punchy captions with high-converting CTAs for this video.", action: "chat" });
   } else if (lower.includes("espn") || lower.includes("news") || lower.includes("today")) {
-    chips.push({ label: "🌐 Check ESPN Sports Live News", prompt: "Fetch today's live breaking ESPN and sports headlines and give me 3 viral angles.", action: "chat" });
+    chips.push({ label: "🗂️ 3 Debate Content Cards", prompt: "Turn today's sports headlines into 3 structured static content cards.", action: "card" });
     chips.push({ label: "🎬 30s Breaking News Script", prompt: "Write a 30-second breaking sports news breakdown script.", action: "script" });
     chips.push({ label: "⚡ 5 Viral Debate Hooks", prompt: "Give me 5 viral debate hooks based on today's sports news.", action: "hooks" });
   } else {
-    chips.push({ label: "🌐 Live ESPN & Sports News", prompt: "Check live ESPN and sports headlines for hot topics I can post about today.", action: "chat" });
-    chips.push({ label: "⚡ 5 High-Retention Hooks", prompt: "Give me 5 scroll-stopping hooks with visual cues.", action: "hooks" });
+    chips.push({ label: "🗂️ Generate 3 Content Cards", prompt: "Turn this into 3 structured static content cards.", action: "card" });
     chips.push({ label: "🎬 30s TikTok Script", prompt: "Turn this idea into a camera-ready 30-second script for Studio.", action: "script" });
-    chips.push({ label: "📅 7-Day Plan", prompt: "Create a 7-day high-growth content schedule for me.", action: "calendar" });
+    chips.push({ label: "🌐 Live ESPN & Sports News", prompt: "Check live ESPN and sports headlines for hot topics I can post about today.", action: "chat" });
   }
   return chips.slice(0, 3);
 }
 
 function pulseAiRenderMsgContent(text, msgId, action){
+  // Check for Content Cards
+  const cardsRes = pulseAiParseContentCards(text);
+  if (cardsRes) {
+    let preHtml = cardsRes.preText ? `<div class="pa-lead-text">${esc(cardsRes.preText).replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(/\n/g, "<br>")}</div>` : "";
+    let postHtml = cardsRes.postText ? `<div class="pa-tail-text">${esc(cardsRes.postText).replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>").replace(/\n/g, "<br>")}</div>` : "";
+    return `${preHtml}<div class="pa-content-cards-wrap">${cardsRes.cardsHtml}</div>${postHtml}`;
+  }
+
   let processed = pulseAiParseTablesToCards(text);
   processed = pulseAiParseSectionsToCards(processed);
   processed = processed.replace(/\[HOOK\s*[-–—]?\s*([^\]]+)\]/gi, '<div class="pa-cue-badge pa-cue-hook">🎬 HOOK ($1)</div>');
@@ -155,6 +251,40 @@ function pulseAiRenderMsgContent(text, msgId, action){
   html = html.replace(/(^|\n)\s*[-•]\s*/g, "$1• ");
   html = html.replace(/\n/g, "<br>");
   return html;
+}
+
+function renderPulseAiThreadsDrawer() {
+  const threads = S.pulseAi?.threads || [];
+  const activeId = S.pulseAi?.activeThreadId;
+
+  return `<div class="pa-threads-drawer">
+    <div class="pa-threads-header">
+      <div class="pa-threads-title">💬 Conversations (${threads.length})</div>
+      <div class="pa-threads-head-actions">
+        <button class="pa-chip-mini pa-chip-primary" onclick="newPulseAiThread()">+ New Chat</button>
+        <button class="pa-mem-close" onclick="togglePulseAiThreads(event)">×</button>
+      </div>
+    </div>
+    <p class="pa-mem-desc">Switch between creative brainstorming sessions, video scripts, and research threads.</p>
+
+    <div class="pa-threads-list">
+      ${threads.map(t => {
+        const isActive = t.id === activeId;
+        const msgCount = (t.messages || []).length;
+        const dateStr = t.updatedAt ? new Date(t.updatedAt).toLocaleDateString([], { month: "short", day: "numeric" }) : "Today";
+        return `<div class="pa-thread-item ${isActive ? 'pa-thread-active' : ''}" onclick="switchPulseAiThread('${t.id}')">
+          <div class="pa-thread-info">
+            <div class="pa-thread-title">${esc(t.title || 'Creative Session')}</div>
+            <div class="pa-thread-meta">${dateStr} · ${msgCount} msgs</div>
+          </div>
+          <div class="pa-thread-actions">
+            ${isActive ? '<span class="pa-thread-curr-pill">Active</span>' : ''}
+            <button class="pa-thread-del" onclick="deletePulseAiThread('${t.id}', event)" title="Delete conversation">🗑️</button>
+          </div>
+        </div>`;
+      }).join("")}
+    </div>
+  </div>`;
 }
 
 function renderPulseAiMemoryDrawer() {
@@ -171,7 +301,7 @@ function renderPulseAiMemoryDrawer() {
       <div class="pa-mem-title">🧠 Pulse AI Creator Memory</div>
       <button class="pa-mem-close" onclick="togglePulseAiMemory(event)">×</button>
     </div>
-    <p class="pa-mem-desc">Pulse AI learns your voice, preferences, topics, and pet peeves so it never wastes your time with generic filler.</p>
+    <p class="pa-mem-desc">Plus AI learns your voice, preferences, topics, and pet peeves so it never wastes your time with generic filler.</p>
     
     <div class="pa-mem-sec">
       <div class="pa-mem-sec-title">Learned Character Traits</div>
@@ -222,7 +352,7 @@ function renderPulseAiMemoryDrawer() {
 
 function renderFloatingCoach(){
   if(S.mode !== "app") return "";
-  const P = S.pulseAi || (S.pulseAi = { open:false, messages:[], loading:false, platform:"tiktok", goal:"views", niche:"", brandVoice:"", input:"", activeAction:"chat", showMemory:false, memory:null });
+  const P = S.pulseAi || (S.pulseAi = { open:false, messages:[], loading:false, platform:"tiktok", goal:"views", niche:"", brandVoice:"", input:"", activeAction:"chat", showMemory:false, showThreads:false, memory:null, threads:[] });
   const open = !!P.open;
   const hasMessages = P.messages && P.messages.length > 0;
 
@@ -230,9 +360,10 @@ function renderFloatingCoach(){
 
   if(!open) return fab;
 
-  const quickChips = !hasMessages ? PULSE_AI_ACTIONS.map(a => `<button class="pa-chip" onclick="sendPulseAiMessage('${a.prompt.replace(/['\\]/g, '')}', '${a.action}')">${a.label}</button>`).join("") : "";
-
   const traitCount = ((P.memory?.characterTraits?.length || 3) + (P.memory?.likes?.length || 4));
+  const threadCount = (P.threads?.length || 1);
+
+  const quickChips = !hasMessages ? PULSE_AI_ACTIONS.map(a => `<button class="pa-chip" onclick="sendPulseAiMessage('${a.prompt.replace(/['\\]/g, '')}', '${a.action}')">${a.label}</button>`).join("") : "";
 
   const messagesHtml = hasMessages ? P.messages.map(m => {
     if(m.role === "user"){
@@ -259,10 +390,29 @@ function renderFloatingCoach(){
   }).join("") : `
     <div class="pa-welcome">
       <div class="pa-welcome-icon">${I.sparkle}</div>
-      <h4>Your AI Creative Partner</h4>
-      <p>I learn your voice, avoid your pet peeves, and pull live ESPN &amp; sports data. Tap an action below or bring any idea.</p>
+      <h4>Plus AI — Your Creative Partner</h4>
+      <p>Brainstorm bold angles, develop your own ideas into camera-ready scripts, or generate static content cards.</p>
+    </div>
+    <div class="pa-modes-grid">
+      <div class="pa-mode-card" onclick="sendPulseAiMessage('I have an idea for a video. Help me develop it into 3 strong creative angles.', 'ideas')">
+        <div class="pa-mode-badge">MODE B</div>
+        <div class="pa-mode-title">💡 Bring Your Own Idea</div>
+        <div class="pa-mode-desc">Bring any concept, question, or rough topic and turn it into cards.</div>
+      </div>
+      <div class="pa-mode-card" onclick="sendPulseAiMessage('Fetch today\'s breaking ESPN sports headlines and give me 3 viral debate angles.', 'news')">
+        <div class="pa-mode-badge">MODE A</div>
+        <div class="pa-mode-title">🌐 Live ESPN &amp; Trends</div>
+        <div class="pa-mode-desc">Real-time headlines and breaking sports debates ready to film today.</div>
+      </div>
     </div>
     <div class="pa-chips">${quickChips}</div>`;
+
+  let drawerContent = messagesHtml;
+  if (P.showThreads) {
+    drawerContent = renderPulseAiThreadsDrawer();
+  } else if (P.showMemory) {
+    drawerContent = renderPulseAiMemoryDrawer();
+  }
 
   return `${fab}
   <div class="sheet-overlay open" onclick="if(event.target===this){closePulseAi()}">
@@ -272,34 +422,32 @@ function renderFloatingCoach(){
         <div class="pa-header">
           <div class="pa-logo">${I.sparkle}</div>
           <div>
-            <h3>Pulse AI</h3>
-            <div class="pa-sub">Your creator co-pilot</div>
+            <h3>Plus AI</h3>
+            <div class="pa-sub">Your creative partner</div>
           </div>
         </div>
         <div class="pa-header-actions">
-          <button class="pa-mem-pill" onclick="togglePulseAiMemory(event)" title="Creator Memory Profile">🧠 <span>${traitCount}</span> Learned</button>
-          ${hasMessages ? `<button class="pa-icon-act" title="New chat" onclick="resetPulseAiConversation()">${I.refresh}</button>` : ""}
+          <button class="pa-head-btn" onclick="newPulseAiThread()" title="Start New Chat">+ New</button>
+          <button class="pa-head-btn ${P.showThreads ? 'pa-head-btn-active' : ''}" onclick="togglePulseAiThreads(event)" title="Conversations">💬 <span>${threadCount}</span></button>
+          <button class="pa-head-btn ${P.showMemory ? 'pa-head-btn-active' : ''}" onclick="togglePulseAiMemory(event)" title="Creator Memory Profile">🧠 <span>${traitCount}</span></button>
           <button class="sheet-close" onclick="closePulseAi()">×</button>
         </div>
       </div>
 
-      <div class="pa-context">
-        <select class="pa-select" onchange="S.pulseAi.platform=this.value;render()">
-          ${["tiktok","instagram","youtube","twitter","facebook","linkedin"].map(p => `<option value="${p}" ${P.platform===p?'selected':''}>${p[0].toUpperCase()+p.slice(1)}</option>`).join("")}
-        </select>
-        <select class="pa-select" onchange="S.pulseAi.goal=this.value;render()">
-          ${PULSE_AI_GOALS.map(g => `<option value="${g}" ${P.goal===g?'selected':''}>${g[0].toUpperCase()+g.slice(1)}</option>`).join("")}
-        </select>
+      <div class="pa-context-bar">
+        <span class="pa-context-pill">📱 ${esc((P.platform || "tiktok").toUpperCase())}</span>
+        <span class="pa-context-pill">🎯 ${esc(P.goal || "views")}</span>
+        <span class="pa-context-pill">🔥 ${esc(P.niche || "creator")}</span>
       </div>
 
       <div class="pa-chat" id="pulse-chat-messages">
-        ${P.showMemory ? renderPulseAiMemoryDrawer() : messagesHtml}
+        ${drawerContent}
         ${P.loading ? `<div class="pa-msg pa-msg-ai"><div class="pa-bubble pa-bubble-ai pa-typing"><span></span><span></span><span></span></div></div>` : ""}
         ${(S.errors && S.errors.pulseAi) ? errCard(S.errors.pulseAi, "sendPulseAiMessage()", "pulseAi") : ""}
       </div>
 
       <div class="pa-inputbar">
-        <textarea id="pulse-input" class="pa-input" rows="1" placeholder="Ask Pulse AI anything — 'I have an idea…', '5 hooks', 'Live ESPN news'"
+        <textarea id="pulse-input" class="pa-input" rows="1" placeholder="Tell Plus AI what you want to create..."
           oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px';S.pulseAi.input=this.value"
           onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();sendPulseAiMessage();}"></textarea>
         <button class="pa-send" onclick="sendPulseAiMessage()" ${P.loading?"disabled":""} aria-label="Send">${I.bolt}</button>
@@ -307,7 +455,6 @@ function renderFloatingCoach(){
     </div>
   </div>`;
 }
-
 
 window.coachUploadScreenshot = (e) => {
   const f = e.target.files?.[0]; if(!f) return;
