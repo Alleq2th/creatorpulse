@@ -1506,7 +1506,8 @@ window.sendPulseAiMessage = async (customText, actionType) => {
       content: d.text || d.answer || "I am ready with your creative angle. Let's make it hit.",
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       action: d.action || actionType || "chat",
-      model: d.model || "pulse-ai"
+      model: d.model || "pulse-ai",
+      statCard: d.statCard || null
     };
 
     S.pulseAi.messages.push(assistantMsg);
@@ -1523,6 +1524,86 @@ window.sendPulseAiMessage = async (customText, actionType) => {
     render();
     scrollPulseAiToBottom();
   }
+};
+
+
+window.generatePulseStatCard = (topic, format = "instagram") => {
+  const clean = String(topic || "").replace(/['\\]/g, "");
+  const actionText = format === "tiktok" 
+    ? `Change this into a TikTok post stat card: ${clean}`
+    : `Change this into an Instagram post stat card: ${clean}`;
+  window.sendPulseAiMessage(actionText, format === "tiktok" ? "tiktok_post" : "stat_card");
+};
+
+
+window.downloadPulseSlide = (msgId, slideIdx) => {
+  const msg = S.pulseAi?.messages?.find(m => m.id === msgId);
+  const img = msg?.statCard?.images?.[slideIdx];
+  if (img && typeof window.dl === "function") {
+    window.dl(img, "stat-card-slide-" + (slideIdx + 1) + ".png");
+  }
+};
+
+window.downloadPulseAllSlides = (msgId) => {
+  const msg = S.pulseAi?.messages?.find(m => m.id === msgId);
+  const imgs = msg?.statCard?.images;
+  if (imgs && imgs.length && typeof window.dlAll === "function") {
+    window.dlAll(imgs);
+  }
+};
+
+window.switchStatCardFormat = async (msgId, newFormat) => {
+  const msg = S.pulseAi?.messages?.find(m => m.id === msgId);
+  if (!msg || !msg.statCard) return;
+  msg.statCard._loading = true;
+  render();
+  try {
+    const res = await api("/api/pulse-ai/stat-card", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        topic: msg.statCard.topic,
+        format: newFormat,
+        palette: msg.statCard.palette || "noir_orange",
+        category: msg.statCard.category,
+        imageUrl: msg.statCard.imageUrl
+      })
+    });
+    if (res && res.images && res.images.length) {
+      msg.statCard.images = res.images;
+      msg.statCard.slides = res.slides;
+      msg.statCard.format = newFormat;
+      if (res.imageCredit) msg.statCard.imageCredit = res.imageCredit;
+      toast("Updated to " + (newFormat === "tiktok" ? "TikTok (9:16)" : "Instagram (4:5)") + "!");
+    }
+  } catch (err) {
+    toast("Could not switch format — try again.");
+  } finally {
+    msg.statCard._loading = false;
+    window.savePulseAiThreads();
+    render();
+  }
+};
+
+window.savePulseStatCardToLibrary = (msgId) => {
+  const msg = S.pulseAi?.messages?.find(m => m.id === msgId);
+  if (!msg || !msg.statCard) return;
+  if (!S.saved) S.saved = [];
+  const card = msg.statCard;
+  S.saved.unshift({
+    id: "sc_" + Date.now(),
+    headline: card.slides?.[0]?.headline || card.topic || "Stat Card",
+    platform: card.format === "tiktok" ? "tiktok" : "instagram",
+    niche: card.category?.displayName || "General",
+    content_type: "stat_card",
+    images: card.images || [],
+    slides: card.slides || [],
+    imageUrl: card.imageUrl,
+    created_at: new Date().toISOString()
+  });
+  try { localStorage.setItem("cp_saved", JSON.stringify(S.saved)); } catch(_) {}
+  toast("Saved stat card to your library!");
+  render();
 };
 
 window.pulseAiShootScript = (msgId) => {
