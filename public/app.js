@@ -92,7 +92,7 @@ function pulseAiParseContentCards(text) {
   const postText = text.substring(lastCardEnd).trim();
 
   const getField = (body, name) => {
-    const r = new RegExp(`(?:^|\n)\s*(?:\*\*)?${name}(?:\*\*)?\s*:\s*([\s\S]*?)(?=(?:\n\s*(?:\*\*)?[A-Z][a-zA-Z\s/&]+(?:\*\*)?\s*:|$))`, "i");
+    const r = new RegExp(String.raw`(?:^|\n)\s*(?:\*\*)?${name}(?:\*\*)?\s*:\s*([\s\S]*?)(?=(?:\n\s*(?:\*\*)?[A-Z][a-zA-Z\s/&]+(?:\*\*)?\s*:|$))`, "i");
     const found = body.match(r);
     return found ? found[1].trim() : "";
   };
@@ -402,6 +402,20 @@ function renderPulseAiMemoryDrawer() {
   </div>`;
 }
 
+// Never let one malformed message blank the whole app. render() is a
+// full-page rebuild (renderApp assigns root.innerHTML in ONE shot), so if a
+// single row throws, that assignment never happens: the screen keeps its old
+// markup AND every later tap re-throws and does nothing until a manual reload.
+// That is exactly the "tap Plus AI -> the whole app dies" failure, so each
+// message row is rendered through this guard.
+function paSafeRender(fn, fallback) {
+  try { return fn(); }
+  catch (e) {
+    try { console.warn("Plus AI render fallback:", e && e.message); } catch (_) {}
+    return fallback;
+  }
+}
+
 function renderFloatingCoach(){
   if(S.mode !== "app") return "";
   const P = S.pulseAi || (S.pulseAi = { open:false, messages:[], loading:false, platform:"tiktok", goal:"views", niche:"", brandVoice:"", input:"", activeAction:"chat", showMemory:false, showThreads:false, memory:null, threads:[] });
@@ -430,10 +444,10 @@ function renderFloatingCoach(){
       </div>
     </div>` : "";
 
-    const statCardHtml = m.statCard ? pulseAiRenderStatCard(m.statCard, m.id) : "";
+    const statCardHtml = m.statCard ? paSafeRender(() => pulseAiRenderStatCard(m.statCard, m.id), "") : "";
     return `<div class="pa-msg pa-msg-ai">
       ${statCardHtml}
-      <div class="pa-bubble pa-bubble-ai">${pulseAiRenderMsgContent(m.content, m.id, m.action)}</div>
+      <div class="pa-bubble pa-bubble-ai">${paSafeRender(() => pulseAiRenderMsgContent(m.content, m.id, m.action), esc(m.content || ""))}</div>
       <div class="pa-msg-actions">
         ${isScript ? `<button class="pa-act pa-act-primary" onclick="pulseAiShootScript('${m.id}')">🎬 Shoot in Studio</button>` : ""}
         <button class="pa-act" onclick="pulseAiSaveScript('${m.id}')">💾 Save</button>
