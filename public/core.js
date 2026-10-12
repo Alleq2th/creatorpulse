@@ -1221,8 +1221,41 @@ window.savePulseAiThreads = () => {
         }
       }
     }
-    localStorage.setItem("cp_plus_ai_threads", JSON.stringify(S.pulseAi.threads.slice(0, 25)));
-    localStorage.setItem("cp_pulse_ai_messages", JSON.stringify(S.pulseAi.messages.slice(-30)));
+    // Stat-card slides are multi-megabyte base64 data URLs. Persisting them
+    // blows the ~5MB localStorage quota (one card is ~9.5MB), which throws
+    // QuotaExceededError and can leave the app unable to save anything at all.
+    // They are regenerable from the server, so keep them in memory only and
+    // write a stripped copy to storage.
+    const stripHeavy = (msgs) => (msgs || []).map(m => {
+      if (!m || !m.statCard) return m;
+      const { images, slides, ...rest } = m.statCard;
+      return { ...m, statCard: { ...rest, images: [], slides: [] } };
+    });
+    const persistThreads = (threads) => threads.map(t => ({ ...t, messages: stripHeavy(t.messages) }));
+
+    const writeThreads = (threads) => {
+      localStorage.setItem("cp_plus_ai_threads", JSON.stringify(persistThreads(threads)));
+    };
+
+    // Try the full set first; if the quota is still exceeded (other keys have
+    // filled storage), drop the oldest threads one at a time and retry so a
+    // save never throws and never leaves the app wedged.
+    let threadsToSave = S.pulseAi.threads.slice(0, 25);
+    for (;;) {
+      try { writeThreads(threadsToSave); break; }
+      catch (e) {
+        if (threadsToSave.length > 1) { threadsToSave = threadsToSave.slice(0, -1); continue; }
+        // Even a single thread will not fit — clear the key rather than throw.
+        try { localStorage.removeItem("cp_plus_ai_threads"); } catch (_) {}
+        break;
+      }
+    }
+
+    try {
+      localStorage.setItem("cp_pulse_ai_messages", JSON.stringify(stripHeavy(S.pulseAi.messages.slice(-30))));
+    } catch (_) {
+      try { localStorage.removeItem("cp_pulse_ai_messages"); } catch (_) {}
+    }
   } catch(_) {}
 };
 
