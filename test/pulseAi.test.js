@@ -123,3 +123,22 @@ test("routes/cards.js defines /pulse-ai-stat-card route", () => {
   const CARDS_JS = fs.readFileSync(path.join(ROOT, "routes", "cards.js"), "utf8");
   assert.match(CARDS_JS, /\/pulse-ai-stat-card/, "routes/cards.js must expose /pulse-ai-stat-card");
 });
+
+// Regression: server.js's /api/pulse-ai/stat-card route called
+// buildDefaultStatCardSlides(), a function that was never defined anywhere.
+// Every request threw "buildDefaultStatCardSlides is not defined" and
+// returned a 500. The real builder lives in routes/cards.js as
+// buildDefaultPulseSlides. These two tests fail if that mismatch ever
+// comes back.
+test("routes/cards.js exports buildDefaultPulseSlides as a function", () => {
+  const cards = require("../routes/cards");
+  assert.equal(typeof cards.buildDefaultPulseSlides, "function", "buildDefaultPulseSlides must be exported");
+  const slides = cards.buildDefaultPulseSlides("United States Marines", "instagram", null, null);
+  assert.ok(Array.isArray(slides) && slides.length > 0, "buildDefaultPulseSlides must return a non-empty slide array");
+  assert.equal(slides[0].type, "hook", "first slide must be a hook");
+});
+
+test("server.js never calls the undefined buildDefaultStatCardSlides", () => {
+  assert.doesNotMatch(SERVER_JS, /buildDefaultStatCardSlides\s*\(/, "server.js must not call the undefined buildDefaultStatCardSlides");
+  assert.match(SERVER_JS, /buildDefaultPulseSlides\s*\(/, "server.js must call the exported buildDefaultPulseSlides");
+});

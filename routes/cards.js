@@ -132,3 +132,8 @@ router.post("/pulse-ai-stat-card", async (req, res) => {
 });
 
 module.exports = router;
+// Exported so server.js can reuse the same default-slide builder instead of
+// calling a function that was never defined (that mismatch made
+// POST /api/pulse-ai/stat-card throw "buildDefaultStatCardSlides is not
+// defined" and return a 500).
+module.exports.buildDefaultPulseSlides = buildDefaultPulseSlides;

@@ -26,6 +26,7 @@ const path = require("path");
 const express = require("express");
 const { LIVE_SOURCES_CATALOG, fetchMultiSourceLiveData, findLiveImage, fetchWikipediaKnowledge } = require("./services/liveIntelligence");
 const { renderCardSet } = require("./services/statCard");
+const { buildDefaultPulseSlides } = require("./routes/cards");
 const cors = require("cors");
 const fetch = require("node-fetch");
 
@@ -2406,7 +2407,7 @@ app.post("/api/pulse-ai/stat-card", async (req, res) => {
     let finalSlides = slides;
     if (!finalSlides || !finalSlides.length) {
       wikiData = await fetchWikipediaKnowledge(topic);
-      finalSlides = buildDefaultStatCardSlides(topic, format, wikiData, imgInfo);
+      finalSlides = buildDefaultPulseSlides(topic, format, wikiData, imgInfo);
     }
 
     const catObj = typeof category === "string" ? { displayName: category, slug: "default" } : (category || { displayName: topic.slice(0, 24), slug: "default" });
