@@ -1690,6 +1690,208 @@ body{padding-bottom:var(--tab-h);letter-spacing:-0.005em}
 .cp-server-note b{ font-weight:700; }
 .cp-server-warn{ background:#2a1f12; border-color:#7a5320; color:#ffd9a0; }
 
+
+  /* Responsive Platform Mockup Previews */
+  .preview-tabs {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 8px 10px;
+    background: var(--sf2);
+    border-bottom: 1px solid var(--br);
+    scrollbar-width: none;
+    width: 100%;
+  }
+  .preview-tabs::-webkit-scrollbar { display: none; }
+  .prev-tab-lbl { font-size: 10px; font-weight: 700; color: var(--mu); text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; margin-right: 2px; }
+  .prev-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    border-radius: 99px;
+    border: 1px solid var(--br2);
+    background: var(--sf);
+    color: var(--mu);
+    font: 600 11px var(--sans);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all .15s ease;
+  }
+  .prev-tab:hover { color: var(--tx); border-color: var(--br3); }
+  .prev-tab.active { background: var(--tx); color: var(--bg); border-color: var(--tx); font-weight: 700; }
+
+  .mock-wrap {
+    padding: 10px 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: rgba(0,0,0,0.20);
+    border-bottom: 1px solid var(--br);
+  }
+  .mock-shell {
+    width: 100%;
+    max-width: 320px;
+    border-radius: 16px;
+    border: 1px solid var(--br);
+    background: #000;
+    color: #fff;
+    overflow: hidden;
+    box-shadow: 0 10px 28px rgba(0,0,0,0.4);
+    position: relative;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    margin: 8px auto;
+  }
+
+  /* Instagram Mockup */
+  .mock-ig-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .mock-ig-user { display: flex; align-items: center; gap: 7px; }
+  .mock-ig-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5px;
+  }
+  .mock-ig-avatar-inner {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: #111;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10.5px;
+    font-weight: 700;
+    color: #fff;
+  }
+  .mock-ig-name { font-size: 11.5px; font-weight: 600; color: #fff; line-height: 1.2; }
+  .mock-ig-sub { font-size: 9.5px; color: #888; }
+  .mock-ig-body {
+    position: relative;
+    background: #080808;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .mock-ig-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px 4px;
+    font-size: 16px;
+  }
+  .mock-ig-icons-left { display: flex; gap: 12px; }
+  .mock-ig-likes { padding: 0 10px; font-size: 11.5px; font-weight: 600; }
+  .mock-ig-caption { padding: 3px 10px 8px; font-size: 11.5px; line-height: 1.4; color: #ddd; }
+  .mock-ig-caption b { color: #fff; font-weight: 600; margin-right: 4px; }
+  .mock-ig-more { color: #888; cursor: pointer; }
+
+  /* TikTok Mockup */
+  .mock-tt-shell {
+    aspect-ratio: 9/16;
+    max-height: 480px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    background: #050505;
+    overflow: hidden;
+  }
+  .mock-tt-top {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    padding: 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #888;
+    z-index: 2;
+  }
+  .mock-tt-top .active { color: #fff; border-bottom: 2px solid #fff; padding-bottom: 1px; }
+  .mock-tt-overlay {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    padding: 12px 10px;
+    background: linear-gradient(to top, rgba(0,0,0,0.88) 0%, transparent 100%);
+  }
+  .mock-tt-info { flex: 1; padding-right: 10px; }
+  .mock-tt-user { font-size: 12px; font-weight: 700; color: #fff; margin-bottom: 3px; }
+  .mock-tt-desc { font-size: 11px; color: #eee; line-height: 1.35; max-height: 48px; overflow: hidden; }
+  .mock-tt-sound { display: flex; align-items: center; gap: 4px; font-size: 9.5px; color: #ccc; margin-top: 5px; }
+  .mock-tt-side { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  .mock-tt-side-item { display: flex; flex-direction: column; align-items: center; gap: 2px; font-size: 9.5px; color: #eee; }
+  .mock-tt-side-btn { width: 30px; height: 30px; border-radius: 50%; background: rgba(255,255,255,0.15); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center; font-size: 14px; }
+
+  /* YouTube Mockup */
+  .mock-yt-player {
+    position: relative;
+    aspect-ratio: 16/9;
+    background: #111;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  .mock-yt-play-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: rgba(255,0,0,0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 16px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.5);
+    z-index: 2;
+  }
+  .mock-yt-progress {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: rgba(255,255,255,0.25);
+    z-index: 2;
+  }
+  .mock-yt-progress-fill { width: 35%; height: 100%; background: #ff0000; }
+  .mock-yt-meta { padding: 10px; }
+  .mock-yt-title { font-size: 12px; font-weight: 700; color: #fff; line-height: 1.35; margin-bottom: 4px; }
+  .mock-yt-views { font-size: 10px; color: #aaa; margin-bottom: 8px; }
+  .mock-yt-channel { display: flex; align-items: center; justify-content: space-between; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 8px; }
+  .mock-yt-ch-info { display: flex; align-items: center; gap: 7px; }
+  .mock-yt-avatar { width: 24px; height: 24px; border-radius: 50%; background: #333; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; }
+  .mock-yt-ch-name { font-size: 11px; font-weight: 600; color: #fff; }
+  .mock-yt-sub-btn { background: #cc0000; color: #fff; border: none; border-radius: 99px; padding: 4px 10px; font-size: 10.5px; font-weight: 700; cursor: pointer; }
+
+  /* X (Twitter) Mockup */
+  .mock-x-card { padding: 12px; background: #000; border-radius: 16px; border: 1px solid rgba(255,255,255,0.12); }
+  .mock-x-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 6px; }
+  .mock-x-user-row { display: flex; align-items: center; gap: 7px; }
+  .mock-x-avatar { width: 30px; height: 30px; border-radius: 50%; background: #222; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff; }
+  .mock-x-names { display: flex; flex-direction: column; }
+  .mock-x-display-name { font-size: 12px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 4px; }
+  .mock-x-handle { font-size: 10.5px; color: #71767b; }
+  .mock-x-text { font-size: 12px; line-height: 1.4; color: #e7e9ea; white-space: pre-wrap; margin-bottom: 8px; word-break: break-word; }
+  .mock-x-media { border-radius: 10px; overflow: hidden; border: 1px solid rgba(255,255,255,0.08); margin-bottom: 8px; }
+  .mock-x-actions { display: flex; align-items: center; justify-content: space-between; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.08); color: #71767b; font-size: 10.5px; }
+  .mock-x-action { display: flex; align-items: center; gap: 3px; }
+
 </style>
 
 </head>
@@ -1707,7 +1909,7 @@ body{padding-bottom:var(--tab-h);letter-spacing:-0.005em}
 <script src="plus-ai/ui.js?v=30"></script>
 <script src="plus-ai/actions.js?v=30"></script>
 <script src="plus-ai/index.js?v=30"></script>
-<script src="core.js?v=30"></script>
+<script src="core.js?v=31"></script>
 <script src="lib/studioPerf.js?v=30"></script>
 <script src="studio.js?v=30"></script>
 <script src="app.js?v=30"></script>
