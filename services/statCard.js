@@ -49,10 +49,38 @@ const FORMATS = {
     outroHeadlineSize: 86, outroHeadlineLine: 96, outroHeadlineChars: 15, outroMaxLines: 4,
   }
 };
-function resolveFormat(format) {
+function resolveFormat(format, densityKey) {
   const f = String(format || "instagram").toLowerCase();
-  if (f.includes("tiktok") || f.includes("reel") || f.includes("story") || f.includes("9:16")) return FORMATS.tiktok;
-  return FORMATS.instagram;
+  const base = (f.includes("tiktok") || f.includes("reel") || f.includes("story") || f.includes("9:16")) ? FORMATS.tiktok : FORMATS.instagram;
+  const dens = resolveDensity(densityKey);
+  const scale = dens.fontScale;
+  const charsMod = dens.charsMod;
+  const linesMod = dens.maxLinesMod;
+
+  return {
+    ...base,
+    densityScale: scale,
+    hookHeadlineSize: Math.round(base.hookHeadlineSize * scale),
+    hookHeadlineLine: Math.round(base.hookHeadlineLine * scale),
+    hookHeadlineChars: Math.max(10, base.hookHeadlineChars + charsMod),
+    hookMaxLines: Math.max(2, base.hookMaxLines + linesMod),
+
+    bodyHeadlineSize: Math.round(base.bodyHeadlineSize * scale),
+    bodyHeadlineLine: Math.round(base.bodyHeadlineLine * scale),
+    bodyHeadlineChars: Math.max(14, base.bodyHeadlineChars + charsMod),
+    bodyHeadlineMaxLines: Math.max(2, base.bodyHeadlineMaxLines + linesMod),
+
+    bodyTextSize: Math.round(base.bodyTextSize * scale),
+    bodyTextLine: Math.round(base.bodyTextLine * scale),
+    bodyTextChars: Math.max(24, base.bodyTextChars + charsMod),
+    bodyTextMaxLines: Math.max(3, base.bodyTextMaxLines + linesMod),
+
+    statSize: Math.round(base.statSize * dens.statScale),
+    outroHeadlineSize: Math.round(base.outroHeadlineSize * scale),
+    outroHeadlineLine: Math.round(base.outroHeadlineLine * scale),
+    outroHeadlineChars: Math.max(12, base.outroHeadlineChars + charsMod),
+    outroMaxLines: Math.max(2, base.outroMaxLines + linesMod)
+  };
 }
 
 // ── Palettes ───────────────────────────────────────────────────────────
@@ -76,9 +104,161 @@ const DEFAULT_PALETTE = "noir_orange";
 // Old palette names from the previous version, mapped forward so existing
 // saved content / in-flight requests don't break.
 const PALETTE_ALIASES = { noir: "noir_orange", ember: "crimson", sunset: "gold", ocean: "electric_blue", forest: "emerald", royal: "violet" };
-function resolvePalette(key) {
+
+// ── Themes, Typography, and Density Presets ─────────────────────────────
+const THEMES = {
+  modern_dark: {
+    id: "modern_dark",
+    name: "Modern Dark",
+    backgroundStart: "#08090C",
+    backgroundEnd: "#1A1512",
+    primaryText: "#F5F3EF",
+    secondaryText: "#B8B6B2",
+    muted: "#737373",
+    isLight: false
+  },
+  clean_light: {
+    id: "clean_light",
+    name: "Clean Light",
+    backgroundStart: "#F9F9FB",
+    backgroundEnd: "#ECEEF2",
+    primaryText: "#111216",
+    secondaryText: "#464953",
+    muted: "#8A8D98",
+    isLight: true
+  },
+  cyber_neon: {
+    id: "cyber_neon",
+    name: "Cyber Neon",
+    backgroundStart: "#05070B",
+    backgroundEnd: "#0B1424",
+    primaryText: "#FFFFFF",
+    secondaryText: "#6EE7B7",
+    muted: "#334155",
+    isLight: false,
+    defaultAccent: "#00FF9D"
+  },
+  editorial_warm: {
+    id: "editorial_warm",
+    name: "Editorial Warm",
+    backgroundStart: "#15110E",
+    backgroundEnd: "#2A1F18",
+    primaryText: "#FDFBF7",
+    secondaryText: "#D1BEAF",
+    muted: "#7C6C5E",
+    isLight: false,
+    defaultAccent: "#E59866"
+  }
+};
+
+const TYPOGRAPHIES = {
+  impact: {
+    id: "impact",
+    name: "Impact Bold",
+    headline: "'Anton', 'Archivo Black', Impact, sans-serif",
+    body: "Inter, sans-serif"
+  },
+  modern_sans: {
+    id: "modern_sans",
+    name: "Modern Sans",
+    headline: "'Bricolage Grotesque', 'Space Grotesk', Inter, sans-serif",
+    body: "Inter, sans-serif"
+  },
+  editorial_serif: {
+    id: "editorial_serif",
+    name: "Editorial Serif",
+    headline: "'Playfair Display', 'DM Serif Display', Georgia, serif",
+    body: "'PT Serif', Georgia, serif"
+  },
+  code_mono: {
+    id: "code_mono",
+    name: "Modern Mono",
+    headline: "'IBM Plex Mono', 'Space Mono', monospace",
+    body: "'IBM Plex Mono', monospace"
+  }
+};
+
+const DENSITIES = {
+  punchy: {
+    id: "punchy",
+    name: "Punchy",
+    fontScale: 1.15,
+    maxLinesMod: -1,
+    charsMod: -4,
+    statScale: 1.2
+  },
+  balanced: {
+    id: "balanced",
+    name: "Balanced",
+    fontScale: 1.0,
+    maxLinesMod: 0,
+    charsMod: 0,
+    statScale: 1.0
+  },
+  detailed: {
+    id: "detailed",
+    name: "Detailed",
+    fontScale: 0.90,
+    maxLinesMod: 2,
+    charsMod: 8,
+    statScale: 0.9
+  }
+};
+
+function resolveTypography(key) {
+  return TYPOGRAPHIES[key] || TYPOGRAPHIES.impact;
+}
+
+function resolveDensity(key) {
+  return DENSITIES[key] || DENSITIES.balanced;
+}
+
+function resolvePalette(key, themeKey) {
   const k = PALETTE_ALIASES[key] || key;
-  return PALETTE[k] || PALETTE[DEFAULT_PALETTE];
+  const p = PALETTE[k] || PALETTE[DEFAULT_PALETTE];
+  const t = THEMES[themeKey] || THEMES.modern_dark;
+
+  if (t.isLight) {
+    return {
+      ...p,
+      name: `${t.name} · ${p.name}`,
+      backgroundStart: t.backgroundStart,
+      backgroundEnd: t.backgroundEnd,
+      primaryText: t.primaryText,
+      secondaryText: t.secondaryText,
+      muted: t.muted,
+      isLight: true,
+      accent: p.accent
+    };
+  }
+
+  if (themeKey === "cyber_neon") {
+    return {
+      ...p,
+      name: `${t.name} · ${p.name}`,
+      backgroundStart: t.backgroundStart,
+      backgroundEnd: t.backgroundEnd,
+      primaryText: t.primaryText,
+      secondaryText: p.secondaryText || t.secondaryText,
+      muted: t.muted,
+      accent: p.accent || t.defaultAccent
+    };
+  }
+
+  if (themeKey === "editorial_warm") {
+    return {
+      ...p,
+      name: `${t.name} · ${p.name}`,
+      backgroundStart: t.backgroundStart,
+      backgroundEnd: t.backgroundEnd,
+      primaryText: t.primaryText,
+      secondaryText: t.secondaryText,
+      muted: t.muted,
+      accent: p.accent || t.defaultAccent
+    };
+  }
+
+  return p;
 }
 
 // ── Category icons (original glyphs — see note at top of file) ──────────
@@ -205,7 +385,6 @@ function decorativeTexture(p, f, seed) {
     const off = i * 90;
     return `<line x1="${-200+off}" y1="${f.h}" x2="${200+off}" y2="0" stroke="${p.accent}" stroke-width="2" opacity="0.05"/>`;
   }).join("");
-  return `
   const border = `<rect x="28" y="28" width="${f.w - 56}" height="${f.h - 56}" rx="20" fill="none" stroke="${p.accent}" stroke-width="1.5" opacity="0.14"/>`;
   return `
   <defs>
@@ -227,7 +406,9 @@ function backgroundLayer(p, f, scrimStrength, slideType) {
 // ── Header ────────────────────────────────────────────────────────────
 // Plain variant (body/outro slides): [icon] CATEGORY | divider ... counter,
 // with a segmented progress-dash row underneath.
-function plainHeader(p, f, categoryName, slug, slideNum, totalSlides) {
+function plainHeader(p, f, categoryName, slug, slideNum, totalSlides, typo) {
+  const fontHead = (typo && typo.headline) ? typo.headline : FONT_SERIF;
+  const fontBody = (typo && typo.body) ? typo.body : FONT_SANS;
   const m = f.margin;
   const icon = categoryIconSVG(slug);
   const isSinglePost = (totalSlides || 1) <= 1;
@@ -242,13 +423,15 @@ function plainHeader(p, f, categoryName, slug, slideNum, totalSlides) {
   ).join("");
   return `
     <g transform="translate(${m},${f.headerY - 20})" color="${p.accent}">${icon}</g>
-    <text x="${m + 50}" y="${f.headerY}" font-family="${FONT_SANS}" font-size="26" font-weight="700" fill="${p.primaryText}" letter-spacing="1.5">${escXml((categoryName||"").toUpperCase())}</text>
-    ${isSinglePost ? "" : `<text x="${f.w - m}" y="${f.headerY}" font-family="${FONT_SANS}" font-size="26" font-weight="700" fill="${p.secondaryText}" text-anchor="end">${slideNum||1} / ${totalSlides||1}</text>`}
+    <text x="${m + 50}" y="${f.headerY}" font-family="${fontBody}" font-size="26" font-weight="700" fill="${p.primaryText}" letter-spacing="1.5">${escXml((categoryName||"").toUpperCase())}</text>
+    ${isSinglePost ? "" : `<text x="${f.w - m}" y="${f.headerY}" font-family="${fontBody}" font-size="26" font-weight="700" fill="${p.secondaryText}" text-anchor="end">${slideNum||1} / ${totalSlides||1}</text>`}
     ${dashes}`;
 }
 
 // Pill variant (hook slide): outlined badge around [icon] CATEGORY.
-function pillHeader(p, f, categoryName, slug, slideNum, totalSlides) {
+function pillHeader(p, f, categoryName, slug, slideNum, totalSlides, typo) {
+  const fontHead = (typo && typo.headline) ? typo.headline : FONT_SERIF;
+  const fontBody = (typo && typo.body) ? typo.body : FONT_SANS;
   const m = f.margin;
   const label = (categoryName||"").toUpperCase();
   const pillW = 84 + label.length * 19;
@@ -256,16 +439,17 @@ function pillHeader(p, f, categoryName, slug, slideNum, totalSlides) {
   return `
     <rect x="${m}" y="${f.headerY-34}" width="${pillW}" height="52" rx="26" fill="none" stroke="${p.accent}" stroke-width="2"/>
     <g transform="translate(${m+20},${f.headerY-16})" color="${p.accent}">${icon}</g>
-    <text x="${m+58}" y="${f.headerY}" font-family="${FONT_SANS}" font-size="26" font-weight="700" fill="${p.primaryText}" letter-spacing="1.5">${escXml(label)}</text>
-    <text x="${f.w - m}" y="${f.headerY}" font-family="${FONT_SANS}" font-size="26" font-weight="700" fill="${p.secondaryText}" text-anchor="end">${slideNum||1} / ${totalSlides||1}</text>`;
+    <text x="${m+58}" y="${f.headerY}" font-family="${fontBody}" font-size="26" font-weight="700" fill="${p.primaryText}" letter-spacing="1.5">${escXml(label)}</text>
+    <text x="${f.w - m}" y="${f.headerY}" font-family="${fontBody}" font-size="26" font-weight="700" fill="${p.secondaryText}" text-anchor="end">${slideNum||1} / ${totalSlides||1}</text>`;
 }
 
 // Fading accent line + swipe cue, used at the foot of hook slides.
-function swipeFooter(p, f) {
+function swipeFooter(p, f, typo) {
+  const fontBody = (typo && typo.body) ? typo.body : FONT_SANS;
   const m = f.margin, y = f.h - 60, lineY = f.h - 34;
   const textEndX = f.w - m - 46; // leave room for the two chevrons after the text
   return `
-    <text x="${textEndX}" y="${y}" font-family="${FONT_SANS}" font-size="24" font-weight="700" letter-spacing="2" fill="${p.primaryText}" text-anchor="end">SWIPE TO CONTINUE</text>
+    <text x="${textEndX}" y="${y}" font-family="${fontBody}" font-size="24" font-weight="700" letter-spacing="2" fill="${p.primaryText}" text-anchor="end">SWIPE TO CONTINUE</text>
     <path d="M ${textEndX+12} ${y-8} L ${textEndX+22} ${y} L ${textEndX+12} ${y+8}" stroke="${p.accent}" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
     <path d="M ${textEndX+22} ${y-8} L ${textEndX+32} ${y} L ${textEndX+22} ${y+8}" stroke="${p.accent}" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.6"/>
     <defs><linearGradient id="fadeLine" x1="${m}" y1="0" x2="${f.w-m}" y2="0" gradientUnits="userSpaceOnUse">
@@ -274,14 +458,17 @@ function swipeFooter(p, f) {
     <rect x="${m}" y="${lineY}" width="${f.w-2*m}" height="3" fill="url(#fadeLine)"/>`;
 }
 
-function swipeArrow(p, f, x, y) {
-  return `<text x="${x}" y="${y}" font-family="${FONT_SANS}" font-size="24" font-weight="700" letter-spacing="2" fill="${p.accent}" text-anchor="end">SWIPE</text>
+function swipeArrow(p, f, x, y, typo) {
+  const fontBody = (typo && typo.body) ? typo.body : FONT_SANS;
+  return `<text x="${x}" y="${y}" font-family="${fontBody}" font-size="24" font-weight="700" letter-spacing="2" fill="${p.accent}" text-anchor="end">SWIPE</text>
     <path d="M ${x+14} ${y-8} L ${x+26} ${y} L ${x+14} ${y+8}" stroke="${p.accent}" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
 }
 
 // ── Slides ────────────────────────────────────────────────────────────
 
-function renderHookSVG(p, f, slide, category, scrimStrength) {
+function renderHookSVG(p, f, slide, category, scrimStrength, typo) {
+  const fontHead = (typo && typo.headline) ? typo.headline : FONT_SERIF;
+  const fontBody = (typo && typo.body) ? typo.body : FONT_SANS;
   const m = f.margin;
   const { lines, size } = fitMultilineText(slide.headline, f.hookHeadlineSize, f.hookHeadlineChars, f.hookMaxLines);
   const lineH = Math.round(f.hookHeadlineLine * (size / f.hookHeadlineSize));
@@ -293,10 +480,10 @@ function renderHookSVG(p, f, slide, category, scrimStrength) {
   return `
   <svg width="${f.w}" height="${f.h}" viewBox="0 0 ${f.w} ${f.h}" xmlns="http://www.w3.org/2000/svg">
     ${backgroundLayer(p, f, scrimStrength, "hook")}
-    ${pillHeader(p, f, category.displayName, category.slug, slide.slideNumber, slide.totalSlides)}
-    <text x="${m}" y="${startY}" font-family="${FONT_SERIF}" font-size="${size}" font-weight="700">${tspansEmphasis(lines, m, startY, lineH, emphasisIdx, p.accent, p.primaryText)}</text>
-    ${supportLines.length ? `<text x="${m}" y="${supportY}" font-family="${FONT_SANS}" font-size="${f.hookSupportSize}" fill="${p.secondaryText}">${tspans(supportLines, m, supportY, f.hookSupportLine)}</text>` : ""}
-    ${swipeFooter(p, f)}
+    ${pillHeader(p, f, category.displayName, category.slug, slide.slideNumber, slide.totalSlides, typo)}
+    <text x="${m}" y="${startY}" font-family="${fontHead}" font-size="${size}" font-weight="700">${tspansEmphasis(lines, m, startY, lineH, emphasisIdx, p.accent, p.primaryText)}</text>
+    ${supportLines.length ? `<text x="${m}" y="${supportY}" font-family="${fontBody}" font-size="${f.hookSupportSize}" fill="${p.secondaryText}">${tspans(supportLines, m, supportY, f.hookSupportLine)}</text>` : ""}
+    ${swipeFooter(p, f, typo)}
   </svg>`;
 }
 
@@ -344,18 +531,18 @@ function renderAnnouncement(m, f, p, subject, action, outcome, startY) {
   const out = [];
   const railX = m + 4;
   if (subject) {
-    out.push(`<text x="${m}" y="${y}" font-family="${FONT_SANS}" font-size="24" font-weight="700" letter-spacing="1.5" fill="${p.accent}">${escXml((subject||"").toUpperCase())}</text>`);
+    out.push(`<text x="${m}" y="${y}" font-family="${fontBody}" font-size="24" font-weight="700" letter-spacing="1.5" fill="${p.accent}">${escXml((subject||"").toUpperCase())}</text>`);
     out.push(`<line x1="${railX}" y1="${y+14}" x2="${railX}" y2="${y+46}" stroke="${p.accent}" stroke-width="2" opacity="0.5"/>`);
     y += 46;
   }
   const actionY = y + actionSize * 0.85;
-  out.push(`<text x="${m}" y="${actionY}" font-family="${FONT_SANS}" font-size="${actionSize}" font-weight="700" fill="${p.primaryText}">${tspans(actionLines, m, actionY, actionLineH)}</text>`);
+  out.push(`<text x="${m}" y="${actionY}" font-family="${fontBody}" font-size="${actionSize}" font-weight="700" fill="${p.primaryText}">${tspans(actionLines, m, actionY, actionLineH)}</text>`);
   y = actionY + (actionLines.length - 1) * actionLineH + 26;
   if (outcomeLines.length) {
     out.push(`<line x1="${railX}" y1="${y-14}" x2="${railX}" y2="${y+14}" stroke="${p.muted}" stroke-width="2" opacity="0.4"/>`);
     const outcomeSize = Math.round(f.bodyTextSize * 0.9);
     const outcomeY = y + outcomeSize * 0.9;
-    out.push(`<text x="${m+24}" y="${outcomeY}" font-family="${FONT_SANS}" font-size="${outcomeSize}" fill="${p.secondaryText}">${tspans(outcomeLines, m+24, outcomeY, f.bodyTextLine)}</text>`);
+    out.push(`<text x="${m+24}" y="${outcomeY}" font-family="${fontBody}" font-size="${outcomeSize}" fill="${p.secondaryText}">${tspans(outcomeLines, m+24, outcomeY, f.bodyTextLine)}</text>`);
   }
   return out.join("");
 }
@@ -385,17 +572,17 @@ function renderComparison(m, f, p, compareA, compareB, note, startY) {
   const labelY = startY;
   const valueY = labelY + 16 + valueSize * 0.85;
   const out = [];
-  out.push(`<text x="${colAx}" y="${labelY}" font-family="${FONT_SANS}" font-size="${labelSize}" font-weight="700" letter-spacing="1" fill="${p.secondaryText}">${escXml((compareA.label||"").toUpperCase())}</text>`);
-  out.push(`<text x="${colBx}" y="${labelY}" font-family="${FONT_SANS}" font-size="${labelSize}" font-weight="700" letter-spacing="1" fill="${p.secondaryText}">${escXml((compareB.label||"").toUpperCase())}</text>`);
-  out.push(`<text x="${colAx}" y="${valueY}" font-family="${FONT_SANS}" font-size="${valueSize}" font-weight="900" fill="${p.primaryText}">${escXml(compareA.value||"")}</text>`);
-  out.push(`<text x="${colBx}" y="${valueY}" font-family="${FONT_SANS}" font-size="${valueSize}" font-weight="900" fill="${p.accent}">${escXml(compareB.value||"")}</text>`);
-  out.push(`<text x="${midX}" y="${valueY - valueSize*0.32}" font-family="${FONT_SANS}" font-size="22" font-weight="700" fill="${p.muted}" text-anchor="middle">VS</text>`);
+  out.push(`<text x="${colAx}" y="${labelY}" font-family="${fontBody}" font-size="${labelSize}" font-weight="700" letter-spacing="1" fill="${p.secondaryText}">${escXml((compareA.label||"").toUpperCase())}</text>`);
+  out.push(`<text x="${colBx}" y="${labelY}" font-family="${fontBody}" font-size="${labelSize}" font-weight="700" letter-spacing="1" fill="${p.secondaryText}">${escXml((compareB.label||"").toUpperCase())}</text>`);
+  out.push(`<text x="${colAx}" y="${valueY}" font-family="${fontBody}" font-size="${valueSize}" font-weight="900" fill="${p.primaryText}">${escXml(compareA.value||"")}</text>`);
+  out.push(`<text x="${colBx}" y="${valueY}" font-family="${fontBody}" font-size="${valueSize}" font-weight="900" fill="${p.accent}">${escXml(compareB.value||"")}</text>`);
+  out.push(`<text x="${midX}" y="${valueY - valueSize*0.32}" font-family="${fontBody}" font-size="22" font-weight="700" fill="${p.muted}" text-anchor="middle">VS</text>`);
   let y = valueY + 38;
   if (noteLines.length) {
     out.push(`<line x1="${m+4}" y1="${y-8}" x2="${m+4}" y2="${y+20}" stroke="${p.muted}" stroke-width="2" opacity="0.4"/>`);
     const noteSize = Math.round(f.bodyTextSize * 0.9);
     const noteY = y + noteSize * 0.9;
-    out.push(`<text x="${m+24}" y="${noteY}" font-family="${FONT_SANS}" font-size="${noteSize}" fill="${p.secondaryText}">${tspans(noteLines, m+24, noteY, f.bodyTextLine)}</text>`);
+    out.push(`<text x="${m+24}" y="${noteY}" font-family="${fontBody}" font-size="${noteSize}" fill="${p.secondaryText}">${tspans(noteLines, m+24, noteY, f.bodyTextLine)}</text>`);
   }
   return out.join("");
 }
@@ -425,17 +612,17 @@ function renderReaction(m, f, p, claim, reaction, reactionTag, startY) {
     const label = String(reactionTag).toUpperCase();
     const pillW = 40 + label.length * 15;
     out.push(`<rect x="${m}" y="${y-32}" width="${pillW}" height="44" rx="22" fill="none" stroke="${p.accent}" stroke-width="1.5"/>`);
-    out.push(`<text x="${m+20}" y="${y-4}" font-family="${FONT_SANS}" font-size="22" font-weight="600" letter-spacing="1" fill="${p.accent}">${escXml(label)}</text>`);
+    out.push(`<text x="${m+20}" y="${y-4}" font-family="${fontBody}" font-size="22" font-weight="600" letter-spacing="1" fill="${p.accent}">${escXml(label)}</text>`);
     y += 40;
   }
   out.push(`<line x1="${railX}" y1="${y}" x2="${railX}" y2="${y + claimLines.length*claimLineH}" stroke="${p.muted}" stroke-width="3" opacity="0.5"/>`);
   const claimY = y + claimSize * 0.85;
-  out.push(`<text x="${m+24}" y="${claimY}" font-family="${FONT_SANS}" font-size="${claimSize}" font-weight="700" fill="${p.primaryText}">${tspans(claimLines, m+24, claimY, claimLineH)}</text>`);
+  out.push(`<text x="${m+24}" y="${claimY}" font-family="${fontBody}" font-size="${claimSize}" font-weight="700" fill="${p.primaryText}">${tspans(claimLines, m+24, claimY, claimLineH)}</text>`);
   y = claimY + (claimLines.length - 1) * claimLineH + 34;
   if (reactionLines.length) {
     const reactionSize = Math.round(f.bodyTextSize * 0.92);
     const reactionY = y + reactionSize * 0.9;
-    out.push(`<text x="${m}" y="${reactionY}" font-family="${FONT_SANS}" font-size="${reactionSize}" font-style="italic" fill="${p.secondaryText}">${tspans(reactionLines, m, reactionY, f.bodyTextLine)}</text>`);
+    out.push(`<text x="${m}" y="${reactionY}" font-family="${fontBody}" font-size="${reactionSize}" font-style="italic" fill="${p.secondaryText}">${tspans(reactionLines, m, reactionY, f.bodyTextLine)}</text>`);
   }
   return out.join("");
 }
@@ -452,7 +639,7 @@ function renderFacts(m, f, p, rows, startY) {
     const bSize = Math.round(f.bodyTextSize * 0.82);
     const lineH = Math.round(f.bodyTextLine * 0.82);
     out.push(`<circle cx="${m+10}" cy="${y - bSize*0.35}" r="5" fill="${p.accent}"/>`);
-    out.push(`<text x="${m+34}" y="${y}" font-family="${FONT_SANS}" font-size="${bSize}" font-weight="500" fill="${p.secondaryText}">${tspans(lines, m+34, y, lineH)}</text>`);
+    out.push(`<text x="${m+34}" y="${y}" font-family="${fontBody}" font-size="${bSize}" font-weight="500" fill="${p.secondaryText}">${tspans(lines, m+34, y, lineH)}</text>`);
     y += lines.length * lineH + 40;
   });
   return out.join("");
@@ -468,9 +655,9 @@ function renderQuote(m, f, p, quote, attribution, startY) {
   const { lines, size, lineH } = measureQuote(f, quote, attribution);
   const textY = startY + 56;
   return `
-    <text x="${m-6}" y="${startY+40}" font-family="${FONT_SERIF}" font-size="90" fill="${p.accent}" opacity="0.35">"</text>
-    <text x="${m}" y="${textY}" font-family="${FONT_SERIF}" font-size="${size}" fill="${p.primaryText}">${tspans(lines, m, textY, lineH)}</text>
-    ${attribution ? `<text x="${m}" y="${textY + lines.length*lineH + 36}" font-family="${FONT_SANS}" font-size="24" font-weight="700" letter-spacing="1" fill="${p.secondaryText}">${escXml(("— "+attribution).toUpperCase())}</text>` : ""}`;
+    <text x="${m-6}" y="${startY+40}" font-family="${fontHead}" font-size="90" fill="${p.accent}" opacity="0.35">"</text>
+    <text x="${m}" y="${textY}" font-family="${fontHead}" font-size="${size}" fill="${p.primaryText}">${tspans(lines, m, textY, lineH)}</text>
+    ${attribution ? `<text x="${m}" y="${textY + lines.length*lineH + 36}" font-family="${fontBody}" font-size="24" font-weight="700" letter-spacing="1" fill="${p.secondaryText}">${escXml(("— "+attribution).toUpperCase())}</text>` : ""}`;
 }
 
 function measureTimeline(f, items) {
@@ -489,14 +676,16 @@ function renderTimeline(m, f, p, items, rows, startY) {
     const bSize = Math.round(f.bodyTextSize * 0.82);
     const lineH = Math.round(f.bodyTextLine * 0.8);
     out.push(`<circle cx="${railX}" cy="${y - bSize*0.7}" r="7" fill="${p.accent}"/>`);
-    out.push(`<text x="${m+34}" y="${y - bSize*0.55}" font-family="${FONT_SANS}" font-size="22" font-weight="700" letter-spacing="1" fill="${p.accent}">${escXml((it.label||"").toUpperCase())}</text>`);
-    out.push(`<text x="${m+34}" y="${y + bSize*0.5}" font-family="${FONT_SANS}" font-size="${bSize}" fill="${p.secondaryText}">${tspans(lines, m+34, y+bSize*0.5, lineH)}</text>`);
+    out.push(`<text x="${m+34}" y="${y - bSize*0.55}" font-family="${fontBody}" font-size="22" font-weight="700" letter-spacing="1" fill="${p.accent}">${escXml((it.label||"").toUpperCase())}</text>`);
+    out.push(`<text x="${m+34}" y="${y + bSize*0.5}" font-family="${fontBody}" font-size="${bSize}" fill="${p.secondaryText}">${tspans(lines, m+34, y+bSize*0.5, lineH)}</text>`);
     y += 46 + lines.length * lineH;
   });
   return out.join("");
 }
 
-function renderBodySVG(p, f, slide, category, scrimStrength) {
+function renderBodySVG(p, f, slide, category, scrimStrength, typo) {
+  const fontHead = (typo && typo.headline) ? typo.headline : FONT_SERIF;
+  const fontBody = (typo && typo.body) ? typo.body : FONT_SANS;
   const m = f.margin;
   const variant = detectBodyVariant(slide);
   const hasStat = variant === "stat";
@@ -567,30 +756,32 @@ function renderBodySVG(p, f, slide, category, scrimStrength) {
     const statLabelY = statBaseline + f.statLabelGap;
     const bodyStartY = statLabelY + 60;
     middleSVG = `
-    <text x="${m}" y="${statBaseline}" font-family="${FONT_SANS}" font-size="${statFontSize}" font-weight="900" fill="${p.accent}">${escXml(slide.stat)}</text>
-    ${slide.statLabel ? `<text x="${m}" y="${statLabelY}" font-family="${FONT_SANS}" font-size="${f.statLabelSize}" font-weight="700" letter-spacing="1.5" fill="${p.secondaryText}">${escXml((slide.statLabel||"").toUpperCase())}</text>` : ""}
-    ${slide.body ? `<text x="${m}" y="${bodyStartY}" font-family="${FONT_SANS}" font-size="${bSize}" fill="${p.secondaryText}">${tspans(bLines, m, bodyStartY, bLineH)}</text>` : ""}`;
+    <text x="${m}" y="${statBaseline}" font-family="${fontBody}" font-size="${statFontSize}" font-weight="900" fill="${p.accent}">${escXml(slide.stat)}</text>
+    ${slide.statLabel ? `<text x="${m}" y="${statLabelY}" font-family="${fontBody}" font-size="${f.statLabelSize}" font-weight="700" letter-spacing="1.5" fill="${p.secondaryText}">${escXml((slide.statLabel||"").toUpperCase())}</text>` : ""}
+    ${slide.body ? `<text x="${m}" y="${bodyStartY}" font-family="${fontBody}" font-size="${bSize}" fill="${p.secondaryText}">${tspans(bLines, m, bodyStartY, bLineH)}</text>` : ""}`;
   } else if (slide.body) {
     middleSVG = `
     <rect x="${m}" y="${afterHeadlineY - bSize - 20}" width="130" height="3" fill="${p.accent}" opacity="0.5"/>
-    <text x="${m}" y="${afterHeadlineY}" font-family="${FONT_SANS}" font-size="${bSize}" fill="${p.secondaryText}">${tspans(bLines, m, afterHeadlineY, bLineH)}</text>`;
+    <text x="${m}" y="${afterHeadlineY}" font-family="${fontBody}" font-size="${bSize}" fill="${p.secondaryText}">${tspans(bLines, m, afterHeadlineY, bLineH)}</text>`;
   }
 
   return `
   <svg width="${f.w}" height="${f.h}" viewBox="0 0 ${f.w} ${f.h}" xmlns="http://www.w3.org/2000/svg">
     ${backgroundLayer(p, f, scrimStrength, "body")}
-    ${plainHeader(p, f, category.displayName, category.slug, slide.slideNumber, slide.totalSlides)}
-    ${slide.sectionLabel ? `<rect x="${m}" y="${sectionLabelY-20}" width="4" height="24" fill="${p.accent}"/><text x="${m+18}" y="${sectionLabelY}" font-family="${FONT_SANS}" font-size="${f.sectionLabelSize}" font-weight="700" letter-spacing="1.5" fill="${p.accent}">${escXml((slide.sectionLabel||"").toUpperCase())}</text>` : ""}
-    <text x="${m}" y="${headlineStartY}" font-family="${FONT_SERIF}" font-size="${hSize}" font-weight="400" fill="${p.primaryText}">${tspans(hLines, m, headlineStartY, hLineH)}</text>
+    ${plainHeader(p, f, category.displayName, category.slug, slide.slideNumber, slide.totalSlides, typo)}
+    ${slide.sectionLabel ? `<rect x="${m}" y="${sectionLabelY-20}" width="4" height="24" fill="${p.accent}"/><text x="${m+18}" y="${sectionLabelY}" font-family="${fontBody}" font-size="${f.sectionLabelSize}" font-weight="700" letter-spacing="1.5" fill="${p.accent}">${escXml((slide.sectionLabel||"").toUpperCase())}</text>` : ""}
+    <text x="${m}" y="${headlineStartY}" font-family="${fontHead}" font-size="${hSize}" font-weight="400" fill="${p.primaryText}">${tspans(hLines, m, headlineStartY, hLineH)}</text>
     ${middleSVG}
-    ${hasCtaLine ? `<text x="${m}" y="${footerDividerY - 32}" font-family="${FONT_SERIF}" font-size="34" fill="${p.accent}">${escXml((slide.ctaLine||"").toUpperCase())}</text>` : ""}
+    ${hasCtaLine ? `<text x="${m}" y="${footerDividerY - 32}" font-family="${fontHead}" font-size="34" fill="${p.accent}">${escXml((slide.ctaLine||"").toUpperCase())}</text>` : ""}
     <rect x="${m}" y="${footerDividerY}" width="${f.w-2*m}" height="1" fill="${p.muted}" opacity="0.4"/>
-    ${slide.tag ? `<rect x="${m}" y="${footerY-32}" width="${40+slide.tag.length*15}" height="44" rx="22" fill="none" stroke="${p.muted}" stroke-width="1.5"/><text x="${m+20}" y="${footerY-4}" font-family="${FONT_SANS}" font-size="22" font-weight="600" letter-spacing="1" fill="${p.secondaryText}">${escXml((slide.tag||"").toUpperCase())}</text>` : ""}
+    ${slide.tag ? `<rect x="${m}" y="${footerY-32}" width="${40+slide.tag.length*15}" height="44" rx="22" fill="none" stroke="${p.muted}" stroke-width="1.5"/><text x="${m+20}" y="${footerY-4}" font-family="${fontBody}" font-size="22" font-weight="600" letter-spacing="1" fill="${p.secondaryText}">${escXml((slide.tag||"").toUpperCase())}</text>` : ""}
     ${hasCtaLine ? "" : swipeArrow(p, f, f.w - m, footerY - 4)}
   </svg>`;
 }
 
-function renderOutroSVG(p, f, slide, category, scrimStrength) {
+function renderOutroSVG(p, f, slide, category, scrimStrength, typo) {
+  const fontHead = (typo && typo.headline) ? typo.headline : FONT_SERIF;
+  const fontBody = (typo && typo.body) ? typo.body : FONT_SANS;
   const m = f.margin;
   const { lines, size } = fitMultilineText(slide.headline, f.outroHeadlineSize, f.outroHeadlineChars, f.outroMaxLines);
   const lineH = Math.round(f.outroHeadlineLine * (size / f.outroHeadlineSize));
@@ -603,9 +794,9 @@ function renderOutroSVG(p, f, slide, category, scrimStrength) {
   return `
   <svg width="${f.w}" height="${f.h}" viewBox="0 0 ${f.w} ${f.h}" xmlns="http://www.w3.org/2000/svg">
     ${backgroundLayer(p, f, scrimStrength, "outro")}
-    ${plainHeader(p, f, category.displayName, category.slug, slide.slideNumber, slide.totalSlides)}
-    <text x="${m}" y="${startY}" font-family="${FONT_SERIF}" font-size="${size}" font-weight="700">${tspansEmphasis(lines, m, startY, lineH, emphasisIdx, p.accent, p.primaryText)}</text>
-    ${supportLines.length ? `<text x="${m}" y="${supportY}" font-family="${FONT_SANS}" font-size="${f.hookSupportSize}" fill="${p.secondaryText}">${tspans(supportLines, m, supportY, f.hookSupportLine)}</text>` : ""}
+    ${plainHeader(p, f, category.displayName, category.slug, slide.slideNumber, slide.totalSlides, typo)}
+    <text x="${m}" y="${startY}" font-family="${fontHead}" font-size="${size}" font-weight="700">${tspansEmphasis(lines, m, startY, lineH, emphasisIdx, p.accent, p.primaryText)}</text>
+    ${supportLines.length ? `<text x="${m}" y="${supportY}" font-family="${fontBody}" font-size="${f.hookSupportSize}" fill="${p.secondaryText}">${tspans(supportLines, m, supportY, f.hookSupportLine)}</text>` : ""}
     <defs><linearGradient id="fadeLine2" x1="${m}" y1="0" x2="${f.w-m}" y2="0" gradientUnits="userSpaceOnUse">
       <stop offset="0%" stop-color="${p.accent}" stop-opacity="1"/><stop offset="100%" stop-color="${p.accent}" stop-opacity="0"/>
     </linearGradient></defs>
@@ -703,20 +894,17 @@ async function coverFromBase64(dataUrl, w, h) {
   }
 }
 
-async function renderStatCard(slide, category, paletteKey, format, imageUrl) {
-  const p = resolvePalette(paletteKey);
-  const f = resolveFormat(format);
+async function renderStatCard(slide, category, paletteKey, format, imageUrl, options = {}) {
+  const themeKey = options.theme || slide.theme || "modern_dark";
+  const typoKey = options.typography || slide.typography || "impact";
+  const densityKey = options.density || slide.density || "balanced";
+
+  const p = resolvePalette(paletteKey, themeKey);
+  const f = resolveFormat(format, densityKey);
+  const typo = resolveTypography(typoKey);
   const type = resolveType(slide, (slide.slideNumber || 1) - 1, slide.totalSlides || 1);
   const cat = typeof category === "string" ? { displayName: category, slug: "default" } : (category || { displayName: "", slug: "default" });
 
-  // Mode B: photo + adaptive scrim. Priority order: a user's own uploaded
-  // image for THIS specific slide always wins — that's a deliberate choice,
-  // not something the auto-sourcing should override — then falls back
-  // through: live article photo (hook slide only — that photo is tied to
-  // the specific news story, so it doesn't belong on generic body/outro
-  // slides) → local niche background library (any slide type, picked fresh
-  // per slide so a carousel doesn't reuse the same image 6 times) →
-  // Mode A gradient + decorative texture.
   let cover = slide.customImage ? await coverFromBase64(slide.customImage, f.w, f.h) : null;
   if (!cover && (type === "hook" || slide.useCover || slide.imageUrl)) cover = await fetchCoverImage(slide.imageUrl || imageUrl, f.w, f.h);
   if (!cover) {
@@ -725,9 +913,9 @@ async function renderStatCard(slide, category, paletteKey, format, imageUrl) {
   }
   const scrimStrength = cover ? cover.brightness : null;
 
-  const svg = type === "hook" ? renderHookSVG(p, f, slide, cat, scrimStrength)
-    : type === "outro" ? renderOutroSVG(p, f, slide, cat, scrimStrength)
-    : renderBodySVG(p, f, slide, cat, scrimStrength);
+  const svg = type === "hook" ? renderHookSVG(p, f, slide, cat, scrimStrength, typo)
+    : type === "outro" ? renderOutroSVG(p, f, slide, cat, scrimStrength, typo)
+    : renderBodySVG(p, f, slide, cat, scrimStrength, typo);
 
   const textLayer = await sharp(Buffer.from(svg)).png().toBuffer();
   if (!cover) return textLayer;
@@ -743,17 +931,31 @@ async function renderStatCard(slide, category, paletteKey, format, imageUrl) {
 // regardless of carousel size, at the cost of a slightly longer total
 // render time — a trade worth making over the service restarting.
 const CARD_RENDER_CONCURRENCY = 3;
-async function renderCardSet(slides, category, paletteKey, format, imageUrl) {
+async function renderCardSet(slides, category, paletteKey, format, imageUrl, options = {}) {
   const total = slides.length;
   const buffers = new Array(total);
   for (let start = 0; start < total; start += CARD_RENDER_CONCURRENCY) {
     const batch = slides.slice(start, start + CARD_RENDER_CONCURRENCY);
     const results = await Promise.all(
-      batch.map((s, j) => renderStatCard({ ...s, slideNumber: start + j + 1, totalSlides: total }, category, paletteKey, format, imageUrl))
+      batch.map((s, j) => renderStatCard({ ...s, slideNumber: start + j + 1, totalSlides: total }, category, paletteKey, format, imageUrl, options))
     );
     results.forEach((buf, j) => { buffers[start + j] = buf; });
   }
   return buffers.map(b => `data:image/png;base64,${b.toString("base64")}`);
 }
 
-module.exports = { renderStatCard, renderCardSet, PALETTE, DEFAULT_PALETTE, CATEGORY_ICON, CATEGORY_ICON_OVERRIDES };
+module.exports = {
+  renderStatCard,
+  renderCardSet,
+  PALETTE,
+  DEFAULT_PALETTE,
+  THEMES,
+  TYPOGRAPHIES,
+  DENSITIES,
+  resolvePalette,
+  resolveFormat,
+  resolveTypography,
+  resolveDensity,
+  CATEGORY_ICON,
+  CATEGORY_ICON_OVERRIDES
+};

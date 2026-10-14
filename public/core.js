@@ -35,6 +35,28 @@ const PTYPES = {tiktok:["TikTok Script","TikTok No-Face Graphic","Caption + Hash
 const TONES = [{id:"normal",label:"Neutral"},{id:"funny",label:"Banter"},{id:"educative",label:"Educative"},{id:"hype",label:"Hot Take"},{id:"storytelling",label:"Storytelling"}];
 // Gradient palette options exposed to the user — must match the PALETTE keys
 // in services/statCard.js.
+
+// ── Carousel Visual Themes, Typography, and Density Presets ─────────────
+const CARD_THEMES = [
+  { id: "modern_dark", label: "Modern Dark" },
+  { id: "clean_light", label: "Clean Light" },
+  { id: "cyber_neon", label: "Cyber Neon" },
+  { id: "editorial_warm", label: "Editorial Warm" }
+];
+
+const CARD_TYPOGRAPHIES = [
+  { id: "impact", label: "Impact Bold" },
+  { id: "modern_sans", label: "Modern Sans" },
+  { id: "editorial_serif", label: "Editorial Serif" },
+  { id: "code_mono", label: "Modern Mono" }
+];
+
+const CARD_DENSITIES = [
+  { id: "punchy", label: "Punchy" },
+  { id: "balanced", label: "Balanced" },
+  { id: "detailed", label: "Detailed" }
+];
+
 const PALETTES = [
   {id:"noir_orange", label:"Noir Orange"}, {id:"electric_blue", label:"Electric Blue"}, {id:"emerald", label:"Emerald"},
   {id:"violet", label:"Violet"}, {id:"crimson", label:"Crimson"}, {id:"gold", label:"Gold"},
@@ -81,7 +103,7 @@ const S = {
   onboard: { step:0, name:"", niches:[], platforms:[], primary:"", ppd:3 },
   tab: "home",
   trends: [], notifs: [], schedule: [], saved: [], eventsCache: {},
-  loading: {}, expanded: {}, plat: {}, ctype: {}, tone: {}, palette: {}, slideCount: {}, outs: {}, recs: {},
+  loading: {}, expanded: {}, plat: {}, ctype: {}, tone: {}, palette: {}, slideCount: {}, cardTheme: {}, cardTypography: {}, cardDensity: {}, previewPlat: {}, previewSlideIdx: {}, previewMode: {}, outs: {}, recs: {},
   cal: { y: new Date().getFullYear(), m: new Date().getMonth() },
   calView: "agenda", // agenda | week | month — agenda is the default per rebuild
   // Which calendar rows the user has tapped open. Keyed by the item's own
@@ -819,6 +841,15 @@ function renderTrend(t){
     const palette = S.palette[t.id] || "noir_orange";
     const paletteChips = PALETTES.map(x=>`<button class="chip ${palette===x.id?'active':''}" onclick="setPalette('${t.id}','${x.id}')">${x.label}</button>`).join("");
     const showPalette = ct === "IG Carousel" || ct === "TikTok No-Face Graphic";
+    const cardTheme = S.cardTheme[t.id] || "modern_dark";
+    const cardTypography = S.cardTypography[t.id] || "impact";
+    const cardDensity = S.cardDensity[t.id] || "balanced";
+    const themeChips = CARD_THEMES.map(x=>`<button class="chip ${cardTheme===x.id?'active':''}" onclick="setCardTheme('${t.id}','${x.id}')">${x.label}</button>`).join("");
+    const typoChips = CARD_TYPOGRAPHIES.map(x=>`<button class="chip ${cardTypography===x.id?'active':''}" onclick="setCardTypography('${t.id}','${x.id}')">${x.label}</button>`).join("");
+    const densityChips = CARD_DENSITIES.map(x=>`<button class="chip ${cardDensity===x.id?'active':''}" onclick="setCardDensity('${t.id}','${x.id}')">${x.label}</button>`).join("");
+    const themeLabel = CARD_THEMES.find(x=>x.id===cardTheme)?.label || cardTheme;
+    const typoLabel = CARD_TYPOGRAPHIES.find(x=>x.id===cardTypography)?.label || cardTypography;
+    const densityLabel = CARD_DENSITIES.find(x=>x.id===cardDensity)?.label || cardDensity;
     const slideCount = S.slideCount[t.id] || 4;
     const slideCountChips = [1,2,3,4,5,6].map(n=>`<button class="chip ${slideCount===n?'active':''}" onclick="setSlideCount('${t.id}',${n})">${n}</button>`).join("");
     const showSlideCount = ct === "IG Carousel";
@@ -851,6 +882,9 @@ function renderTrend(t){
         ${step('format','Format',ct,ctChips)}
         ${step('tone','Tone',toneLabel,toneChips)}
         ${showPalette ? step('palette','Card color',paletteLabel,paletteChips) : ""}
+        ${showPalette ? step('theme','Visual Theme',themeLabel,themeChips) : ""}
+        ${showPalette ? step('typography','Typography',typoLabel,typoChips) : ""}
+        ${showPalette ? step('density','Text Density',densityLabel,densityChips) : ""}
         ${showSlideCount ? step('slides','Number of slides',slideCount,slideCountChips) : ""}
       </div>
       <div class="action-row">
@@ -885,7 +919,172 @@ function renderTrend(t){
   </div>`;
 }
 
+
+function renderPlatformMockup(o, tid, idx, curPlat) {
+  const prevKey = `${tid}-${idx}`;
+  const sIdx = (S.previewSlideIdx && S.previewSlideIdx[prevKey]) || 0;
+  const isCarousel = o.type === "carousel";
+  const slides = isCarousel ? (o.slides || []) : [];
+  const curSlide = isCarousel ? (slides[sIdx] || slides[0] || {}) : null;
+  const totalSlides = slides.length || 1;
+  const userHandle = S.user?.handle || S.user?.name?.toLowerCase().replace(/\s+/g, "") || "creatorpulse";
+  const userDisp = S.user?.name || "CreatorPulse";
+  const initial = userDisp.slice(0, 1).toUpperCase();
+  const textContent = o.type === "text" ? String(o.content || "") : (curSlide ? [curSlide.headline, curSlide.stat, curSlide.body].filter(Boolean).join(" · ") : "");
+
+  // Tab switcher
+  const tabs = `
+    <div class="preview-tabs">
+      <span class="prev-tab-lbl">Live Mockup:</span>
+      <button class="prev-tab ${curPlat==='instagram'?'active':''}" onclick="setPreviewPlat('${prevKey}','instagram')">📸 Instagram</button>
+      <button class="prev-tab ${curPlat==='tiktok'?'active':''}" onclick="setPreviewPlat('${prevKey}','tiktok')">🎵 TikTok</button>
+      <button class="prev-tab ${curPlat==='youtube'?'active':''}" onclick="setPreviewPlat('${prevKey}','youtube')">▶️ YouTube</button>
+      <button class="prev-tab ${curPlat==='twitter'?'active':''}" onclick="setPreviewPlat('${prevKey}','twitter')">𝕏 X</button>
+    </div>`;
+
+  let inner = "";
+
+  if (curPlat === "instagram") {
+    const slideImg = curSlide?.img || o.img || "";
+    const imgEl = slideImg
+      ? `<img src="${slideImg}" style="width:100%;aspect-ratio:4/5;object-fit:cover;display:block"/>`
+      : `<div style="padding:28px 16px;min-height:220px;display:flex;flex-direction:column;justify-content:center;background:#111;text-align:center"><div style="font-size:16px;font-weight:700;color:#fff">${esc(textContent.slice(0, 120))}</div></div>`;
+
+    const navArrows = isCarousel && totalSlides > 1 ? `
+      <div style="position:absolute;top:50%;left:8px;transform:translateY(-50%);z-index:3">
+        <button class="btn bo bxs" style="background:rgba(0,0,0,0.6);color:#fff;border-radius:50%;width:26px;height:26px;padding:0" onclick="setPreviewSlide('${prevKey}',${Math.max(0, sIdx - 1)})">‹</button>
+      </div>
+      <div style="position:absolute;top:50%;right:8px;transform:translateY(-50%);z-index:3">
+        <button class="btn bo bxs" style="background:rgba(0,0,0,0.6);color:#fff;border-radius:50%;width:26px;height:26px;padding:0" onclick="setPreviewSlide('${prevKey}',${Math.min(totalSlides - 1, sIdx + 1)})">›</button>
+      </div>
+      <div style="position:absolute;top:10px;right:10px;background:rgba(0,0,0,0.7);color:#fff;padding:2px 7px;border-radius:99px;font-size:10px;font-weight:700;z-index:3">${sIdx + 1}/${totalSlides}</div>
+    ` : "";
+
+    const dots = isCarousel && totalSlides > 1 ? `
+      <div style="display:flex;justify-content:center;gap:4px;padding:6px 0">
+        ${slides.map((_, i) => `<span style="width:5px;height:5px;border-radius:50%;background:${i===sIdx?'#3897f0':'rgba(255,255,255,0.25)'}"></span>`).join("")}
+      </div>` : "";
+
+    inner = `
+      <div class="mock-shell mock-ig">
+        <div class="mock-ig-header">
+          <div class="mock-ig-user">
+            <div class="mock-ig-avatar"><div class="mock-ig-avatar-inner">${initial}</div></div>
+            <div>
+              <div class="mock-ig-name">${esc(userHandle)}</div>
+              <div class="mock-ig-sub">Suggested for you</div>
+            </div>
+          </div>
+          <div style="color:#aaa;font-size:13px;letter-spacing:1px">•••</div>
+        </div>
+        <div class="mock-ig-body" style="position:relative">
+          ${imgEl}
+          ${navArrows}
+        </div>
+        ${dots}
+        <div class="mock-ig-actions">
+          <div class="mock-ig-icons-left">
+            <span>❤️</span><span>💬</span><span>↗️</span>
+          </div>
+          <div><span>🔖</span></div>
+        </div>
+        <div class="mock-ig-likes">4,821 likes</div>
+        <div class="mock-ig-caption">
+          <b>${esc(userHandle)}</b> ${esc(textContent.slice(0, 110))} <span class="mock-ig-more">... more</span>
+        </div>
+      </div>`;
+  } else if (curPlat === "tiktok") {
+    const slideImg = curSlide?.img || o.img || "";
+    const mediaEl = slideImg
+      ? `<img src="${slideImg}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"/>`
+      : `<div style="padding:20px;text-align:center;color:#fff;font-weight:700;font-size:15px;z-index:1">${esc(textContent.slice(0, 140))}</div>`;
+
+    inner = `
+      <div class="mock-shell mock-tt mock-tt-shell">
+        ${mediaEl}
+        <div class="mock-tt-top">
+          <span>Following</span>
+          <span class="active">For You</span>
+        </div>
+        <div class="mock-tt-overlay">
+          <div class="mock-tt-info">
+            <div class="mock-tt-user">@${esc(userHandle)}</div>
+            <div class="mock-tt-desc">${esc(textContent.slice(0, 95))} #fyp #viral</div>
+            <div class="mock-tt-sound">🎵 <span>Trending Sound · Original Audio</span></div>
+          </div>
+          <div class="mock-tt-side">
+            <div class="mock-tt-side-item"><div class="mock-tt-side-btn">❤️</div><span>52.4K</span></div>
+            <div class="mock-tt-side-item"><div class="mock-tt-side-btn">💬</div><span>1,842</span></div>
+            <div class="mock-tt-side-item"><div class="mock-tt-side-btn">⭐️</div><span>8,910</span></div>
+            <div class="mock-tt-side-item"><div class="mock-tt-side-btn">↗️</div><span>3,420</span></div>
+            <div class="mock-tt-side-item"><div class="mock-tt-side-btn" style="border-radius:50%;font-size:11px">💿</div></div>
+          </div>
+        </div>
+      </div>`;
+  } else if (curPlat === "youtube") {
+    const slideImg = curSlide?.img || o.img || "";
+    const mediaEl = slideImg
+      ? `<img src="${slideImg}" style="width:100%;height:100%;object-fit:cover"/>`
+      : `<div style="padding:16px;color:#fff;font-size:13px;font-weight:600;text-align:center">${esc(textContent.slice(0, 90))}</div>`;
+
+    inner = `
+      <div class="mock-shell mock-yt">
+        <div class="mock-yt-player">
+          ${mediaEl}
+          <div class="mock-yt-play-btn">▶</div>
+          <div class="mock-yt-progress"><div class="mock-yt-progress-fill"></div></div>
+          <div style="position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,0.8);color:#fff;font-size:10px;padding:2px 5px;border-radius:3px">12:45</div>
+        </div>
+        <div class="mock-yt-meta">
+          <div class="mock-yt-title">${esc(textContent.slice(0, 75) || "Viral Breakdown Video")}</div>
+          <div class="mock-yt-views">284K views · 1 day ago</div>
+          <div class="mock-yt-channel">
+            <div class="mock-yt-ch-info">
+              <div class="mock-yt-avatar">${initial}</div>
+              <div class="mock-yt-ch-name">${esc(userDisp)} ✓</div>
+            </div>
+            <button class="mock-yt-sub-btn">Subscribe</button>
+          </div>
+        </div>
+      </div>`;
+  } else {
+    // X (Twitter)
+    const slideImg = curSlide?.img || o.img || "";
+    const mediaEl = slideImg
+      ? `<div class="mock-x-media"><img src="${slideImg}" style="width:100%;aspect-ratio:16/9;object-fit:cover;display:block"/></div>`
+      : "";
+
+    inner = `
+      <div class="mock-shell mock-x">
+        <div class="mock-x-card">
+          <div class="mock-x-header">
+            <div class="mock-x-user-row">
+              <div class="mock-x-avatar">${initial}</div>
+              <div class="mock-x-names">
+                <div class="mock-x-display-name">${esc(userDisp)} <span style="color:#1d9bf0">✓</span></div>
+                <div class="mock-x-handle">@${esc(userHandle)} · 2h</div>
+              </div>
+            </div>
+            <div style="color:#71767b">𝕏</div>
+          </div>
+          <div class="mock-x-text">${esc(textContent.slice(0, 240) || "Breaking analysis on the latest trend.")}</div>
+          ${mediaEl}
+          <div class="mock-x-actions">
+            <span class="mock-x-action">💬 142</span>
+            <span class="mock-x-action">🔁 840</span>
+            <span class="mock-x-action">❤️ 4.2K</span>
+            <span class="mock-x-action">🔖 620</span>
+            <span class="mock-x-action">📊 88K</span>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  return `<div class="mock-wrap">${tabs}${inner}</div>`;
+}
+
 function renderOut(o, tid, idx){
+
   if(!o) return "";
   if(o.type === "image"){
     // aspect-ratio CSS constrains the preview box so a 9:16 TikTok card
@@ -936,8 +1135,8 @@ window.setSlideBackgroundImage = async (tid, idx, slideIdx, file) => {
   o.slides[slideIdx].customImage = dataUrl;
   o._imgLoading = slideIdx; render();
   try {
-    const { category, palette, format, imageUrl } = o._renderCtx;
-    const cd = await generateCardsWithRetry({slides: o.slides, category, palette, format, imageUrl});
+    const { category, palette, format, imageUrl, theme, typography, density } = o._renderCtx;
+    const cd = await generateCardsWithRetry({slides: o.slides, category, palette, format, imageUrl, theme, typography, density});
     const newImgs = cd.images || [];
     o.slides.forEach((s,i)=>{ if(newImgs[i]) s.img = newImgs[i]; });
     o.images = newImgs;
@@ -984,6 +1183,13 @@ window.setCT = (tid,c) => { S.ctype[tid]=c; openStep(tid,'tone'); render(); };
 window.setTone = (tid,t) => { S.tone[tid]=t; closeStep(tid); render(); };
 window.setPalette = (tid,p) => { S.palette[tid]=p; closeStep(tid); render(); };
 window.setSlideCount = (tid,n) => { S.slideCount[tid]=n; closeStep(tid); render(); };
+window.setCardTheme = (tid, v) => { S.cardTheme = S.cardTheme || {}; S.cardTheme[tid] = v; closeStep(tid); render(); };
+window.setCardTypography = (tid, v) => { S.cardTypography = S.cardTypography || {}; S.cardTypography[tid] = v; closeStep(tid); render(); };
+window.setCardDensity = (tid, v) => { S.cardDensity = S.cardDensity || {}; S.cardDensity[tid] = v; closeStep(tid); render(); };
+window.setPreviewPlat = (key, plat) => { S.previewPlat = S.previewPlat || {}; S.previewPlat[key] = plat; render(); };
+window.setPreviewSlide = (key, idx) => { S.previewSlideIdx = S.previewSlideIdx || {}; S.previewSlideIdx[key] = idx; render(); };
+window.setPreviewMode = (key, mode) => { S.previewMode = S.previewMode || {}; S.previewMode[key] = mode; render(); };
+
 window.toggle = async (tid) => {
   S.expanded[tid] = !S.expanded[tid];
   if(S.expanded[tid] && !S.plat[tid]) S.plat[tid] = S.user?.primaryPlatform || "instagram";
@@ -1117,6 +1323,11 @@ window.gen = async (tid, all) => {
         const isCaption = /caption/i.test(c);
 
         let userPrompt = "";
+        const isYouTubeLong = plat === "youtube" && /long form/i.test(c);
+        const isYouTubeShort = plat === "youtube" && /short/i.test(c);
+        const isYouTubeTitleDesc = plat === "youtube" && /title/i.test(c);
+        const isYouTubeThumb = plat === "youtube" && /thumbnail/i.test(c);
+
         if (plat === "twitter" && isThread) {
           userPrompt = `Write a high-converting, viral 5-tweet thread for a ${t.niche} creator on X (Twitter), breaking down: "${t.headline}". Story details: ${t.summary||""}.
 
@@ -1134,6 +1345,62 @@ Make it bold, unapologetic, and designed to generate heated replies and quote-tw
         } else if (plat === "twitter" && /engagement/i.test(c)) {
           userPrompt = `Write a high-engagement question/poll tweet (under 250 characters) for a ${t.niche} creator on X (Twitter) about: "${t.headline}". Story: ${t.summary||""}.
 Give a 1-line setup, then ask an irresistible "Agree or Disagree?" or "A vs B" dilemma question that compels people to reply. Return only the ready-to-post tweet.`;
+        } else if (isYouTubeLong) {
+          userPrompt = `Write a comprehensive, retention-engineered Long-Form YouTube Video Script for a ${t.niche} creator about: "${t.headline}". Story details: ${t.summary||""}.
+
+Structure requirements:
+[0:00 - 0:25 THE HOOK & RETENTION STAKE]:
+Open immediately on the central question or revelation without introducing yourself. Hook viewers with high stakes.
+
+[0:25 - 1:15 THE PREVIEW & CLIMAX TEASE]:
+Tease the most unexpected part of the story coming in Chapter 3. Brief channel subscribe call-to-action.
+
+[CHAPTER 1: THE BACKSTORY]:
+The origins, the key figures involved, and how the conflict escalated. Spoken dialogue with [B-ROLL / GRAPHIC] cues.
+
+[CHAPTER 2: THE TURNING POINT]:
+The pivotal breakdown, specific statistics, and controversial quotes.
+
+[CHAPTER 3: THE UNTOLD TRUTH & IMPACT]:
+The payoff teased in the intro. What mainstream news missed.
+
+[OUTRO & RETENTION CTA]:
+Never say "in conclusion" or "thanks for watching". Keep energy high, tease the next related video topic, and tell viewers to click the next video on screen right now.
+
+Return only the ready-to-record script formatted with timestamp chapter tags.`;
+        } else if (isYouTubeShort) {
+          userPrompt = `Write a high-velocity, 45-60 second YouTube Short script for a ${t.niche} creator about: "${t.headline}". Story: ${t.summary||""}.
+
+Crucial Requirement: Use the INFINITE LOOP technique — write the script so the very last sentence seamlessly and grammatically flows directly back into the opening hook sentence, making viewers watch it on an endless loop!
+
+Structure:
+[0-3s SCROLL-STOPPING HOOK]: Shocking visual action + opening statement.
+[ON-SCREEN TEXT]: Bold 3-4 word phrase.
+[RAPID EXPLANATION]: 3 fast-paced spoken beats with [B-ROLL / ZOOM IN] directions.
+[THE CLIMAX / VERDICT]: High drama payoff.
+[INFINITE LOOP SEED]: Seamless transition sentence that loops back to the start.
+
+Return only the ready-to-record spoken script.`;
+        } else if (isYouTubeTitleDesc) {
+          userPrompt = `Write YouTube Video Titles, Description, and Chapter Timestamps for a ${t.niche} creator about: "${t.headline}". Story: ${t.summary||""}.
+
+Requirements:
+1. 3 High-CTR Title Options (under 60 characters, curiosity-driven, emotionally compelling).
+2. YouTube Video Description (2-sentence SEO summary with key search terms).
+3. Suggested Chapter Timestamps (e.g. 0:00 Hook, 0:42 The Backstory, 1:45 The Twist, 3:10 What This Means).
+4. Top 3 Search Tags.
+
+Return only the ready-to-copy titles and description.`;
+        } else if (isYouTubeThumb) {
+          userPrompt = `Provide a high-CTR YouTube Thumbnail concept & design blueprint for a ${t.niche} creator about: "${t.headline}". Story: ${t.summary||""}.
+
+Requirements:
+- Visual Subject & Focal Point (who or what is featured, facial expression or dramatic angle).
+- Background Setting & Contrast Colors (high-contrast lighting to pop on dark/light feeds).
+- On-Thumbnail Graphic Text (strictly 2 to 4 words maximum, bold, punchy, curiosity-inducing).
+- A/B Split Test Alternative Concept.
+
+Return only the ready-to-use thumbnail direction.`;
         } else if (isReel) {
           userPrompt = `Write a camera-ready, high-retention 30-45 second Instagram Reel script for a ${t.niche} creator about: "${t.headline}". Story: ${t.summary||""}.
 
@@ -1151,11 +1418,19 @@ Return only the ready-to-film script formatted with beat tags.`;
 Structure:
 [0-2s HOOK]: Stop-the-scroll visual cue + shocking opening line.
 [OVERLAY]: 3-6 word controversial screen text.
+[SOUND CUE]: [SOUND: Suggested trending sound genre]
 [BEAT 1]: The most shocking or dramatic detail first.
 [BEAT 2]: The context and why everyone is talking about it.
 [COMMENT BAIT & CTA]: Ask a debate-starter question that makes viewers fight in the comments.
 
 Return only the ready-to-record spoken script.`;
+        } else if (plat === "tiktok" && isCaption) {
+          userPrompt = `Write a witty, viral TikTok caption and hashtags for a ${t.niche} creator about: "${t.headline}". Story: ${t.summary||""}.
+Requirements:
+- 2 punchy lines maximum with dry humor or curiosity gap.
+- 5-6 viral and niche-specific TikTok hashtags (including #fyp and #foryou).
+
+Return only the ready-to-copy TikTok caption.`;
         } else if (isCaption) {
           userPrompt = `Write an engaging social caption with hashtags for a ${t.niche} creator on ${P?.label||plat} about: "${t.headline}". Story: ${t.summary||""}.
 Format:
