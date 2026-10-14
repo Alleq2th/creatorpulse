@@ -812,7 +812,8 @@ function renderTrend(t){
     const bp = trendBestPlatform(t);
     const bpLabel = PLATS.find(x=>x.id===bp)?.label || bp;
     const opp = trendOpportunity(t);
-    const platChips = (S.user?.platforms||["instagram"]).map(p=>{ const P = PLATS.find(x=>x.id===p); return `<button class="chip ${plat===p?'active':''}" onclick="setPlat('${t.id}','${p}')">${esc(P?.label||p)}</button>`; }).join("");
+    const availablePlats = Array.from(new Set([...(S.user?.platforms||[]), "instagram", "tiktok", "twitter", "youtube"]));
+    const platChips = availablePlats.map(p=>{ const P = PLATS.find(x=>x.id===p); const label = p === "twitter" ? "X (Twitter)" : (P?.label||p); return `<button class="chip ${plat===p?'active':''}" onclick="setPlat('${t.id}','${p}')">${esc(label)}</button>`; }).join("");
     const ctChips = (PTYPES[plat]||[]).map(c=>`<button class="chip ac ${ct===c?'active':''}" onclick="setCT('${t.id}','${esc(c)}')">${esc(c)}</button>`).join("");
     const toneChips = TONES.map(x=>`<button class="chip ${tone===x.id?'active':''}" onclick="setTone('${t.id}','${x.id}')">${x.label}</button>`).join("");
     const palette = S.palette[t.id] || "noir_orange";
@@ -827,7 +828,7 @@ function renderTrend(t){
     // option (setPlat/setCT/setTone/setPalette/setSlideCount) closes the
     // step it belongs to, so the panel never has more than one thing open.
     const openStep = (S.openStep && S.openStep[t.id]) || null;
-    const platLabel = PLATS.find(x=>x.id===plat)?.label || plat;
+    const platLabel = plat === "twitter" ? "X (Twitter)" : (PLATS.find(x=>x.id===plat)?.label || plat);
     const toneLabel = TONES.find(x=>x.id===tone)?.label || tone;
     const paletteLabel = PALETTES.find(x=>x.id===palette)?.label || palette;
     const step = (name,label,value,body) => `<div class="step ${openStep===name?'open':''}">
@@ -904,11 +905,11 @@ function renderOut(o, tid, idx){
   }
   if(o.type === "carousel"){
     const slideText = s => [s.headline, s.stat && s.statLabel ? `${s.stat} — ${s.statLabel}` : s.stat, s.sectionLabel, s.body, s.supportingText].filter(Boolean).join("\n");
-    const slides = (o.slides||[]).map((s,si)=>`<div style="padding:8px 0;border-bottom:1px solid var(--br)"><div style="display:flex;align-items:center;justify-content:space-between"><div style="font-size:10px;color:var(--mu);font-weight:600">Slide ${s.slideNumber} · ${esc(s.type||"")}</div><div style="display:flex;gap:4px;align-items:center">${o._imgLoading===si?`<span style="font-size:10px;color:var(--mu)">Applying…</span>`:`${s.img?`<button class="btn bo bxs tipbtn" data-tip="Download this slide" title="Download this slide" aria-label="Download slide ${s.slideNumber}" onclick="dl('${s.img}','slide-${s.slideNumber}.png')" style="padding:3px 8px">${I.dl}</button>`:""}<input type="file" accept="image/*" id="slideimg-${tid}-${idx}-${si}" style="display:none" onchange="setSlideBackgroundImage('${tid}',${idx},${si},this.files[0])"/><button class="btn bo bxs tipbtn" data-tip="Use your own photo as this slide's background" title="Add background image" aria-label="Add background image for slide ${s.slideNumber}" onclick="document.getElementById('slideimg-${tid}-${idx}-${si}').click()" style="padding:3px 8px">${I.image}</button>`}</div></div>${s.img?`<img loading="lazy" decoding="async" src="${s.img}" style="width:100%;border-radius:6px;margin-top:6px;aspect-ratio:4/5;object-fit:cover"/>`:""}<div style="font-family:var(--serif);font-size:14px;font-weight:600;margin-top:6px">${esc(s.headline)}</div>${s.stat?`<div style="font-size:12px;color:var(--ac);margin-top:2px;font-weight:700">${esc(s.stat)}${s.statLabel?` — ${esc(s.statLabel)}`:""}</div>`:""}<div style="font-size:12px;color:var(--mu);margin-top:3px;line-height:1.5">${esc(s.body||s.supportingText||"")}</div></div>`).join("");
+    const slides = (o.slides||[]).map((s,si)=>`<div style="padding:8px 0;border-bottom:1px solid var(--br)"><div style="display:flex;align-items:center;justify-content:space-between"><div style="font-size:10px;color:var(--mu);font-weight:600">Slide ${s.slideNumber} · ${esc(s.type||"")}</div><div style="display:flex;gap:4px;align-items:center">${o._imgLoading===si?`<span style="font-size:10px;color:var(--mu)">Applying…</span>`:`${s.img?`<button class="btn bo bxs tipbtn" data-tip="Download this slide" title="Download this slide" aria-label="Download slide ${s.slideNumber}" onclick="dl('${s.img}','slide-${s.slideNumber}.png')" style="padding:3px 8px">${I.dl}</button>`:""}<input type="file" accept="image/*" id="slideimg-${tid}-${idx}-${si}" style="display:none" onchange="setSlideBackgroundImage('${tid}',${idx},${si},this.files[0])"/><button class="btn bo bxs tipbtn" data-tip="Use your own photo as this slide's background" title="Add background image" aria-label="Add background image for slide ${s.slideNumber}" onclick="document.getElementById('slideimg-${tid}-${idx}-${si}').click()" style="padding:3px 8px">${I.image}</button>`}</div></div>${s.img?`<img loading="lazy" decoding="async" src="${s.img}" style="width:100%;border-radius:6px;margin-top:6px;aspect-ratio:4/5;object-fit:cover"/>`:""}</div>`).join("");
     const cp = (o.slides||[]).map(s=>`SLIDE ${s.slideNumber}: ${slideText(s)}`).join("\n\n");
     const imgs = (o.slides||[]).map(s=>s.img).filter(Boolean);
     const dlAllBtn = imgs.length ? `<button class="btn bo bxs tipbtn" data-tip="Download all slide images" title="Download all slides" aria-label="Download all slides" onclick='dlAll(${JSON.stringify(imgs)})'>${I.dl} All</button>` : "";
-    return `<div class="oc"><div class="oh"><span class="ol">Carousel · ${o.slides?.length||0} slides</span><div style="display:flex;gap:6px">${dlAllBtn}<button class="btn bo bxs tipbtn" data-tip="Copy carousel text" title="Copy carousel text" aria-label="Copy carousel text" onclick="copyTxt(\`${cp.replace(/`/g,"\\`")}\`)">${I.copy}</button></div></div><div style="padding:10px">${slides}</div><div class="ofoot"><button class="btn bp bxs tipbtn" data-tip="Save to library" title="Save to library" aria-label="Save to library" onclick="saveOut('${tid}',${idx})">${I.save} Save</button></div></div>`;
+    return `<div class="oc"><div class="oh"><span class="ol">Carousel · ${o.slides?.length||0} slides</span><div style="display:flex;gap:6px">${dlAllBtn}<button class="btn bo bxs tipbtn" data-tip="Copy carousel text" title="Copy carousel text" aria-label="Copy carousel text" onclick="copyTxt(\`${cp.replace(/`/g,"\\`")}\`)">${I.copy}</button></div></div><div style="padding:10px">${slides}</div><details style="margin:0 10px 10px;background:var(--sf);border-radius:6px;padding:8px 12px;border:1px solid var(--br)"><summary style="cursor:pointer;font-size:11px;font-weight:600;color:var(--mu2)">View slide copy &amp; details</summary><div style="font-size:11px;color:var(--tx);margin-top:6px;line-height:1.6;white-space:pre-wrap">${esc(cp)}</div></details><div class="ofoot"><button class="btn bp bxs tipbtn" data-tip="Save to library" title="Save to library" aria-label="Save to library" onclick="saveOut('${tid}',${idx})">${I.save} Save</button></div></div>`;
   }
   const content = String(o.content||"");
   return `<div class="oc"><div class="oh"><span class="ol">${esc(o.label||"Draft")}</span><button class="btn bo bxs tipbtn" data-tip="Copy draft" title="Copy draft" aria-label="Copy draft" onclick="copyTxt(\`${content.replace(/`/g,"\\`")}\`)">${I.copy}</button></div><div class="ob">${esc(content)}</div><div class="ofoot"><button class="btn bp bxs tipbtn" data-tip="Save to library" title="Save to library" aria-label="Save to library" onclick="saveOut('${tid}',${idx})">${I.save} Save</button></div></div>`;
@@ -1023,9 +1024,9 @@ window.gen = async (tid, all) => {
         // 1600 chars, not the old 200) — the raw material the AI rewrites
         // from, not just a fragment to mechanically slice up.
         const sourceText = t.summary || "";
-        const HOOK_SCHEMA = `"hookHeadline":"a REWRITTEN, catchier editorial headline that states the real news and makes someone want to keep reading — not a copy of the raw scraped headline, 5-9 words","hookTease":"1-2 sentences that tease why this matters without giving away the full story"`;
-        const BODY_ITEM_SCHEMA = `{"headline":"editorial headline, 4-8 words — communicate the actual news, not just a topic label","sectionLabel":"short label like BACKGROUND or WHAT HAPPENED, else null","body":"2-4 FULL sentences with real specific detail — names, numbers, context, what happens next. Don't summarize vaguely, explain it properly like a real news writer would, else null","subject":"the entity doing the thing — a person, brand, or organization name, ONLY if the slide is naturally an announcement (someone/something did a specific thing) — else omit this field entirely","action":"the specific thing that entity did or announced, as a short clear phrase — ONLY set this alongside subject, else omit this field entirely","outcome":"1-2 sentences on why it matters or what happens next, only if subject/action are set, else omit","compareA":{"label":"short label for the first figure, e.g. BEFORE or LAST SEASON","value":"the first figure as a short string, e.g. 5.25% or 8.2 PPG"},"compareB":{"label":"short label for the second figure, e.g. AFTER or THIS SEASON","value":"the second figure as a short string"},"comparisonNote":"1 sentence on what the contrast means, only if compareA/compareB are set, else omit","claim":"the statement or move that's stirring a response, as a short bold sentence — ONLY if the story has a genuine claim/action-and-reaction dynamic, else omit this field entirely","reaction":"1-2 sentences on how people (fans, critics, the public, other parties) are actually responding, only if claim is set, else omit","reactionTag":"a short label like BACKLASH, MIXED REACTION, PRAISE, or DEBATE — only if claim is set, else omit","stat":"a number/figure from the story if one genuinely exists, else null","statLabel":"what the stat measures, else null","facts":["3-4 short standalone facts, ONLY if the story naturally breaks into a list of distinct points — else omit this field entirely"],"quote":"a real quote from someone in the story, ONLY if the source material actually contains one — else omit this field entirely","quoteAttribution":"who said it, only if quote is set","timeline":[{"label":"a date/stage label","text":"what happened at that point"}],"tag":"a short context tag like a team/event name, else null"}`;
-        const REWRITE_RULES = `You are REWRITING this into a proper editorial carousel, not mechanically splitting the source text across slides — rephrase in clear, engaging, well-written English, and never cut a sentence off mid-thought at a slide boundary. Each slide should use AT MOST ONE of subject+action+outcome / compareA+compareB / claim+reaction / stat / facts / quote / timeline — never combine them, never fill one in unless the story genuinely supports it, never invent a stat/quote/timeline/comparison point that isn't actually in the source. Use subject+action+outcome specifically when the slide's whole point is that a named person/brand/organization did or announced something concrete — that's a distinct visual treatment from a plain body paragraph, so don't set it for slides that are just background or context with no clear actor. Use compareA+compareB ONLY when the source genuinely gives two comparable figures (a real before/after, this-season-vs-last, or two named things being weighed against each other) — never invent a second figure just to force a comparison. Use claim+reaction ONLY when the source genuinely describes a statement or move AND a real response to it (backlash, praise, debate, pushback) — never invent a reaction that isn't actually reported. Prioritize substance — every slide should teach the reader something concrete.`;
+        const HOOK_SCHEMA = `"hookHeadline":"a scroll-stopping editorial headline in 4-7 punchy words, clear and specific","hookTease":"one intriguing sentence of no more than 14 words"`;
+        const BODY_ITEM_SCHEMA = `{"headline":"editorial headline, 4-8 words — communicate the actual news, not just a topic label","sectionLabel":"short label like BACKGROUND or WHAT HAPPENED, else null","body":"1-2 crisp, specific sentences, max 30 words total; easy to scan in 3 seconds, not a paragraph","subject":"the entity doing the thing — a person, brand, or organization name, ONLY if the slide is naturally an announcement (someone/something did a specific thing) — else omit this field entirely","action":"the specific thing that entity did or announced, as a short clear phrase — ONLY set this alongside subject, else omit this field entirely","outcome":"1-2 sentences on why it matters or what happens next, only if subject/action are set, else omit","compareA":{"label":"short label for the first figure, e.g. BEFORE or LAST SEASON","value":"the first figure as a short string, e.g. 5.25% or 8.2 PPG"},"compareB":{"label":"short label for the second figure, e.g. AFTER or THIS SEASON","value":"the second figure as a short string"},"comparisonNote":"1 sentence on what the contrast means, only if compareA/compareB are set, else omit","claim":"the statement or move that's stirring a response, as a short bold sentence — ONLY if the story has a genuine claim/action-and-reaction dynamic, else omit this field entirely","reaction":"1-2 sentences on how people (fans, critics, the public, other parties) are actually responding, only if claim is set, else omit","reactionTag":"a short label like BACKLASH, MIXED REACTION, PRAISE, or DEBATE — only if claim is set, else omit","stat":"a number/figure from the story if one genuinely exists, else null","statLabel":"what the stat measures, else null","facts":["3-4 short standalone facts, ONLY if the story naturally breaks into a list of distinct points — else omit this field entirely"],"quote":"a real quote from someone in the story, ONLY if the source material actually contains one — else omit this field entirely","quoteAttribution":"who said it, only if quote is set","timeline":[{"label":"a date/stage label","text":"what happened at that point"}],"tag":"a short context tag like a team/event name, else null"}`;
+        const REWRITE_RULES = `Design a high-retention social carousel, not a dense article. Every slide must scan in under 3 seconds: one key idea, short copy, strong contrast, plain conversational English. Use a genuinely supported stat, comparison, quote, fact list, timeline, or announcement when the source has one. Never invent facts, numbers, quotes, reactions, or comparisons. Give each slide a distinct editorial beat and preserve concrete names/context.`;
 
         // Generation occasionally returns fewer slide objects than asked —
         // usually a truncated/malformed response rather than the model
@@ -1047,7 +1048,7 @@ window.gen = async (tid, all) => {
           // A single slide is the WHOLE post — no second slide to swipe to,
           // so headline + body + CTA all have to live here together.
           const sr = await generateText(
-            `Return ONLY a valid JSON object for a single all-in-one post (there is no other slide, this must fully tell the story): {"headline":"a full, complete, REWRITTEN editorial headline stating the actual news — catchy, not a copy of the raw source headline, 6-10 words","body":"3-5 full sentences with real specific detail — names, numbers, context, what happens and why it matters. This is the ONLY slide so it must completely explain the story on its own, in clear well-written English.","tag":"a short context tag, else null"}.`,
+            `Return ONLY a valid JSON object for a single all-in-one post (there is no other slide, this must fully tell the story): {"headline":"a full, complete, REWRITTEN editorial headline stating the actual news — catchy, not a copy of the raw source headline, 6-10 words","body":"1-2 concise sentences that explain the key takeaway with real names/numbers and context, maximum 30 words total; this is the only slide, so make it complete without becoming a paragraph.","tag":"a short context tag, else null"}.`,
             `${category.name} single post. Raw source headline: "${t.headline}". Full source text: ${sourceText}`, tone
           );
           const single = extractJSON(sr) || {};
@@ -1110,17 +1111,73 @@ window.gen = async (tid, all) => {
       } else {
         const P = PLATS.find(x=>x.id===plat);
         const isScript = /script/i.test(c);
-        const userPrompt = isScript
-          ? `Write a "${c}" for a ${t.niche} creator on ${P?.label||plat}, built around this story: "${t.headline}". ${t.summary||""}
+        const isThread = /thread/i.test(c);
+        const isReel = /reel/i.test(c);
+        const isTikTokScript = plat === "tiktok" && isScript;
+        const isCaption = /caption/i.test(c);
+
+        let userPrompt = "";
+        if (plat === "twitter" && isThread) {
+          userPrompt = `Write a high-converting, viral 5-tweet thread for a ${t.niche} creator on X (Twitter), breaking down: "${t.headline}". Story details: ${t.summary||""}.
+
+Thread structure requirements:
+- 1/5 (The Hook): A scroll-stopping opening hook (under 240 chars) that creates an urgent curiosity gap. Tease the key revelation or debate. End with 🧵👇
+- 2/5 (The Context / Stakes): The essential background in 1-2 punchy sentences. Why this matters right now.
+- 3/5 (The Turning Point / Key Numbers): Specific stats, quotes, or turning points that define the story.
+- 4/5 (The Analysis / Hot Take): An opinionated, debate-sparking perspective that triggers replies and quote tweets.
+- 5/5 (The Payoff & Question): Final takeaway + ask an irresistible question to drive comments + "If you found this valuable, repost 🔁 and follow for daily ${t.niche} breakdowns."
+
+Format with 1/5, 2/5, 3/5, 4/5, 5/5 clearly separated by double line breaks. Return only the ready-to-post thread with no meta-commentary.`;
+        } else if (plat === "twitter" && /hot take/i.test(c)) {
+          userPrompt = `Write a punchy, controversial hot take tweet (under 240 characters) for a ${t.niche} creator on X (Twitter) about: "${t.headline}". Story: ${t.summary||""}.
+Make it bold, unapologetic, and designed to generate heated replies and quote-tweets. No hashtags or generic filler. Return only the ready-to-post tweet.`;
+        } else if (plat === "twitter" && /engagement/i.test(c)) {
+          userPrompt = `Write a high-engagement question/poll tweet (under 250 characters) for a ${t.niche} creator on X (Twitter) about: "${t.headline}". Story: ${t.summary||""}.
+Give a 1-line setup, then ask an irresistible "Agree or Disagree?" or "A vs B" dilemma question that compels people to reply. Return only the ready-to-post tweet.`;
+        } else if (isReel) {
+          userPrompt = `Write a camera-ready, high-retention 30-45 second Instagram Reel script for a ${t.niche} creator about: "${t.headline}". Story: ${t.summary||""}.
+
+Structure it clearly with production beats:
+[HOOK - 0-3s]: Visual action cue + punchy spoken scroll-stopper.
+[TEXT OVERLAY]: Bold 3-5 word on-screen text.
+[BEAT 1 - CONTEXT]: Rapid-fire setup in conversational spoken English with [B-ROLL / CUTAWAY] direction.
+[BEAT 2 - THE PEAK MOMENT]: The key revelation, stats, or turning point.
+[CTA - 30-40s]: Provocative question to trigger comments + "Follow for more ${t.niche} breakdowns".
+
+Return only the ready-to-film script formatted with beat tags.`;
+        } else if (isTikTokScript) {
+          userPrompt = `Write a fast-paced, high-velocity 25-35 second TikTok script for a ${t.niche} creator about: "${t.headline}". Story: ${t.summary||""}.
+
+Structure:
+[0-2s HOOK]: Stop-the-scroll visual cue + shocking opening line.
+[OVERLAY]: 3-6 word controversial screen text.
+[BEAT 1]: The most shocking or dramatic detail first.
+[BEAT 2]: The context and why everyone is talking about it.
+[COMMENT BAIT & CTA]: Ask a debate-starter question that makes viewers fight in the comments.
+
+Return only the ready-to-record spoken script.`;
+        } else if (isCaption) {
+          userPrompt = `Write an engaging social caption with hashtags for a ${t.niche} creator on ${P?.label||plat} about: "${t.headline}". Story: ${t.summary||""}.
+Format:
+- First line: Punchy hook that stops scrolling before "...more".
+- Body: 3 bullet point takeaways using emojis.
+- Call to Action: A question to drive comments.
+- Hashtags: 12-15 targeted, active hashtags.
+
+Return only the ready-to-post caption.`;
+        } else if (isScript) {
+          userPrompt = `Write a "${c}" for a ${t.niche} creator on ${P?.label||plat}, built around this story: "${t.headline}". ${t.summary||""}
 
 Structure it as ONE continuous flow of speech — never label or separate sections, never write a heading like "Hook:" or "[CTA]", just write it exactly as it would be spoken start to finish:
-1. Open with a strong hook in the very first line — the thing that stops someone from scrolling. This is not a separate section, it's just how the script begins.
-2. Immediately follow with 1-2 lines that create a reason to keep watching — a curiosity gap or a "here's what happened" tease — before explaining anything fully.
-3. Deliver the actual substance of the story in clear, engaging spoken language — this is the bulk of the script.
-4. Close with a natural ending, then a real call to action: ask a genuine question that invites a comment, and end with a follow-prompt worded differently than the usual line — vary it, never repeat the same "follow for more" phrasing verbatim every time.
+1. Open with a strong hook in the very first line — the thing that stops someone from scrolling.
+2. Immediately follow with 1-2 lines that create a reason to keep watching — a curiosity gap or a "here's what happened" tease.
+3. Deliver the actual substance of the story in clear, engaging spoken language.
+4. Close with a natural ending, then a real call to action: ask a genuine question that invites a comment, and end with a follow-prompt.
 
-Return only the ready-to-post spoken text — no labels, no headers, no meta-commentary.`
-          : `Write a "${c}" for a ${t.niche} creator on ${P?.label||plat}. Story: "${t.headline}". ${t.summary||""}. Return only the ready-to-post text.`;
+Return only the ready-to-post spoken text — no labels, no headers, no meta-commentary.`;
+        } else {
+          userPrompt = `Write a "${c}" for a ${t.niche} creator on ${P?.label||plat}. Story: "${t.headline}". ${t.summary||""}. Return only the ready-to-post text.`;
+        }
         const s = await generateText(SYS, userPrompt, tone);
         out.push({type:"text", label:`${P?.label||plat} · ${c}`, content:s});
       }
@@ -1582,7 +1639,7 @@ window.openVideoBlueprint = async (tid) => {
   const t = S.trends.find(x=>x.id===tid); if(!t) return;
   const plat = S.plat[tid] || S.user?.primaryPlatform || "instagram";
   const ct = S.ctype[tid] || PTYPES[plat]?.[0] || "";
-  const platLabel = PLATS.find(x=>x.id===plat)?.label || plat;
+  const platLabel = plat === "twitter" ? "X (Twitter)" : (PLATS.find(x=>x.id===plat)?.label || plat);
   S.sheet = { kind:"blueprint", loading:true, data:null, videoBP:true, tid, plat };
   render();
   try {
@@ -1598,7 +1655,7 @@ window.openVideoBlueprint = async (tid) => {
 window.getChatGPTPrompt = async (tid) => {
   const t = S.trends.find(x=>x.id===tid); if(!t) return;
   const plat = S.plat[tid] || S.user?.primaryPlatform || "instagram";
-  const platLabel = PLATS.find(x=>x.id===plat)?.label || plat;
+  const platLabel = plat === "twitter" ? "X (Twitter)" : (PLATS.find(x=>x.id===plat)?.label || plat);
   const isYouTube = plat === "youtube";
   S.sheet = { kind:"gptprompt", loading:true, data:null, tid };
   render();
