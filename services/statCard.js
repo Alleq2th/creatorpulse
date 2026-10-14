@@ -28,25 +28,25 @@ const FONT_SANS = "Inter, sans-serif";                    // everything else —
 const FORMATS = {
   instagram: {
     w: 1080, h: 1350,
-    margin: 76,
-    headerY: 90, dashY: 122, dashW: owidth => 0, // computed inline
-    hookHeadlineY: 0.37, hookHeadlineSize: 84, hookHeadlineLine: 92, hookHeadlineChars: 16, hookMaxLines: 4,
-    hookSupportGap: 56, hookSupportSize: 32, hookSupportLine: 44, hookSupportChars: 56, hookSupportMaxLines: 3,
-    statY: 470, statSize: 210, statLabelGap: 46, statLabelSize: 26,
-    bodyHeadlineSize: 66, bodyHeadlineLine: 74, bodyHeadlineChars: 23, bodyHeadlineMaxLines: 3,
-    sectionLabelSize: 24, bodyTextSize: 28, bodyTextLine: 40, bodyTextChars: 58, bodyTextMaxLines: 10,
-    outroHeadlineSize: 76, outroHeadlineLine: 84, outroHeadlineChars: 17, outroMaxLines: 4,
+    margin: 80,
+    headerY: 96, dashY: 132, dashW: owidth => 0,
+    hookHeadlineY: 0.38, hookHeadlineSize: 88, hookHeadlineLine: 96, hookHeadlineChars: 15, hookMaxLines: 4,
+    hookSupportGap: 56, hookSupportSize: 36, hookSupportLine: 48, hookSupportChars: 46, hookSupportMaxLines: 3,
+    statY: 480, statSize: 220, statLabelGap: 46, statLabelSize: 28,
+    bodyHeadlineSize: 72, bodyHeadlineLine: 82, bodyHeadlineChars: 22, bodyHeadlineMaxLines: 3,
+    sectionLabelSize: 26, bodyTextSize: 36, bodyTextLine: 50, bodyTextChars: 42, bodyTextMaxLines: 6,
+    outroHeadlineSize: 80, outroHeadlineLine: 90, outroHeadlineChars: 16, outroMaxLines: 4,
   },
   tiktok: {
     w: 1080, h: 1920,
-    margin: 76,
-    headerY: 96, dashY: 130,
-    hookHeadlineY: 0.36, hookHeadlineSize: 92, hookHeadlineLine: 100, hookHeadlineChars: 15, hookMaxLines: 4,
-    hookSupportGap: 60, hookSupportSize: 34, hookSupportLine: 46, hookSupportChars: 52, hookSupportMaxLines: 3,
-    statY: 620, statSize: 240, statLabelGap: 50, statLabelSize: 28,
-    bodyHeadlineSize: 72, bodyHeadlineLine: 80, bodyHeadlineChars: 21, bodyHeadlineMaxLines: 3,
-    sectionLabelSize: 26, bodyTextSize: 30, bodyTextLine: 44, bodyTextChars: 52, bodyTextMaxLines: 14,
-    outroHeadlineSize: 84, outroHeadlineLine: 92, outroHeadlineChars: 16, outroMaxLines: 4,
+    margin: 80,
+    headerY: 104, dashY: 140,
+    hookHeadlineY: 0.36, hookHeadlineSize: 94, hookHeadlineLine: 102, hookHeadlineChars: 14, hookMaxLines: 4,
+    hookSupportGap: 60, hookSupportSize: 38, hookSupportLine: 50, hookSupportChars: 44, hookSupportMaxLines: 3,
+    statY: 630, statSize: 240, statLabelGap: 50, statLabelSize: 30,
+    bodyHeadlineSize: 76, bodyHeadlineLine: 86, bodyHeadlineChars: 20, bodyHeadlineMaxLines: 3,
+    sectionLabelSize: 28, bodyTextSize: 38, bodyTextLine: 52, bodyTextChars: 40, bodyTextMaxLines: 8,
+    outroHeadlineSize: 86, outroHeadlineLine: 96, outroHeadlineChars: 15, outroMaxLines: 4,
   }
 };
 function resolveFormat(format) {
@@ -206,13 +206,16 @@ function decorativeTexture(p, f, seed) {
     return `<line x1="${-200+off}" y1="${f.h}" x2="${200+off}" y2="0" stroke="${p.accent}" stroke-width="2" opacity="0.05"/>`;
   }).join("");
   return `
+  const border = `<rect x="28" y="28" width="${f.w - 56}" height="${f.h - 56}" rx="20" fill="none" stroke="${p.accent}" stroke-width="1.5" opacity="0.14"/>`;
+  return `
   <defs>
-    <radialGradient id="glow" cx="${cx}" cy="${cy}" r="${f.w*0.55}" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="${p.accent}" stop-opacity="0.16"/>
+    <radialGradient id="glow" cx="${cx}" cy="${cy}" r="${f.w*0.65}" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="${p.accent}" stop-opacity="0.18"/>
       <stop offset="100%" stop-color="${p.accent}" stop-opacity="0"/>
     </radialGradient>
   </defs>
   <rect width="${f.w}" height="${f.h}" fill="url(#glow)"/>
+  ${border}
   ${lines}`;
 }
 
@@ -449,7 +452,7 @@ function renderFacts(m, f, p, rows, startY) {
     const bSize = Math.round(f.bodyTextSize * 0.82);
     const lineH = Math.round(f.bodyTextLine * 0.82);
     out.push(`<circle cx="${m+10}" cy="${y - bSize*0.35}" r="5" fill="${p.accent}"/>`);
-    out.push(`<text x="${m+34}" y="${y}" font-family="${FONT_SANS}" font-size="${bSize}" fill="${p.secondaryText}">${tspans(lines, m+34, y, lineH)}</text>`);
+    out.push(`<text x="${m+34}" y="${y}" font-family="${FONT_SANS}" font-size="${bSize}" font-weight="500" fill="${p.secondaryText}">${tspans(lines, m+34, y, lineH)}</text>`);
     y += lines.length * lineH + 40;
   });
   return out.join("");

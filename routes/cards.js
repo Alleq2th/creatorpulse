@@ -9,7 +9,12 @@ const MAX_CONCURRENT_GENERATIONS = 3;
 function buildDefaultPulseSlides(topic, format, wikiData, imageInfo) {
   const isTikTok = String(format).toLowerCase().includes("tiktok") || String(format).toLowerCase().includes("9:16");
   const clean = (topic || "Trending Breakdown").replace(/^(generate|make|create|turn into|change this into|an|a|stat card for|instagram post for|tiktok post for)\s*/i, "").trim();
-  const headline = clean.toUpperCase().slice(0, 36);
+  let headline = clean.toUpperCase();
+  if (headline.length > 40) {
+    const trimmed = headline.slice(0, 40);
+    const lastSpace = trimmed.lastIndexOf(" ");
+    headline = lastSpace > 20 ? trimmed.slice(0, lastSpace) : trimmed;
+  }
 
   if (isTikTok) {
     return [
@@ -27,8 +32,8 @@ function buildDefaultPulseSlides(topic, format, wikiData, imageInfo) {
   return [
     {
       type: "hook",
-      headline: headline.length > 26 ? headline.slice(0, 26) : headline,
-      supportingText: wikiData?.extract?.slice(0, 130) || "The untold dilemma, key data, and controversy everyone is debating right now.",
+      headline,
+      supportingText: wikiData?.extract?.slice(0, 140) || "The untold dilemma, key data, and controversy everyone is debating right now.",
       slideNumber: 1,
       totalSlides: 4,
       imageUrl: imageInfo?.url || null
@@ -36,23 +41,21 @@ function buildDefaultPulseSlides(topic, format, wikiData, imageInfo) {
     {
       type: "body",
       headline: "THE CORE DILEMMA",
-      compareA: { label: "TRADITIONAL MODEL", value: "90%" },
-      compareB: { label: "NEW REALITY", value: "10X" },
+      sectionLabel: "THE CONTRAST",
+      compareA: { label: "PERCEPTION", value: "90%" },
+      compareB: { label: "REALITY", value: "10X" },
       comparisonNote: "Conventional wisdom misses the underlying shift completely.",
-      claim: "Most view this as a standard situation.",
-      reaction: "The data shows a massive divide between perception and reality.",
-      reactionTag: "MAJOR DILEMMA",
       slideNumber: 2,
       totalSlides: 4,
       imageUrl: imageInfo?.url || null
     },
     {
       type: "body",
-      headline: "THE NUMBERS THAT MATTER",
+      headline: "THE KEY NUMBERS",
+      sectionLabel: "TACTICAL BREAKDOWN",
       stat: "84%",
       statLabel: "OF THE OUTCOME IS DECIDED IN PHASE 1",
-      body: wikiData?.extract ? wikiData.extract.slice(0, 220) : "When you break down the actual metrics, the outcome is rarely an accident.",
-      sectionLabel: "TACTICAL BREAKDOWN",
+      body: wikiData?.extract ? wikiData.extract.slice(0, 160) : "When you break down the actual metrics, the outcome is rarely an accident.",
       slideNumber: 3,
       totalSlides: 4,
       imageUrl: imageInfo?.url || null
