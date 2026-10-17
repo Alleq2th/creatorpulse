@@ -889,50 +889,126 @@ function renderTrend(t){
     const bpLabel = PLATS.find(x=>x.id===bp)?.label || bp;
     const opp = trendOpportunity(t);
     const availablePlats = Array.from(new Set([...(S.user?.platforms||[]), "instagram", "tiktok", "twitter", "youtube"]));
-    const vopt = (active, onclick, visual, label, sub) => `<button class="vopt ${active?'active':''}" onclick="${onclick}"><div class="vopt-vis">${visual}</div><div class="vopt-txt"><div class="vopt-l">${label}</div>${sub?`<div class="vopt-s">${sub}</div>`:''}</div><div class="vopt-chk">${active?'✓':''}</div></button>`;
-    const platChips = availablePlats.map(p=>{ const P = PLATS.find(x=>x.id===p); const label = p === "twitter" ? "X (Twitter)" : (P?.label||p); return vopt(plat===p, `setPlat('${t.id}','${p}')`, `<div class="vlogo">${PLAT_LOGO[p]||PLAT_EMOJI[p]||''}</div>`, esc(label), esc((PTYPES[p]||[]).join(' · '))); }).join("");
-    const fmtVisual = (c) => {
-      if(/carousel/i.test(c)) return `<div class="vfmt-car"><span></span><span></span><span></span></div>`;
-      if(/graphic|thumbnail/i.test(c)) return `<div class="vfmt-img"><b>HEADLINE</b><i></i></div>`;
-      if(/caption|hashtag/i.test(c)) return `<div class="vfmt-cap"><div>Big news today… 👀</div><div class="ht">#trending #fyp</div></div>`;
-      if(/script|short/i.test(c)) return `<div class="vfmt-scr"><div><b>HOOK</b> 0:00</div><div><b>BODY</b> 0:05</div><div><b>CTA</b> 0:25</div></div>`;
-      if(/thread/i.test(c)) return `<div class="vfmt-scr"><div>1/5 🧵</div><div>2/5</div><div>3/5</div></div>`;
-      if(/title/i.test(c)) return `<div class="vfmt-cap"><div><b>Title goes here</b></div><div class="ht">Description…</div></div>`;
-      return `<div class="vfmt-cap"><div>💬 Your post…</div><div class="ht">♥ 4.8k  ↻ 920</div></div>`;
+    const platChips = availablePlats.map(p => {
+      const P = PLATS.find(x=>x.id===p);
+      const label = p === "twitter" ? "X (Twitter)" : (P?.label||p);
+      const isAct = plat === p;
+      return `<button class="h-card h-card-plat ${isAct?'active':''}" onclick="setPlat('${t.id}','${p}')">
+        <div class="h-badge">${isAct?'✓':''}</div>
+        <div class="h-logo">${PLAT_LOGO[p]||PLAT_EMOJI[p]||''}</div>
+        <div class="h-name">${esc(label)}</div>
+      </button>`;
+    }).join("");
+
+    const fmtIcon = (c) => {
+      if(/carousel/i.test(c)) return `<div class="h-fmt-vis h-fmt-car"><span></span><span></span><span></span></div>`;
+      if(/graphic|thumbnail/i.test(c)) return `<div class="h-fmt-vis h-fmt-img"><i></i></div>`;
+      if(/caption|hashtag/i.test(c)) return `<div class="h-fmt-vis h-fmt-cap"><span>#</span></div>`;
+      if(/script|short/i.test(c)) return `<div class="h-fmt-vis h-fmt-scr"><span>🎬</span></div>`;
+      if(/thread/i.test(c)) return `<div class="h-fmt-vis h-fmt-thr"><span>🧵</span></div>`;
+      return `<div class="h-fmt-vis h-fmt-cap"><span>💬</span></div>`;
     };
-    const ctChips = (PTYPES[plat]||[]).map(c=>vopt(ct===c, `setCT('${t.id}','${esc(c)}')`, fmtVisual(c), esc(c), "")).join("");
-    const TONE_VIS = {normal:["😐","Here's what happened."],funny:["😂","Bro really said that 💀"],educative:["🧠","3 things you need to know"],hype:["🔥","Nobody wants to admit this…"],storytelling:["📖","It all started when…"]};
-    const toneChips = TONES.map(x=>vopt(tone===x.id, `setTone('${t.id}','${x.id}')`, `<div class="vemoji">${(TONE_VIS[x.id]||["💬"])[0]}</div>`, x.label, `“${(TONE_VIS[x.id]||["",""])[1]}”`)).join("");
+    const ctChips = (PTYPES[plat]||[]).map(c => {
+      const isAct = ct === c;
+      return `<button class="h-card h-card-fmt ${isAct?'active':''}" onclick="setCT('${t.id}','${esc(c)}')">
+        <div class="h-badge">${isAct?'✓':''}</div>
+        ${fmtIcon(c)}
+        <div class="h-name">${esc(c)}</div>
+      </button>`;
+    }).join("");
+
+    const TONE_VIS = {normal:["😐","Neutral"],funny:["😂","Banter"],educative:["🧠","Educative"],hype:["🔥","Hot Take"],storytelling:["📖","Storytelling"]};
+    const toneChips = TONES.map(x => {
+      const isAct = tone === x.id;
+      const emoji = (TONE_VIS[x.id]||["💬"])[0];
+      return `<button class="h-card h-card-tone ${isAct?'active':''}" onclick="setTone('${t.id}','${x.id}')">
+        <div class="h-badge">${isAct?'✓':''}</div>
+        <div class="h-emoji">${emoji}</div>
+        <div class="h-name">${x.label}</div>
+      </button>`;
+    }).join("");
+
     const palette = S.palette[t.id] || "noir_orange";
-    const paletteChips = PALETTES.map(x=>{ const v=PALETTE_VIS[x.id]||["#111","#f60"]; return vopt(palette===x.id, `setPalette('${t.id}','${x.id}')`, `<div class="vcard" style="background:${v[0]}"><i style="background:${v[1]}"></i><b style="color:${x.id==='white_platinum'?'#111':'#fff'}">Aa</b><u style="background:${v[1]}"></u></div>`, x.label, `<span class="vsw" style="background:${v[0]}"></span><span class="vsw" style="background:${v[1]}"></span>`); }).join("");
+    const paletteChips = PALETTES.map(x => {
+      const isAct = palette === x.id;
+      const v = PALETTE_VIS[x.id] || ["#08090C","#FF7A1A"];
+      return `<button class="h-card h-card-color ${isAct?'active':''}" onclick="setPalette('${t.id}','${x.id}')">
+        <div class="h-badge">${isAct?'✓':''}</div>
+        <div class="h-color-preview" style="background:${v[0]}">
+          <div class="h-color-bar" style="background:${v[1]}"></div>
+          <div class="h-color-text" style="color:${x.id==='white_platinum'?'#111':'#fff'}">Aa</div>
+          <div class="h-color-dot" style="background:${v[1]}"></div>
+        </div>
+        <div class="h-name">${x.label}</div>
+      </button>`;
+    }).join("");
+
     const showPalette = ct === "IG Carousel" || ct === "TikTok No-Face Graphic";
     const cardTheme = S.cardTheme[t.id] || "modern_dark";
     const cardTypography = S.cardTypography[t.id] || "impact";
     const cardDensity = S.cardDensity[t.id] || "balanced";
-    const themeChips = CARD_THEMES.map(x=>{ const v=THEME_VIS[x.id]; return vopt(cardTheme===x.id, `setCardTheme('${t.id}','${x.id}')`, `<div class="vcard" style="background:${v.bg}"><b style="color:${v.fg}">Aa</b><u style="background:${v.mu}"></u><u style="background:${v.mu};width:50%"></u></div>`, x.label, ""); }).join("");
-    const typoChips = CARD_TYPOGRAPHIES.map(x=>{ const v=TYPO_VIS[x.id]; return vopt(cardTypography===x.id, `setCardTypography('${t.id}','${x.id}')`, `<div class="vtypo" style="font-family:${v.f.replace(/"/g,"'")};font-weight:${v.w}">${v.up?'AB':'Ab'}</div>`, `<span style="font-family:${v.f.replace(/"/g,"'")};font-weight:${v.w};font-size:15px">${v.up?x.label.toUpperCase():x.label}</span>`, "The quick headline"); }).join("");
-    const densityChips = CARD_DENSITIES.map(x=>{ const n=DENSITY_VIS[x.id]||2; return vopt(cardDensity===x.id, `setCardDensity('${t.id}','${x.id}')`, `<div class="vdens"><b></b>${'<u></u>'.repeat(n)}</div>`, x.label, n===1?'Big headline, minimal text':n===2?'Headline + short body':'More detail per slide'); }).join("");
-    const themeLabel = CARD_THEMES.find(x=>x.id===cardTheme)?.label || cardTheme;
-    const typoLabel = CARD_TYPOGRAPHIES.find(x=>x.id===cardTypography)?.label || cardTypography;
-    const densityLabel = CARD_DENSITIES.find(x=>x.id===cardDensity)?.label || cardDensity;
+
+    const themeChips = CARD_THEMES.map(x => {
+      const isAct = cardTheme === x.id;
+      const v = THEME_VIS[x.id] || {bg:"#111",fg:"#fff",mu:"#888"};
+      return `<button class="h-card h-card-theme ${isAct?'active':''}" onclick="setCardTheme('${t.id}','${x.id}')">
+        <div class="h-badge">${isAct?'✓':''}</div>
+        <div class="h-theme-preview" style="background:${v.bg};border-color:${isAct?'var(--tx)':'rgba(255,255,255,0.1)'}">
+          <span style="color:${v.fg}">Card</span>
+          <span class="h-theme-line" style="background:${v.mu}"></span>
+        </div>
+        <div class="h-name">${x.label}</div>
+      </button>`;
+    }).join("");
+
+    const typoChips = CARD_TYPOGRAPHIES.map(x => {
+      const isAct = cardTypography === x.id;
+      const v = TYPO_VIS[x.id] || {f:"Inter, sans-serif",w:700,up:false};
+      const cleanFont = v.f.replace(/"/g,"'");
+      return `<button class="h-card h-card-typo ${isAct?'active':''}" onclick="setCardTypography('${t.id}','${x.id}')">
+        <div class="h-badge">${isAct?'✓':''}</div>
+        <div class="h-typo-preview" style="font-family:${cleanFont};font-weight:${v.w}">${v.up?'AA':'Aa'}</div>
+        <div class="h-name" style="font-family:${cleanFont};font-weight:${v.w}">${x.label}</div>
+      </button>`;
+    }).join("");
+
+    const densityChips = CARD_DENSITIES.map(x => {
+      const isAct = cardDensity === x.id;
+      const n = DENSITY_VIS[x.id] || 2;
+      return `<button class="h-card h-card-density ${isAct?'active':''}" onclick="setCardDensity('${t.id}','${x.id}')">
+        <div class="h-badge">${isAct?'✓':''}</div>
+        <div class="h-dens-preview">
+          <b></b>
+          ${'<u></u>'.repeat(n)}
+        </div>
+        <div class="h-name">${x.label}</div>
+        <div class="h-sub">${n===1?'Punchy':n===2?'Balanced':'Detailed'}</div>
+      </button>`;
+    }).join("");
+
     const slideCount = S.slideCount[t.id] || 4;
-    const slideCountChips = [1,2,3,4,5,6].map(n=>vopt(slideCount===n, `setSlideCount('${t.id}',${n})`, `<div class="vslides">${'<span></span>'.repeat(n)}</div>`, `${n} slide${n>1?'s':''}`, n===1?'Single all-in-one post':n>=6?'Includes a follow slide':'')).join("");
+    const slideCountChips = [1,2,3,4,5,6,7,8].map(n => {
+      const isAct = slideCount === n;
+      return `<button class="h-slide-pill ${isAct?'active':''}" onclick="setSlideCount('${t.id}',${n})">
+        ${n} ${n===1?'slide':'slides'}
+      </button>`;
+    }).join("");
     const showSlideCount = ct === "IG Carousel";
     const outsHTML = outs.map((o,i)=>renderOut(o,t.id,i)).join("");
-    // Accordion: only the step the person tapped is open; everything else
-    // collapses to a one-line "label — current value" summary. Picking an
-    // option (setPlat/setCT/setTone/setPalette/setSlideCount) closes the
-    // step it belongs to, so the panel never has more than one thing open.
-    const openStep = (S.openStep && S.openStep[t.id]) || null;
+
     const platLabel = plat === "twitter" ? "X (Twitter)" : (PLATS.find(x=>x.id===plat)?.label || plat);
     const toneLabel = TONES.find(x=>x.id===tone)?.label || tone;
     const paletteLabel = PALETTES.find(x=>x.id===palette)?.label || palette;
-    // Always-open, vertically scrolling visual sections — nothing hidden
-    // behind a tap. Every option shows a picture of what it looks like.
-    const step = (name,label,value,body) => `<div class="vstep" data-step="${name}">
-        <div class="vstep-hd"><span class="vstep-l">${esc(label)}</span><span class="vstep-v">${esc(String(value))}</span></div>
-        <div class="vlist">${body}</div>
-      </div>`;
+    const themeLabel = CARD_THEMES.find(x=>x.id===cardTheme)?.label || cardTheme;
+    const typoLabel = CARD_TYPOGRAPHIES.find(x=>x.id===cardTypography)?.label || cardTypography;
+    const densityLabel = CARD_DENSITIES.find(x=>x.id===cardDensity)?.label || cardDensity;
+
+    // Minimal, horizontally scrolling visual rails — zero dropdowns, swipe and tap.
+    const hRail = (label, value, body) => `<div class="h-step">
+      <div class="h-step-hd"><span class="h-step-l">${esc(label)}</span><span class="h-step-v">${esc(String(value))}</span></div>
+      <div class="h-rail">${body}</div>
+    </div>`;
+
     panel = `<div class="cp">
       <div class="countdown">
         <span class="countdown-label">Post before</span>
@@ -942,14 +1018,14 @@ function renderTrend(t){
       <div class="best-plat"><span class="em">${PLAT_EMOJI[bp]||"◆"}</span><div style="flex:1"><div class="best-plat-lbl">Best platform</div><div class="best-plat-val">${esc(bpLabel)}</div></div></div>
       <div class="opp"><div class="opp-head"><span class="opp-lbl">Opportunity</span><span class="opp-val">${opp}/100</span></div><div class="opp-bar"><div class="opp-fill" style="width:${opp}%"></div></div></div>
       <div class="flow">
-        ${step('platform','Platform',platLabel,platChips)}
-        ${step('format','Format',ct,ctChips)}
-        ${step('tone','Tone',toneLabel,toneChips)}
-        ${showPalette ? step('palette','Card color',paletteLabel,paletteChips) : ""}
-        ${showPalette ? step('theme','Visual Theme',themeLabel,themeChips) : ""}
-        ${showPalette ? step('typography','Typography',typoLabel,typoChips) : ""}
-        ${showPalette ? step('density','Text Density',densityLabel,densityChips) : ""}
-        ${showSlideCount ? step('slides','Number of slides',slideCount,slideCountChips) : ""}
+        ${hRail('Platform', platLabel, platChips)}
+        ${hRail('Format', ct, ctChips)}
+        ${hRail('Tone', toneLabel, toneChips)}
+        ${showPalette ? hRail('Card Color', paletteLabel, paletteChips) : ""}
+        ${showPalette ? hRail('Visual Theme', themeLabel, themeChips) : ""}
+        ${showPalette ? hRail('Typography', typoLabel, typoChips) : ""}
+        ${showPalette ? hRail('Text Density', densityLabel, densityChips) : ""}
+        ${showSlideCount ? hRail('Number of Slides', `${slideCount} slides`, slideCountChips) : ""}
       </div>
       <div class="action-row">
         <button class="action-btn primary" ${load?'disabled':''} onclick="gen('${t.id}',false)">${load?'<span class="sp"></span>':I.bolt}<span>${load?'…':'Generate'}</span></button>
@@ -1152,15 +1228,12 @@ function renderPlatformMockup(o, tid, idx, curPlat) {
 }
 
 function renderOut(o, tid, idx){
-
   if(!o) return "";
+  const prevKey = `${tid}-${idx}`;
+  const curPlat = (S.previewPlat && S.previewPlat[prevKey]) || (o.aspect === "reel" || o.aspect === "tiktok" ? "tiktok" : o.aspect === "youtube" ? "youtube" : (S.plat && S.plat[tid]) || "instagram");
+  const mockupHTML = renderPlatformMockup(o, tid, idx, curPlat);
+
   if(o.type === "image"){
-    // aspect-ratio CSS constrains the preview box so a 9:16 TikTok card
-    // doesn't render at full natural height inside a feed card sized for
-    // a 4:5 carousel slide or square thumbnail — that mismatch (no
-    // constraint at all, previously) is what made the TikTok single card
-    // look oversized. object-fit:contain (not cover) so we never crop off
-    // any of the actual card — cards are precisely laid out, unlike photos.
     const aspectRatioCSS = o.aspect === "reel" || o.aspect === "tiktok" ? "9/16" : o.aspect === "youtube" ? "16/9" : o.aspect === "carousel" ? "4/5" : "1/1";
     const badge = o.isCard
       ? `<span class="ol">Card</span>`
@@ -1168,7 +1241,19 @@ function renderOut(o, tid, idx){
       ? `<span class="ol" style="color:#6fa062">Real photo${o.sourceLabel?' · '+esc(o.sourceLabel):''}</span>`
       : `<span class="ol">AI-generated</span>`;
     const gptBtn = o.isCard ? "" : `<button class="btn bo bxs tipbtn" data-tip="Get a detailed prompt for ChatGPT/DALL-E" title="ChatGPT prompt" aria-label="Get ChatGPT prompt" onclick="getChatGPTPrompt('${tid}')">${I.bolt} ChatGPT Prompt</button>`;
-    return `<div class="oc"><div class="oh">${badge}</div><div style="padding:10px"><img loading="lazy" decoding="async" src="${o.img}" data-fb="${o.fallbackImg||""}" onerror="cardImgFail(this, this.dataset.fb)" style="width:100%;max-width:280px;margin:0 auto;display:block;aspect-ratio:${aspectRatioCSS};object-fit:contain;border-radius:6px"/></div><div class="ofoot"><button class="btn bo bxs tipbtn" data-tip="Download image" title="Download image" aria-label="Download image" onclick="dl('${o.img}','image.jpg')">${I.dl} Download</button>${gptBtn}<button class="btn bp bxs tipbtn" data-tip="Save to library" title="Save to library" aria-label="Save to library" onclick="saveOut('${tid}',${idx})">${I.save} Save</button></div></div>`;
+    return `<div class="oc">
+      <div class="oh">${badge}<span style="font-size:10.5px;color:var(--mu)">Swipe format above to test</span></div>
+      ${mockupHTML}
+      <details style="margin:0 10px 10px;background:var(--sf);border-radius:6px;padding:8px 12px;border:1px solid var(--br)">
+        <summary style="cursor:pointer;font-size:11px;font-weight:600;color:var(--mu2)">View raw image canvas</summary>
+        <div style="padding:10px 0"><img loading="lazy" decoding="async" src="${o.img}" data-fb="${o.fallbackImg||""}" onerror="cardImgFail(this, this.dataset.fb)" style="width:100%;max-width:280px;margin:0 auto;display:block;aspect-ratio:${aspectRatioCSS};object-fit:contain;border-radius:6px"/></div>
+      </details>
+      <div class="ofoot">
+        <button class="btn bo bxs tipbtn" data-tip="Download image" title="Download image" aria-label="Download image" onclick="dl('${o.img}','image.jpg')">${I.dl} Download</button>
+        ${gptBtn}
+        <button class="btn bp bxs tipbtn" data-tip="Save to library" title="Save to library" aria-label="Save to library" onclick="saveOut('${tid}',${idx})">${I.save} Save</button>
+      </div>
+    </div>`;
   }
   if(o.type === "carousel"){
     const slideText = s => [s.headline, s.stat && s.statLabel ? `${s.stat} — ${s.statLabel}` : s.stat, s.sectionLabel, s.body, s.supportingText].filter(Boolean).join("\n");
@@ -1176,10 +1261,40 @@ function renderOut(o, tid, idx){
     const cp = (o.slides||[]).map(s=>`SLIDE ${s.slideNumber}: ${slideText(s)}`).join("\n\n");
     const imgs = (o.slides||[]).map(s=>s.img).filter(Boolean);
     const dlAllBtn = imgs.length ? `<button class="btn bo bxs tipbtn" data-tip="Download all slide images" title="Download all slides" aria-label="Download all slides" onclick='dlAll(${JSON.stringify(imgs)})'>${I.dl} All</button>` : "";
-    return `<div class="oc"><div class="oh"><span class="ol">Carousel · ${o.slides?.length||0} slides</span><div style="display:flex;gap:6px">${dlAllBtn}<button class="btn bo bxs tipbtn" data-tip="Copy carousel text" title="Copy carousel text" aria-label="Copy carousel text" onclick="copyTxt(\`${cp.replace(/`/g,"\\`")}\`)">${I.copy}</button></div></div><div style="padding:10px">${slides}</div><details style="margin:0 10px 10px;background:var(--sf);border-radius:6px;padding:8px 12px;border:1px solid var(--br)"><summary style="cursor:pointer;font-size:11px;font-weight:600;color:var(--mu2)">View slide copy &amp; details</summary><div style="font-size:11px;color:var(--tx);margin-top:6px;line-height:1.6;white-space:pre-wrap">${esc(cp)}</div></details><div class="ofoot"><button class="btn bp bxs tipbtn" data-tip="Save to library" title="Save to library" aria-label="Save to library" onclick="saveOut('${tid}',${idx})">${I.save} Save</button></div></div>`;
+    return `<div class="oc">
+      <div class="oh">
+        <span class="ol">Carousel · ${o.slides?.length||0} slides · ${esc(o.theme||'modern_dark')}</span>
+        <div style="display:flex;gap:6px">
+          ${dlAllBtn}
+          <button class="btn bo bxs tipbtn" data-tip="Copy carousel text" title="Copy carousel text" aria-label="Copy carousel text" onclick="copyTxt(\`${cp.replace(/`/g,"\\`")}\`)">${I.copy}</button>
+        </div>
+      </div>
+      ${mockupHTML}
+      <details style="margin:0 10px 10px;background:var(--sf);border-radius:6px;padding:8px 12px;border:1px solid var(--br)">
+        <summary style="cursor:pointer;font-size:11px;font-weight:600;color:var(--mu2)">View slide copy &amp; details</summary>
+        <div style="padding:10px 0">${slides}</div>
+        <div style="font-size:11px;color:var(--tx);margin-top:6px;line-height:1.6;white-space:pre-wrap;border-top:1px solid var(--br);padding-top:8px">${esc(cp)}</div>
+      </details>
+      <div class="ofoot">
+        <button class="btn bp bxs tipbtn" data-tip="Save to library" title="Save to library" aria-label="Save to library" onclick="saveOut('${tid}',${idx})">${I.save} Save</button>
+      </div>
+    </div>`;
   }
   const content = String(o.content||"");
-  return `<div class="oc"><div class="oh"><span class="ol">${esc(o.label||"Draft")}</span><button class="btn bo bxs tipbtn" data-tip="Copy draft" title="Copy draft" aria-label="Copy draft" onclick="copyTxt(\`${content.replace(/`/g,"\\`")}\`)">${I.copy}</button></div><div class="ob">${esc(content)}</div><div class="ofoot"><button class="btn bp bxs tipbtn" data-tip="Save to library" title="Save to library" aria-label="Save to library" onclick="saveOut('${tid}',${idx})">${I.save} Save</button></div></div>`;
+  return `<div class="oc">
+    <div class="oh">
+      <span class="ol">${esc(o.label||"Draft")}</span>
+      <button class="btn bo bxs tipbtn" data-tip="Copy draft" title="Copy draft" aria-label="Copy draft" onclick="copyTxt(\`${content.replace(/`/g,"\\`")}\`)">${I.copy}</button>
+    </div>
+    ${mockupHTML}
+    <details style="margin:0 10px 10px;background:var(--sf);border-radius:6px;padding:8px 12px;border:1px solid var(--br)">
+      <summary style="cursor:pointer;font-size:11px;font-weight:600;color:var(--mu2)">View raw text draft</summary>
+      <div class="ob" style="padding:8px 0">${esc(content)}</div>
+    </details>
+    <div class="ofoot">
+      <button class="btn bp bxs tipbtn" data-tip="Save to library" title="Save to library" aria-label="Save to library" onclick="saveOut('${tid}',${idx})">${I.save} Save</button>
+    </div>
+  </div>`;
 }
 
 window.setSlideBackgroundImage = async (tid, idx, slideIdx, file) => {
