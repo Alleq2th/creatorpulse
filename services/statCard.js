@@ -818,9 +818,11 @@ function resolveType(slide, index, total) {
 async function fetchCoverImage(imageUrl, w, h) {
   if (!imageUrl) return null;
   try {
-    const r = await fetch(imageUrl, { headers: { "User-Agent": "Mozilla/5.0" }, timeout: 8000 });
+    const signal = typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined;
+    const r = await fetch(imageUrl, { headers: { "User-Agent": "Mozilla/5.0" }, signal });
     if (!r.ok) return null;
-    const buf = await r.buffer();
+    const arrayBuffer = await r.arrayBuffer();
+    const buf = Buffer.from(arrayBuffer);
     const cover = await sharp(buf).resize(w, h, { fit: "cover", position: "attention" }).jpeg({ quality: 90 }).toBuffer();
     const stats = await sharp(cover).stats();
     const avgLum = stats.channels.slice(0, 3).reduce((s, c) => s + c.mean, 0) / 3 / 255; // 0-1
