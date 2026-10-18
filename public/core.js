@@ -901,12 +901,13 @@ function renderTrend(t){
     }).join("");
 
     const fmtIcon = (c) => {
-      if(/carousel/i.test(c)) return `<div class="h-fmt-vis h-fmt-car"><span></span><span></span><span></span></div>`;
-      if(/graphic|thumbnail/i.test(c)) return `<div class="h-fmt-vis h-fmt-img"><i></i></div>`;
-      if(/caption|hashtag/i.test(c)) return `<div class="h-fmt-vis h-fmt-cap"><span>#</span></div>`;
-      if(/script|short/i.test(c)) return `<div class="h-fmt-vis h-fmt-scr"><span>🎬</span></div>`;
-      if(/thread/i.test(c)) return `<div class="h-fmt-vis h-fmt-thr"><span>🧵</span></div>`;
-      return `<div class="h-fmt-vis h-fmt-cap"><span>💬</span></div>`;
+      const svg = /carousel/i.test(c) ? '<rect x="7" y="3" width="14" height="14" rx="2"/><rect x="3" y="7" width="14" height="14" rx="2" fill="currentColor" fill-opacity=".22"/>'
+        : /graphic|thumbnail/i.test(c) ? '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>'
+        : /caption|hashtag/i.test(c) ? '<path d="M4 9h16M4 15h16M10 3 8 21M16 3l-2 18"/>'
+        : /script|short/i.test(c) ? '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 8h20M7 4v4M12 4v4M17 4v4"/>'
+        : /thread/i.test(c) ? '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M6 9v6m12-6a6 6 0 0 0-6 6"/>'
+        : '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>';
+      return `<div class="h-fmt-vis"><svg viewBox="0 0 24 24" aria-hidden="true">${svg}</svg></div>`;
     };
     const ctChips = (PTYPES[plat]||[]).map(c => {
       const isAct = ct === c;
@@ -917,13 +918,18 @@ function renderTrend(t){
       </button>`;
     }).join("");
 
-    const TONE_VIS = {normal:["😐","Neutral"],funny:["😂","Banter"],educative:["🧠","Educative"],hype:["🔥","Hot Take"],storytelling:["📖","Storytelling"]};
+    const TONE_ICONS = {
+      normal:'<circle cx="12" cy="12" r="9"/><path d="M8 12h8"/>',
+      funny:'<circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/>',
+      educative:'<path d="m2 10 10-5 10 5-10 5zM6 12v5c3 3 9 3 12 0v-5M22 10v6"/>',
+      hype:'<path d="M12 2c2 4 7 7 7 13a7 7 0 0 1-14 0c0-3 2-6 4-8 0 3 1 4 2 5 1-3 1-6 1-10z"/>',
+      storytelling:'<path d="M2 4h6a4 4 0 0 1 4 4v13a4 4 0 0 0-4-4H2zM22 4h-6a4 4 0 0 0-4 4v13a4 4 0 0 1 4-4h6z"/>'
+    };
     const toneChips = TONES.map(x => {
       const isAct = tone === x.id;
-      const emoji = (TONE_VIS[x.id]||["💬"])[0];
       return `<button class="h-card h-card-tone ${isAct?'active':''}" onclick="setTone('${t.id}','${x.id}')">
         <div class="h-badge">${isAct?'✓':''}</div>
-        <div class="h-emoji">${emoji}</div>
+        <div class="h-icon-svg"><svg viewBox="0 0 24 24" aria-hidden="true">${TONE_ICONS[x.id]||TONE_ICONS.normal}</svg></div>
         <div class="h-name">${x.label}</div>
       </button>`;
     }).join("");
@@ -1003,10 +1009,22 @@ function renderTrend(t){
     const typoLabel = CARD_TYPOGRAPHIES.find(x=>x.id===cardTypography)?.label || cardTypography;
     const densityLabel = CARD_DENSITIES.find(x=>x.id===cardDensity)?.label || cardDensity;
 
-    // Minimal, horizontally scrolling visual rails — zero dropdowns, swipe and tap.
+    const railOpen = (label) => {
+      S.railExp = S.railExp || {};
+      const key = t.id + "_" + String(label).toLowerCase().replace(/[^a-z]/g, "");
+      if (S.railExp[key] !== undefined) return !!S.railExp[key];
+      if (label === "Platform") return !S.hasSelected?.[t.id + "_platform"];
+      if (label === "Format") return !!S.hasSelected?.[t.id + "_platform"] && !S.hasSelected?.[t.id + "_format"];
+      if (label === "Tone") return !!S.hasSelected?.[t.id + "_format"] && !S.hasSelected?.[t.id + "_tone"];
+      return false;
+    };
+    // Completed steps collapse to compact summaries; tap Change to edit again.
     const hRail = (label, value, body) => `<div class="h-step">
-      <div class="h-step-hd"><span class="h-step-l">${esc(label)}</span><span class="h-step-v">${esc(String(value))}</span></div>
-      <div class="h-rail">${body}</div>
+      <div class="h-step-hd" role="button" tabindex="0" onclick="toggleRail('${t.id}','${esc(label)}')">
+        <span class="h-step-l">${esc(label)}</span>
+        <span class="h-step-r"><span class="h-step-v">${esc(String(value))}</span><span class="h-step-action">${railOpen(label) ? "Done ✓" : "Change ▾"}</span></span>
+      </div>
+      <div class="h-rail" ${railOpen(label) ? "" : "hidden"}>${body}</div>
     </div>`;
 
     panel = `<div class="cp">
@@ -1361,14 +1379,35 @@ function openStep(tid,step){ S.openStep = S.openStep || {}; S.openStep[tid] = st
 // next one open yourself. Now it walks you forward  Platform -> Format ->
 // Tone  and only fully closes after Tone, so choosing feels like one
 // continuous flow instead of three separate taps to open each step.
-window.setPlat = (tid,p) => { S.plat[tid]=p; S.ctype[tid]=PTYPES[p]?.[0]||""; render(); };
-window.setCT = (tid,c) => { S.ctype[tid]=c; render(); };
-window.setTone = (tid,t) => { S.tone[tid]=t; render(); };
-window.setPalette = (tid,p) => { S.palette[tid]=p; render(); };
-window.setSlideCount = (tid,n) => { S.slideCount[tid]=n; render(); };
-window.setCardTheme = (tid, v) => { S.cardTheme = S.cardTheme || {}; S.cardTheme[tid] = v; render(); };
-window.setCardTypography = (tid, v) => { S.cardTypography = S.cardTypography || {}; S.cardTypography[tid] = v; render(); };
-window.setCardDensity = (tid, v) => { S.cardDensity = S.cardDensity || {}; S.cardDensity[tid] = v; render(); };
+window.toggleRail = (tid, label) => {
+  S.railExp = S.railExp || {};
+  const key = tid + "_" + String(label).toLowerCase().replace(/[^a-z]/g, "");
+  const wasOpen = S.railExp[key] !== undefined ? !!S.railExp[key] :
+    (label === "Platform" ? !S.hasSelected?.[tid + "_platform"] :
+     label === "Format" ? !!S.hasSelected?.[tid + "_platform"] && !S.hasSelected?.[tid + "_format"] :
+     label === "Tone" ? !!S.hasSelected?.[tid + "_format"] && !S.hasSelected?.[tid + "_tone"] : false);
+  S.railExp[key] = !wasOpen;
+  render();
+};
+window.setPlat = (tid,p) => {
+  S.hasSelected = S.hasSelected || {}; S.railExp = S.railExp || {};
+  S.plat[tid]=p; S.ctype[tid]=PTYPES[p]?.[0]||"";
+  S.hasSelected[tid+"_platform"]=true; S.railExp[tid+"_platform"]=false; S.railExp[tid+"_format"]=true; render();
+};
+window.setCT = (tid,c) => {
+  S.hasSelected = S.hasSelected || {}; S.railExp = S.railExp || {};
+  S.ctype[tid]=c; S.hasSelected[tid+"_format"]=true;
+  S.railExp[tid+"_format"]=false; S.railExp[tid+"_tone"]=true; render();
+};
+window.setTone = (tid,t) => {
+  S.hasSelected = S.hasSelected || {}; S.railExp = S.railExp || {};
+  S.tone[tid]=t; S.hasSelected[tid+"_tone"]=true; S.railExp[tid+"_tone"]=false; render();
+};
+window.setPalette = (tid,p) => { S.palette[tid]=p; S.railExp = S.railExp || {}; S.railExp[tid+"_cardcolor"]=false; render(); };
+window.setSlideCount = (tid,n) => { S.slideCount[tid]=n; S.railExp = S.railExp || {}; S.railExp[tid+"_numberofslides"]=false; render(); };
+window.setCardTheme = (tid,v) => { S.cardTheme=S.cardTheme||{}; S.railExp=S.railExp||{}; S.cardTheme[tid]=v; S.railExp[tid+"_visualtheme"]=false; render(); };
+window.setCardTypography = (tid,v) => { S.cardTypography=S.cardTypography||{}; S.railExp=S.railExp||{}; S.cardTypography[tid]=v; S.railExp[tid+"_typography"]=false; render(); };
+window.setCardDensity = (tid,v) => { S.cardDensity=S.cardDensity||{}; S.railExp=S.railExp||{}; S.cardDensity[tid]=v; S.railExp[tid+"_textdensity"]=false; render(); };
 window.setPreviewPlat = (key, plat) => { S.previewPlat = S.previewPlat || {}; S.previewPlat[key] = plat; render(); };
 window.setPreviewSlide = (key, idx) => { S.previewSlideIdx = S.previewSlideIdx || {}; S.previewSlideIdx[key] = idx; render(); };
 window.setPreviewMode = (key, mode) => { S.previewMode = S.previewMode || {}; S.previewMode[key] = mode; render(); };
