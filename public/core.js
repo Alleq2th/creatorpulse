@@ -136,7 +136,7 @@ function ctaOutroSlide(niche){
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 const M_SHORT = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const DAYS = ["S","M","T","W","T","F","S"];
-const NICHE_HANDLES = {"American Football": ["AdamSchefter", "RapSheet", "MikeGarafolo", "TomPelissero", "FieldYates", "NFL", "ESPNNFL", "NFLNetwork"], "Football/Soccer": ["FabrizioRomano", "ESPNFC", "SkySportsPL", "BBCSport", "GoalNews", "TheAthleticFC", "TouchlineX", "TMuk_news"], "Basketball": ["ShamsCharania", "WojESPN", "NBA", "ESPNNBA", "TheAthleticNBA", "BleacherReport"], "Baseball": ["MLB", "Ken_Rosenthal", "JeffPassan", "MLBNetwork", "TheAthleticMLB"], "Ice Hockey": ["NHL", "TSNBobMcKenzie", "FriedgeHNIC", "NHLNetwork", "SportsCenter"], "Tennis": ["TennisChannel", "atptour", "WTA", "TennisTV", "Eurosport"], "Cricket": ["ESPNcricinfo", "ICC", "BCCI", "cricbuzz", "BBCCricket"], "Formula 1": ["F1", "SkySportsF1", "ScuderiaFerrari", "McLarenF1", "MercedesAMGF1"], "Boxing": ["BoxingScene", "DAZNBoxing", "MikeCoppinger", "MatchroomBoxing", "SecondsOut"], "MMA/UFC": ["ufc", "espnmma", "arielhelwani", "MMAFighting", "MMAJunkie"], "WWE Wrestling": ["WWE", "FightfulSelect", "WrestleVotes", "WrestlingInc", "PWInsidercom"], "Golf": ["PGATOUR", "GolfChannel", "McIlroyRory", "GolfDigest", "EuropeanTour"], "Rugby": ["WorldRugby", "SixNationsRugby", "planetrugby", "rugbyworldcup"], "Esports": ["esportscom", "DotEsports", "DBLTAP", "ESLGaming", "LiquipediaNet"], "Movies & TV": ["DEADLINE", "Variety", "THR", "FilmUpdates", "IndieWire"], "Anime": ["AnimeNewsNet", "Crunchyroll", "AnimeCornerNews", "IGNAnime"], "Celebrity Gossip": ["PopCrave", "PopBase", "TMZ", "EOnline"], "Pop Culture": ["PopCrave", "PopBase", "BuzzFeed"], "Music (Hip-Hop)": ["ComplexMusic", "HipHopDX", "XXL", "rapalert6"], "Music (Afrobeats)": ["afrobeatsnews", "notjustok", "PulseNigeria247", "Naijaloaded"], "Music (Pop)": ["PopCrave", "billboard", "RollingStone"], "Music (K-Pop)": ["allkpop", "soompi", "koreaboo"], "Console Gaming": ["IGN", "GameSpot", "Wario64", "PlayStation", "Xbox"], "PC Gaming": ["PCGamer", "Wario64", "IGN"], "AI & Tech News": ["TechCrunch", "WIRED", "TheVerge", "OpenAI", "AndrewYNg"], "Gadget Reviews": ["engadget", "MKBHD", "TheVerge", "Gizmodo"], "Cybersecurity": ["briankrebs", "TheHackersNews", "Google_Bugs"], "Space & Science": ["NASA", "SpaceX", "NatGeo", "ESA"], "Crypto": ["CoinDesk", "Cointelegraph", "WatcherGuru", "TheBlock__"], "Stock Market": ["CNBC", "MarketWatch", "YahooFinance"], "Business News": ["Bloomberg", "ReutersBiz", "FT", "CNBC"], "Travel": ["TravelLeisure", "CNTraveler", "LonelyPlanet"], "Food & Recipes": ["NYTFood", "bonappetit", "foodandwine"], "Fitness & Gym": ["MensHealthMag", "WomensHealthMag", "MuscleAndFitness"], "Streetwear": ["Hypebeast", "complex", "Highsnobiety"], "Luxury Fashion": ["Vogue", "GQMagazine", "BoF"], "True Crime": ["oxygen", "IDNetwork"], "Political Commentary": ["politico", "axios", "thehill"], "Entrepreneurship": ["Inc", "Entrepreneur", "ForbesEntre"], "default": ["BreakingNews", "Reuters", "AP"]};
+const NICHE_HANDLES = {"American Football":["AdamSchefter","RapSheet","MikeGarafolo","TomPelissero","FieldYates","NFL","ESPNNFL","NFLNetwork"],"Football/Soccer":["FabrizioRomano","ESPNFC","SkySportsPL","BBCSport","GoalNews","TheAthleticFC","TouchlineX","TMuk_news"],"Basketball":["ShamsCharania","WojESPN","NBA","ESPNNBA","TheAthleticNBA","BleacherReport"],"Baseball":["MLB","Ken_Rosenthal","JeffPassan","MLBNetwork","TheAthleticMLB"],"Ice Hockey":["NHL","TSNBobMcKenzie","FriedgeHNIC","NHLNetwork","SportsCenter"],"Tennis":["TennisChannel","atptour","WTA","TennisTV","Eurosport"],"Cricket":["ESPNcricinfo","ICC","BCCI","cricbuzz","BBCCricket"],"Formula 1":["F1","SkySportsF1","ScuderiaFerrari","McLarenF1","MercedesAMGF1"],"Boxing":["BoxingScene","DAZNBoxing","MikeCoppinger","MatchroomBoxing","SecondsOut"],"MMA/UFC":["ufc","espnmma","arielhelwani","MMAFighting","MMAJunkie"],"WWE Wrestling":["WWE","FightfulSelect","WrestleVotes","WrestlingInc","PWInsidercom"],"Golf":["PGATOUR","GolfChannel","McIlroyRory","GolfDigest","EuropeanTour"],"Rugby":["WorldRugby","SixNationsRugby","planetrugby","rugbyworldcup"],"Esports":["esportscom","DotEsports","DBLTAP","ESLGaming","LiquipediaNet"],"Movies & TV":["DEADLINE","Variety","THR","FilmUpdates","IndieWire"],"Anime":["AnimeNewsNet","Crunchyroll","AnimeCornerNews","IGNAnime"],"Celebrity Gossip":["PopCrave","PopBase","TMZ","EOnline"],"Pop Culture":["PopCrave","PopBase","BuzzFeed"],"Music (Hip-Hop)":["ComplexMusic","HipHopDX","XXL","rapalert6"],"Music (Afrobeats)":["afrobeatsnews","notjustok","PulseNigeria247","Naijaloaded"],"Music (Pop)":["PopCrave","billboard","RollingStone"],"Music (K-Pop)":["allkpop","soompi","koreaboo"],"Console Gaming":["IGN","GameSpot","Wario64","PlayStation","Xbox"],"PC Gaming":["PCGamer","Wario64","IGN"],"AI & Tech News":["TechCrunch","WIRED","TheVerge","OpenAI","AndrewYNg"],"Gadget Reviews":["engadget","MKBHD","TheVerge","Gizmodo"],"Cybersecurity":["briankrebs","TheHackersNews","Google_Bugs"],"Space & Science":["NASA","SpaceX","NatGeo","ESA"],"Crypto":["CoinDesk","Cointelegraph","WatcherGuru","TheBlock__"],"Stock Market":["CNBC","MarketWatch","YahooFinance"],"Business News":["Bloomberg","ReutersBiz","FT","CNBC"],"Travel":["TravelLeisure","CNTraveler","LonelyPlanet"],"Food & Recipes":["NYTFood","bonappetit","foodandwine"],"Fitness & Gym":["MensHealthMag","WomensHealthMag","MuscleAndFitness"],"Streetwear":["Hypebeast","complex","Highsnobiety"],"Luxury Fashion":["Vogue","GQMagazine","BoF"],"True Crime":["oxygen","IDNetwork"],"Political Commentary":["politico","axios","thehill"],"Entrepreneurship":["Inc","Entrepreneur","ForbesEntre"],"default":["BreakingNews","Reuters","AP"],"Athletics/Track":["WorldAthletics","TrackGazette","FloTrack","TravisMillerX"],"Cycling":["Cyclingnewsfeed","VeloNews","letour","Inrng"],"Swimming":["SwimSwamNews","WorldAquatics","SwimmingWorld"],"Volleyball":["volleyballworld","FIVBVolleyball","CEVolleyball"],"Music (R&B)":["RatedRnB","SoulTracks","BillboardRnB","Essence"],"Music (Amapiano)":["AmapianoGrooves","MusicInAfrica","SlikourOnLife"],"Korean Drama":["soompi","allkpop","TheSeoulStory","kdramastars"],"Bollywood":["Bollyhungama","filmfare","Pinkvilla","taran_adarsh"],"Mobile Gaming":["PocketGamer","TouchArcade","DroidGamers"],"Game Reviews":["metacritic","opencritic","IGN","polygon"],"Twitch Streaming":["Dexerto","JakeSucky","StreamerAlerts","Twitch"],"YouTube Gaming":["YouTubeGaming","Dexerto","Tubefilter"],"Mental Health":["PsychToday","MindfulOnline","Calm","EverydayHealth"],"Relationships & Dating":["Bustle","Cosmopolitan","ModernLove"],"Parenting":["MotherlyMedia","TodaysParent","ParentsMagazine"],"Minimalism":["TheMinimalists","ZenHabits","BecomMinimalist"],"Home Decor":["ArchDigest","AptTherapy","HouseBeautiful"],"Pets":["dodo","CatsterMag","DogsterMag","PetMD"],"Skincare":["Allure_magazine","byrdiebeauty","DermTimesNow"],"Makeup":["Allure_magazine","byrdiebeauty","BeautyIndep"],"Haircare":["naturallycurly","Allure_magazine","ByrdieBeauty"],"Personal Finance":["NerdWallet","Kiplinger","ThePennyHoarder"],"Side Hustles":["SideHustleNews","NickLoper","Upwork"],"Real Estate Investing":["BiggerPockets","InmanNews","HousingWire"],"Budgeting":["CleverGirlMoney","TheBudgetMom","FrugalRules"],"Coding & Dev Life":["ThePracticalDev","freeCodeCamp","newsycombinator","GitHub"],"Science":["sciam","ScienceMagazine","NatureNews","LiveScience"],"History":["History","AncientOrigins","SmithsonianMag"],"Language Learning":["Babbel","Duolingo","FluentU"],"Productivity":["JamesClear","todoist","FastCompany","Lifehacker"],"Study Tips":["CollegeInfoGeek","Edutopia","StudyIntNL"],"Philosophy":["DailyStoic","AeonMag","PhilosophyNow"],"Psychology":["PsychToday","Psyche_Mag","SciAmMind"],"Yapping Videos":["PopCrave","TheCut","BuzzFeedNews"],"Hot Takes":["ringer","Deadspin","Slate"],"Rants":["Slate","Substack","Medium"],"Storytelling":["Narratively","MothStories","Longreads"],"Mystery & Unexplained":["Unexplained_M","MysteriousUniv","CoastToCoastAM"],"Viral Dances":["TikTokDances","Dexerto","KnowYourMeme"],"Trend Reaction":["knowyourmeme","Mashable","Distractify"],"Challenge Content":["Dexerto","Tubefilter","WhatsTrending"],"YouTube Growth":["CreatorHooks","vidIQ","TubeBuddy","Tubefilter"],"Social Media Tips":["SocialMedia2Day","LaterMedia","Hootsuite","SproutSocial"],"Brand Deals":["CreatorEconomy","Passionfroot","InfluencerMH"],"Monetization Advice":["TheInformation","Patreon","Substack"],"Medicine & Health":["Medscape","statnews","JAMA_current"],"Law":["LawDotCom","abovethelaw","SCOTUSblog"],"Marketing":["Adweek","AdAge","MarketingDive"],"Motivational Speaking":["Addicted2Succes","EverydayPower","SuccessMagazine"],"Faith & Religion":["CTmagazine","RNS","Sojourners"],"African Culture":["OkayAfrica","AfricanArgu","TheAfricaReport"],"Caribbean Culture":["CaribbeanLife","LoopNewsCarib","JamaicansDotCom"],"Astrology":["Astrology_com","Horoscope","AstroStyle"],"Self-Development":["tinybuddha","LifehackOrg","MindsetMentors"],"Startups":["BreakingNews","Reuters","AP"]};
 
 // Was `window.location.origin`, i.e. "ask whatever machine served me this page".
 // That is only correct when our own Express server serves the page. On a
@@ -153,6 +153,8 @@ const S = {
   authTab: "login", // login | signup
   authForm: { email:"", password:"", name:"" },
   authErr: "", authMsg: "", authLoading: false, token: null, refreshToken: null, user: null,
+  tierFilter: "all",
+  lastTrendsRefresh: 0,
   onboard: { step:0, name:"", niches:[], platforms:[], primary:"", ppd:3 },
   tab: "home",
   trends: [], notifs: [], schedule: [], saved: [], eventsCache: {},
@@ -685,6 +687,9 @@ function startGlobalTimer(){
       const h = Math.floor(diff/3600000), m = Math.floor((diff%3600000)/60000);
       el.textContent = `${h}h ${m}m left`;
     });
+    if (S.user && S.lastTrendsRefresh && (Date.now() - S.lastTrendsRefresh >= 60 * 60 * 1000)) {
+      loadTrends(true);
+    }
   }, 30000);
 }
 
@@ -779,15 +784,15 @@ function trendOpportunity(t){
 }
 
 
-async function loadTrends(){
+async function loadTrends(silent = false){
   if(!S.user) return;
-  const now = Date.now(); const cutoff = now - 6*60*60*1000;
-  S.trends = []; render();
+  const now = Date.now();
+  const cutoff = now - 24 * 60 * 60 * 1000;
+  if (!silent) {
+    S.trends = [];
+    render();
+  }
   const all = [];
-  // Was: nested for-loops with `await` inside — every niche/handle fetch ran
-  // one at a time (up to ~18 sequential round trips for 3 niches). Now all
-  // requests fire together and we just wait for whichever finish, in
-  // whatever order — this is why "Today's edit" was slow to load.
   const jobs = [];
   for(const niche of S.user.niches){
     jobs.push(fetchNews(niche).catch(()=>[]));
@@ -797,7 +802,11 @@ async function loadTrends(){
       jobs.push(
         fetchTwitter(h, niche)
           .then(arr=>{
-            arr.forEach(a=>{ a.niche = niche; if(a.image && !/^https?:/.test(a.image)) a.image = 'https://nitter.net'+a.image; if(a.image) a.image = `${API}/api/image-proxy?url=${encodeURIComponent(a.image)}`; });
+            arr.forEach(a=>{
+              a.niche = niche;
+              if(a.image && !/^https?:/.test(a.image)) a.image = 'https://nitter.net'+a.image;
+              if(a.image) a.image = `${API}/api/image-proxy?url=${encodeURIComponent(a.image)}`;
+            });
             return arr;
           })
           .catch(()=>[])
@@ -806,14 +815,46 @@ async function loadTrends(){
   }
   const results = await Promise.all(jobs);
   results.forEach(arr => all.push(...arr));
-  // Dedupe + freshness
+
+  // Dedupe by headline and normalize viral scores/tiers
   const seen = new Set();
-  S.trends = all.filter(t=>{
-    const k = (t.headline||"").toLowerCase().trim().slice(0,80);
-    if(!k || seen.has(k)) return false; seen.add(k);
+  const normalized = [];
+  for (const t of all) {
+    const k = (t.headline || t.title || "").toLowerCase().trim().slice(0,80);
+    if (!k || seen.has(k)) continue;
+    seen.add(k);
     const ts = t.timestamp || 0;
-    return ts >= cutoff;
-  }).sort((a,b)=> (b.score||0) - (a.score||0)).slice(0, 25);
+    if (ts && ts < cutoff) continue;
+
+    const score = t.score || 70;
+    let tier = t.viralTier;
+    let label = t.viralLabel;
+    if (!tier) {
+      if (score >= 80) { tier = "trending"; label = "🔥 Trending"; }
+      else if (score >= 65) { tier = "mid"; label = "⚡ Mid-Tier"; }
+      else { tier = "low"; label = "📌 Low-Tier"; }
+    }
+    t.viralTier = tier;
+    t.viralLabel = label;
+    t.hasImage = !!t.image;
+    normalized.push(t);
+  }
+
+  // Tier sorting priority: Trending (weight 3), Mid (weight 2), Low (weight 1)
+  // Within tier: score descending, then hasImage as tiebreaker for instant visual readiness
+  const tierWeight = { trending: 3, mid: 2, low: 1 };
+  normalized.sort((a, b) => {
+    const wDiff = (tierWeight[b.viralTier] || 1) - (tierWeight[a.viralTier] || 1);
+    if (wDiff !== 0) return wDiff;
+    const scoreDiff = (b.score || 0) - (a.score || 0);
+    if (scoreDiff !== 0) return scoreDiff;
+    if (b.hasImage !== a.hasImage) return b.hasImage ? 1 : -1;
+    return (b.timestamp || 0) - (a.timestamp || 0);
+  });
+
+  // Threshold: 40 live stories (newer stories replace older ones smoothly on hourly refresh)
+  S.trends = normalized.slice(0, 40);
+  S.lastTrendsRefresh = now;
   if(S.tab === "home") render();
 }
 async function loadNotifs(){ if(!S.user) return; S.notifs = await fetchNotifs(S.user.niches).catch(()=>[]); render(); }
@@ -1057,14 +1098,19 @@ function renderTrend(t){
       <div class="oa">${outsHTML}</div>
     </div>`;
   }
+  const tier = t.viralTier || (t.score >= 80 ? 'trending' : t.score >= 65 ? 'mid' : 'low');
+  const tierLabel = t.viralLabel || (tier === 'trending' ? '🔥 Trending' : tier === 'mid' ? '⚡ Mid-Tier' : '📌 Low-Tier');
   const srcTag = t.source?`<span class="tsep">·</span><span class="badge-src">${esc(t.source)}</span>`:"";
+  const imgReadyPill = t.image ? `<span class="badge badge-img-ready">🖼️ Visual ready</span>` : "";
   const veloCls = (()=>{ const st=trendVelocity(t).state; return st==='peaking'?'tc-peaking':st==='rising'?'tc-rising':''; })();
-  return `<div class="tc ${exp?'exp':''} ${veloCls}" id="tc-${t.id}">
+  return `<div class="tc ${exp?'exp':''} tc-tier-${tier} ${veloCls}" id="tc-${t.id}">
     <div class="th" onclick="toggle('${t.id}')">
       ${img}
       <div class="thead">
         <div class="tmeta-top">
-          <span class="badge badge-hot">${t.score||90}</span>
+          <span class="badge badge-tier badge-tier-${tier}">${tierLabel}</span>
+          <span class="badge badge-hot">${t.score||75}% viral</span>
+          ${imgReadyPill}
           <span class="badge badge-niche">${esc(t.niche)}</span>
           ${(function(){const v=trendVelocity(t);return `<span class="velo-pill velo-${v.state}"><span class="velo-dot"></span>${v.label}</span>`;})()}
         </div>
@@ -2075,22 +2121,53 @@ function topBar(kicker, backTo, showRefresh){
       </div>
     </div></div>`;
 }
+window.setTierFilter = (tier) => { S.tierFilter = tier; render(); };
 window.toggleBell = (e) => { e.stopPropagation(); const dd = document.getElementById("notif-dd"); if(dd) dd.classList.toggle("open"); };
 document.addEventListener("click", (e) => { if(!e.target.closest(".bell-wrap")){ const dd = document.getElementById("notif-dd"); if(dd) dd.classList.remove("open"); } });
 
 function pageHome(){
-  const list = S.trends.length ? `<div class="tlist">${S.trends.map(renderTrend).join("")}</div>` : skTrendList(5);
   const first = ((S.user?.name||"").trim().split(/\s+/)[0]) || "there";
   const peaking = S.trends.filter(t=>trendVelocity(t).state==='peaking').length;
+  const trendingCount = S.trends.filter(t=>t.viralTier==='trending').length;
+  const midCount = S.trends.filter(t=>t.viralTier==='mid').length;
+  const lowCount = S.trends.filter(t=>t.viralTier==='low').length;
   const chipTxt = S.trends.length ? (peaking ? `${peaking} ${peaking===1?'story':'stories'} peaking right now` : `${S.trends.length} live stories`) : "Loading your stories…";
   const top = S.trends[0];
   const peek = top ? `<div class="peek"><div class="k">Top story right now</div><div class="t">${esc(top.headline||top.title||"")}</div><div class="row"><span class="m">${esc(top.niche||"")} · ${trendVelocity(top).label}</span><button class="btn bp" onclick="toggle('${top.id}');setTimeout(()=>document.getElementById('tc-${top.id}')?.scrollIntoView({behavior:'smooth',block:'start'}),50)">Create</button></div></div>` : "";
+
+  let displayTrends = S.trends;
+  if(S.tierFilter && S.tierFilter !== "all"){
+    displayTrends = S.trends.filter(t => t.viralTier === S.tierFilter);
+  }
+
+  const list = displayTrends.length
+    ? `<div class="tlist">${displayTrends.map(renderTrend).join("")}</div>`
+    : (S.trends.length ? `<div class="notif-empty" style="padding:24px 14px;text-align:center;color:var(--mu)">No stories currently in this tier. Check another tier above.</div>` : skTrendList(5));
+
+  const filterStrip = S.trends.length ? `
+    <div class="tier-filter-strip">
+      <button class="tier-chip ${S.tierFilter==='all'?'active':''}" onclick="setTierFilter('all')">All (${S.trends.length})</button>
+      <button class="tier-chip tier-chip-trending ${S.tierFilter==='trending'?'active':''}" onclick="setTierFilter('trending')">🔥 Trending (${trendingCount})</button>
+      <button class="tier-chip tier-chip-mid ${S.tierFilter==='mid'?'active':''}" onclick="setTierFilter('mid')">⚡ Mid-Tier (${midCount})</button>
+      <button class="tier-chip tier-chip-low ${S.tierFilter==='low'?'active':''}" onclick="setTierFilter('low')">📌 Low-Tier (${lowCount})</button>
+    </div>` : "";
+
   return `<main class="page active">${topBar(`${S.trends.length||0} live stories`, null, true)}
-    <div class="hero"><div class="hi">Welcome back</div><div class="nm">${esc(first)}</div>
-      <button class="hero-chip" onclick="document.getElementById('feed').scrollIntoView({behavior:'smooth'})"><span class="n">${peaking||S.trends.length||0}</span><span>${chipTxt}</span><span class="go">›</span></button></div>
+    <div class="hero">
+      <div class="hi">Welcome back</div>
+      <div class="nm">${esc(first)}</div>
+      <div class="hero-stats-row">
+        <span class="hero-stat-pill stat-trending">🔥 ${trendingCount} Trending</span>
+        <span class="hero-stat-pill stat-mid">⚡ ${midCount} Mid-Tier</span>
+        <span class="hero-stat-pill stat-low">📌 ${lowCount} Low-Tier</span>
+      </div>
+      <div class="hero-refresh-meta">Refreshes hourly · ${S.trends.length} fresh stories ready</div>
+      <button class="hero-chip" onclick="document.getElementById('feed').scrollIntoView({behavior:'smooth'})"><span class="n">${peaking||S.trends.length||0}</span><span>${chipTxt}</span><span class="go">›</span></button>
+    </div>
     ${peek}
     ${renderDigest()}
-    <div class="sec-h" id="feed"><h2>Today's edit</h2><span class="sec-meta">Ranked by relevance</span></div>
+    <div class="sec-h" id="feed"><h2>Today's edit</h2><span class="sec-meta">Ranked by viral tier</span></div>
+    ${filterStrip}
     ${list}
   </main>`;
 }

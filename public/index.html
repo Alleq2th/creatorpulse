@@ -201,6 +201,38 @@ body{padding-bottom:var(--tab-h);letter-spacing:-0.005em}
 .badge-hot{color:var(--tx);font-weight:700}
 .badge-niche{background:none;color:var(--mu);border:none;font-weight:500}
 .badge-src{background:transparent;color:var(--mu2);font-weight:500}
+
+/* Viral Tiers & News Engine Badges */
+.badge-tier{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;line-height:1;letter-spacing:0.02em;text-transform:uppercase}
+.badge-tier-trending{background:rgba(255,87,34,0.16);color:#ff7043;border:1px solid rgba(255,112,67,0.45);box-shadow:0 0 12px -2px rgba(255,87,34,0.3)}
+.badge-tier-mid{background:rgba(245,158,11,0.14);color:#fbbf24;border:1px solid rgba(245,158,11,0.4)}
+.badge-tier-low{background:rgba(148,163,184,0.12);color:#94a3b8;border:1px solid rgba(148,163,184,0.25)}
+.badge-img-ready{display:inline-flex;align-items:center;background:rgba(16,185,129,0.12);color:#34d399;border:1px solid rgba(16,185,129,0.32);font-size:10px;font-weight:600;padding:2px 7px;border-radius:999px}
+
+/* Card tier border accents */
+.tc-tier-trending{border-color:rgba(255,112,67,0.38)!important;position:relative}
+.tc-tier-trending::before{content:"";position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,#ff5722,#ff9800);border-top-left-radius:inherit;border-top-right-radius:inherit}
+.tc-tier-mid{border-color:rgba(245,158,11,0.28)!important}
+.tc-tier-low{border-color:var(--br)!important}
+
+/* Tier filter strip */
+.tier-filter-strip{display:flex;gap:8px;overflow-x:auto;padding:6px 0 14px 0;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.tier-filter-strip::-webkit-scrollbar{display:none}
+.tier-chip{background:var(--sf2);border:1px solid var(--br);color:var(--mu);padding:6px 12px;border-radius:999px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;transition:all .18s ease;display:inline-flex;align-items:center;gap:4px}
+.tier-chip:hover{background:var(--sf);color:var(--tx)}
+.tier-chip.active{background:var(--tx);color:var(--bg);border-color:var(--tx)}
+.tier-chip-trending.active{background:#ff5722;color:#fff;border-color:#ff5722;box-shadow:0 2px 10px rgba(255,87,34,0.35)}
+.tier-chip-mid.active{background:#d97706;color:#fff;border-color:#d97706}
+.tier-chip-low.active{background:#475569;color:#fff;border-color:#475569}
+
+/* Hero stats row & hourly refresh meta */
+.hero-stats-row{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 6px 0}
+.hero-stat-pill{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px;display:inline-flex;align-items:center}
+.stat-trending{background:rgba(255,87,34,0.15);color:#ff7043;border:1px solid rgba(255,112,67,0.3)}
+.stat-mid{background:rgba(245,158,11,0.12);color:#fbbf24;border:1px solid rgba(245,158,11,0.25)}
+.stat-low{background:rgba(148,163,184,0.1);color:#94a3b8;border:1px solid rgba(148,163,184,0.2)}
+.hero-refresh-meta{font-size:11px;color:var(--mu2);margin-bottom:12px;letter-spacing:-0.01em}
+
 .thl{font-family:var(--serif);font-size:15px;font-weight:600;line-height:1.35;letter-spacing:-0.015em;color:var(--tx)}
 .tmeta{display:flex;gap:6px;flex-wrap:wrap;align-items:center;font-size:10px;color:var(--mu)}
 .tsep{color:var(--mu2)}
@@ -2038,7 +2070,7 @@ body{padding-bottom:var(--tab-h);letter-spacing:-0.005em}
 <script src="plus-ai/ui.js?v=30"></script>
 <script src="plus-ai/actions.js?v=30"></script>
 <script src="plus-ai/index.js?v=30"></script>
-<script src="core.js?v=34"></script>
+<script src="core.js?v=35"></script>
 <script src="lib/studioPerf.js?v=30"></script>
 <script src="studio.js?v=30"></script>
 <script src="app.js?v=30"></script>

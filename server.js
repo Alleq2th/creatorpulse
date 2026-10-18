@@ -457,154 +457,7 @@ app.post("/api/auth/update-profile", async (req, res) => {
 });
 
 // ── NICHE MAPS ──────────────────────────────────────────────────────────────
-const NICHE_QUERIES = {
-  "Football/Soccer": "football soccer premier league champions league transfer",
-  "Basketball": "NBA basketball Lakers Warriors",
-  "Tennis": "tennis Wimbledon Grand Slam ATP WTA",
-  "Cricket": "cricket IPL Test match World Cup",
-  "Formula 1": "Formula 1 F1 Grand Prix McLaren Ferrari",
-  "Boxing": "boxing fight heavyweight champion",
-  "MMA/UFC": "UFC MMA fight octagon",
-  "WWE Wrestling": "WWE wrestling Raw SmackDown",
-  "American Football": "NFL American football touchdown Super Bowl",
-  "Baseball": "MLB baseball World Series",
-  "Ice Hockey": "NHL hockey Stanley Cup",
-  "Golf": "golf PGA Tour Masters",
-  "Rugby": "rugby Six Nations World Cup",
-  "Athletics/Track": "athletics track field Olympics sprint",
-  "Cycling": "cycling Tour de France Giro",
-  "Swimming": "swimming Olympics world record",
-  "Esports": "esports gaming tournament League of Legends",
-  "Volleyball": "volleyball Olympics championship",
-  "Celebrity Gossip": "celebrity gossip Hollywood entertainment",
-  "Music (Afrobeats)": "Afrobeats Burna Boy Wizkid Davido music",
-  "Music (Hip-Hop)": "hip hop rap Drake Kendrick music album",
-  "Music (Pop)": "pop music Taylor Swift chart album",
-  "Music (R&B)": "R&B soul music Beyonce album",
-  "Music (K-Pop)": "K-pop BTS BLACKPINK Korean music",
-  "Music (Amapiano)": "Amapiano South Africa music",
-  "Movies & TV": "movies TV series Netflix box office",
-  "Anime": "anime manga One Piece Naruto release",
-  "Korean Drama": "Korean drama K-drama Netflix series",
-  "Bollywood": "Bollywood India movies film box office",
-  "Pop Culture": "pop culture viral trending internet",
-  "Console Gaming": "PlayStation Xbox Nintendo gaming console",
-  "PC Gaming": "PC gaming Steam graphics card GPU",
-  "Mobile Gaming": "mobile gaming iOS Android game",
-  "Game Reviews": "video game review launch release",
-  "Twitch Streaming": "Twitch streaming streamer live",
-  "YouTube Gaming": "YouTube gaming channel video",
-  "Travel": "travel destination vacation tourism",
-  "Food & Recipes": "food recipe cooking chef restaurant",
-  "Fitness & Gym": "fitness gym workout health exercise",
-  "Mental Health": "mental health wellness therapy anxiety",
-  "Relationships & Dating": "relationships dating love advice",
-  "Parenting": "parenting children family baby",
-  "Minimalism": "minimalism lifestyle simple living",
-  "Home Decor": "home decor interior design renovation",
-  "Pets": "pets dogs cats animals viral",
-  "Streetwear": "streetwear sneakers Supreme Nike Jordan hypebeast",
-  "Luxury Fashion": "luxury fashion Gucci Louis Vuitton Chanel runway",
-  "Skincare": "skincare beauty routine dermatology",
-  "Makeup": "makeup beauty cosmetics tutorial",
-  "Haircare": "haircare natural hair styling products",
-  "Personal Finance": "personal finance money saving investing",
-  "Crypto": "cryptocurrency Bitcoin Ethereum crypto price",
-  "Stock Market": "stock market Wall Street S&P 500 trading",
-  "Side Hustles": "side hustle passive income make money online",
-  "Business News": "business startup entrepreneur funding",
-  "Real Estate Investing": "real estate property investment market",
-  "Budgeting": "budgeting money management finance tips",
-  "AI & Tech News": "artificial intelligence AI OpenAI tech startup",
-  "Gadget Reviews": "gadget tech review iPhone Samsung",
-  "Coding & Dev Life": "programming coding developer software",
-  "Startups": "startup funding venture capital tech",
-  "Cybersecurity": "cybersecurity hack data breach privacy",
-  "Space & Science": "space NASA SpaceX science discovery",
-  "Science": "science discovery research breakthrough",
-  "History": "history ancient civilization discovery",
-  "Language Learning": "language learning Spanish French Duolingo",
-  "Productivity": "productivity habits time-blocking focus deep work",
-  "Study Tips": "study tips learning education student",
-  "Philosophy": "philosophy life meaning ethics",
-  "Psychology": "psychology behavior mind mental",
-  "Yapping Videos": "viral controversial opinion debate",
-  "Hot Takes": "hot take controversial opinion debate",
-  "Rants": "rant viral opinion social media",
-  "Storytelling": "storytelling viral story true crime",
-  "Political Commentary": "politics government policy news",
-  "True Crime": "true crime murder mystery investigation",
-  "Mystery & Unexplained": "mystery unexplained paranormal conspiracy",
-  "Viral Dances": "TikTok dance trend viral challenge",
-  "Trend Reaction": "TikTok viral trend reaction internet",
-  "Challenge Content": "TikTok viral challenge trend",
-  "YouTube Growth": "YouTube growth subscribers views monetization",
-  "Social Media Tips": "social media marketing tips growth",
-  "Brand Deals": "brand deals sponsorship influencer marketing",
-  "Monetization Advice": "monetization content creator income",
-  "Medicine & Health": "health medicine doctor treatment news",
-  "Law": "law legal court ruling news",
-  "Marketing": "marketing digital advertising brand",
-  "Entrepreneurship": "entrepreneurship business success startup",
-  "Motivational Speaking": "motivation success mindset inspiration",
-  "Faith & Religion": "faith religion church spirituality",
-  "African Culture": "African culture Nigeria Ghana music art",
-  "Caribbean Culture": "Caribbean culture Jamaica Trinidad music",
-  "Astrology": "astrology zodiac horoscope Mercury retrograde",
-  "Self-Development": "self development personal growth mindset"
-};
-
-// Expanded RSS lists per niche. Google News RSS acts as a catch-all query.
-function googleNews(q) { return `https://news.google.com/rss/search?q=${encodeURIComponent(q)}&hl=en-US&gl=US&ceid=US:en`; }
-
-const NICHE_RSS = {
-  "Football/Soccer": "https://feeds.bbci.co.uk/sport/football/rss.xml",
-  "Basketball": "https://feeds.bbci.co.uk/sport/basketball/rss.xml",
-  "Music (Afrobeats)": googleNews("Afrobeats"),
-  "Crypto": "https://cointelegraph.com/rss",
-  "AI & Tech News": "https://feeds.feedburner.com/TechCrunch",
-  "Movies & TV": "https://feeds.bbci.co.uk/news/entertainment_and_arts/rss.xml",
-  "default": "https://feeds.bbci.co.uk/news/rss.xml"
-};
-
-const NICHE_BLOG_RSS = {
-  "Football/Soccer": ["https://www.101greatgoals.com/feed/","https://www.skysports.com/rss/0,,12040,00.xml","https://www.espn.com/espn/rss/football/news","https://www.theguardian.com/football/rss","https://www.90min.com/posts.rss","https://www.football365.com/feed",googleNews("Premier League transfer news")],
-  "Basketball": ["https://www.espn.com/espn/rss/basketball/news","https://bleacherreport.com/articles/feed","https://www.si.com/nba/rss","https://www.cbssports.com/nba/rss","https://www.hoopshype.com/feed/",googleNews("NBA trade news")],
-  "American Football": ["https://www.espn.com/espn/rss/nfl/news","https://profootballtalk.nbcsports.com/feed/","https://www.cbssports.com/nfl/rss","https://www.si.com/nfl/rss",googleNews("NFL news")],
-  "Formula 1": ["https://www.autosport.com/rss/feed/f1","https://www.motorsport.com/rss/f1/news","https://www.formula1.com/en/latest/all.xml","https://www.racefans.net/feed/",googleNews("Formula 1 news")],
-  "Boxing": ["https://www.boxingscene.com/rss.xml","https://www.badlefthook.com/rss/current.xml","https://www.ringtv.com/feed/",googleNews("boxing news")],
-  "MMA/UFC": ["https://www.mmafighting.com/rss/current.xml","https://www.bloodyelbow.com/rss/current.xml","https://www.mmamania.com/rss/current.xml",googleNews("UFC MMA news")],
-  "Tennis": ["https://www.tennis.com/rss","https://www.atptour.com/en/media/rss-feed/xml-feed","https://www.tennisworldusa.org/rss.php",googleNews("tennis ATP WTA news")],
-  "Cricket": ["https://www.espncricinfo.com/rss/content/story/feeds/0.xml","https://www.cricbuzz.com/rss-feed/cricket-news",googleNews("cricket news")],
-  "Golf": ["https://www.pgatour.com/content/pgatour/rss.rss.pga.rss","https://www.golfdigest.com/feed/rss",googleNews("golf news PGA")],
-  "Ice Hockey": ["https://www.espn.com/espn/rss/nhl/news","https://www.si.com/nhl/rss",googleNews("NHL news")],
-  "Baseball": ["https://www.espn.com/espn/rss/mlb/news","https://www.si.com/mlb/rss",googleNews("MLB news")],
-  "Rugby": ["https://www.rugbyworld.com/feed","https://www.rugbypass.com/feed/",googleNews("rugby news")],
-  "Esports": ["https://www.dotesports.com/feed","https://www.eurogamer.net/feed",googleNews("esports news")],
-  "Crypto": ["https://cointelegraph.com/rss","https://cryptobriefing.com/feed","https://www.coindesk.com/arc/outboundfeeds/rss/","https://decrypt.co/feed","https://beincrypto.com/feed/",googleNews("crypto news bitcoin")],
-  "Stock Market": ["https://www.cnbc.com/id/10001147/device/rss/rss.html","https://feeds.marketwatch.com/marketwatch/topstories/","https://www.investing.com/rss/news.rss",googleNews("stock market news")],
-  "AI & Tech News": ["https://feeds.feedburner.com/TechCrunch","https://www.theverge.com/rss/index.xml","https://www.wired.com/feed/rss","https://venturebeat.com/feed","https://arstechnica.com/feed/",googleNews("AI news")],
-  "Gadget Reviews": ["https://www.engadget.com/rss.xml","https://www.theverge.com/rss/index.xml","https://www.cnet.com/rss/news/",googleNews("gadget reviews")],
-  "Cybersecurity": ["https://feeds.feedburner.com/TheHackersNews","https://krebsonsecurity.com/feed/","https://www.bleepingcomputer.com/feed/",googleNews("cybersecurity news")],
-  "Startups": ["https://feeds.feedburner.com/TechCrunch","https://www.ycombinator.com/blog/rss","https://sifted.eu/feed",googleNews("startup funding news")],
-  "Space & Science": ["https://www.nasa.gov/rss/dyn/breaking_news.rss","https://www.space.com/feeds/all","https://www.sciencedaily.com/rss/all.xml",googleNews("space science news")],
-  "Movies & TV": ["https://www.hollywoodreporter.com/feed","https://variety.com/feed","https://deadline.com/feed","https://www.indiewire.com/feed/",googleNews("movies TV news")],
-  "Anime": ["https://www.animenewsnetwork.com/all/rss.xml","https://www.crunchyroll.com/newsrss",googleNews("anime news")],
-  "Music (Hip-Hop)": ["https://hiphopdx.com/feed","https://www.xxlmag.com/feed","https://www.complex.com/music/rss.xml",googleNews("hip hop music news")],
-  "Music (Pop)": ["https://www.billboard.com/feed/","https://www.popjustice.com/feed/",googleNews("pop music news")],
-  "Music (Afrobeats)": [googleNews("Afrobeats OR Burna Boy OR Wizkid OR Davido"), googleNews("Rema OR Tems OR Asake"),"https://notjustok.com/feed/",googleNews("Afrobeats new music releases")],
-  "Music (K-Pop)": ["https://www.soompi.com/feed","https://www.allkpop.com/feed","https://www.koreaboo.com/feed/",googleNews("kpop news")],
-  "Celebrity Gossip": ["https://www.tmz.com/rss.xml","https://pagesix.com/feed/",googleNews("celebrity news")],
-  "Fitness & Gym": ["https://www.menshealth.com/rss/all.xml/","https://www.womenshealthmag.com/rss/all.xml/","https://www.self.com/feed/rss",googleNews("fitness workout news")],
-  "Food & Recipes": ["https://www.bonappetit.com/feed/rss","https://www.food52.com/blog.rss","https://www.epicurious.com/feed/rss",googleNews("recipes food news")],
-  "Travel": ["https://www.cntraveler.com/feed/rss","https://www.travelandleisure.com/feed","https://www.lonelyplanet.com/rss",googleNews("travel news")],
-  "Streetwear": ["https://hypebeast.com/feed","https://sneakernews.com/feed/",googleNews("streetwear sneakers news")],
-  "Luxury Fashion": ["https://www.vogue.com/feed/rss","https://www.gq.com/feed/rss","https://www.harpersbazaar.com/rss/all.xml/",googleNews("luxury fashion news")],
-  "True Crime": [googleNews("true crime murder investigation"),"https://www.crimeonline.com/feed/",googleNews("true crime documentary case")],
-  "Political Commentary": ["https://www.politico.com/rss/politicopicks.xml","https://www.axios.com/feed",googleNews("political news commentary")],
-  "Business News": ["https://feeds.bloomberg.com/markets/news.rss","https://www.reuters.com/rssfeed/businessNews","https://fortune.com/feed/",googleNews("business news")],
-  "default": ["https://feeds.bbci.co.uk/news/rss.xml","https://feeds.npr.org/1001/rss.xml",googleNews("breaking news today")]
-};
+const { googleNews, NICHE_QUERIES, NICHE_RSS, NICHE_BLOG_RSS } = require("./config/feeds");
 
 const NICHE_EVENTS = {
   "Football/Soccer": [
@@ -1372,75 +1225,105 @@ function mediaUrl(field) {
   return entry?.$?.url || entry?.url || null;
 }
 function extractFeedImage(item) {
+  if (!item) return null;
+  // 1. Media RSS namespace (media:content)
   const fromMediaContent = mediaUrl(item['media:content']);
   if (fromMediaContent) return fromMediaContent;
+  // 2. Media RSS thumbnail (media:thumbnail)
   const fromMediaThumbnail = mediaUrl(item['media:thumbnail']);
   if (fromMediaThumbnail) return fromMediaThumbnail;
+  // 3. Enclosure tag
   if (item.enclosure?.url) return item.enclosure.url;
-  const html = item['content:encoded'] || item.content || item.summary || "";
-  if (!html) return null;
-  const patterns = [
-    /<img[^>]+data-lazy-src=["']([^"']+)["']/i,
-    /<img[^>]+data-src=["']([^"']+)["']/i,
-    /<img[^>]+srcset=["']([^"',\s]+)/i,
-    /<img[^>]+src=["']([^"']+)["']/i
-  ];
-  for (const re of patterns) {
-    const m = html.match(re);
-    if (m && m[1] && !/^data:/.test(m[1])) return m[1]; // skip inline base64 placeholders
+  // 4. iTunes image tag
+  if (item['itunes:image']) {
+    const it = item['itunes:image'];
+    const u = it?.$?.href || it?.href || (typeof it === 'string' ? it : null);
+    if (u) return u;
+  }
+  // 5. HTML content image scraping (with lazy-load attribute support)
+  const html = item['content:encoded'] || item.content || item.summary || item.description || "";
+  if (html) {
+    const patterns = [
+      /<img[^>]+data-orig-file=["']([^"']+)["']/i,
+      /<img[^>]+data-lazy-src=["']([^"']+)["']/i,
+      /<img[^>]+data-src=["']([^"']+)["']/i,
+      /<img[^>]+srcset=["']([^"',\s]+)/i,
+      /<img[^>]+src=["']([^"']+)["']/i
+    ];
+    for (const re of patterns) {
+      const m = html.match(re);
+      if (m && m[1] && !/^data:/.test(m[1]) && !m[1].includes("1x1") && !m[1].includes("spacer") && !m[1].includes("tracking")) {
+        return m[1];
+      }
+    }
   }
   return null;
 }
 
-// Last-resort fallback when the RSS feed itself carries no image at all —
-// not every outlet includes one in their feed for every post (short
-// quote-style posts often ship without one even when photo-heavy features
-// do), but almost every real news article has an Open Graph image tag on
-// the actual page, since that's what makes link previews work on social
-// media. Only called when extractFeedImage() already came up empty, so it
-// doesn't add latency to articles that already have an image.
+// OpenGraph fallback using AbortController with 3.5s timeout so sluggish external sites don't stall
 async function fetchOgImage(articleUrl) {
-  if (!articleUrl) return null;
+  if (!articleUrl || !/^https?:\/\//i.test(articleUrl)) return null;
   try {
-    const r = await fetch(articleUrl, { headers: { "User-Agent": "Mozilla/5.0" }, timeout: 5000 });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3500);
+    const r = await fetch(articleUrl, {
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" },
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
+    if (!r.ok) return null;
     const html = await r.text();
     const m = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
       || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i)
-      || html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i);
-    return m ? m[1] : null;
+      || html.match(/<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i)
+      || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i);
+    if (m && m[1] && !/^data:/.test(m[1])) {
+      let img = m[1];
+      if (img.startsWith("//")) img = "https:" + img;
+      return img;
+    }
+    return null;
   } catch (e) {
     return null;
   }
 }
 
-// Replaces the old random score generator everywhere a "how big is this
-// story" number is needed. Not a trained model — it's an honest heuristic
-// built from signals we can actually observe: does the text use language
-// that correlates with genuinely newsworthy stories, is it corroborated by
-// more than one outlet, and is it fresh. That's a real (if rough) signal,
-// unlike a random number dressed up as a percentage.
-const IMPACT_KEYWORDS = [
+const VIRAL_IMPACT_KEYWORDS = [
   "breaking","confirmed","official","record","historic","fired","sacked","quits","resigns",
   "banned","suspended","dies","retires","walks out","stuns","shock","slams","blasts","erupts",
   "viral","backlash","controversy","scandal","exclusive","leaked","unprecedented","first time",
-  "makes history","sets record","world record","under fire","steps down","announces"
+  "makes history","sets record","world record","under fire","steps down","announces","bombshell",
+  "feud","reveals","drama","chaos","massive","trade","deal","drops","huge","warning",
+  "crashes","surges","emergency","investigation","lawsuit","verdict","guilty","champion"
 ];
-function computeContentScore(text, { sourceCount = 1, publishedAt } = {}) {
+
+function computeContentScore(text, { sourceCount = 1, publishedAt, hasImage = false } = {}) {
   const hay = (text || "").toLowerCase();
   let hits = 0;
-  for (const w of IMPACT_KEYWORDS) if (hay.includes(w)) hits++;
-  const impactBonus = Math.min(hits * 4, 20);
-  const corroborationBonus = Math.min((sourceCount - 1) * 8, 16);
+  for (const w of VIRAL_IMPACT_KEYWORDS) {
+    if (hay.includes(w)) hits++;
+  }
+  const impactBonus = Math.min(hits * 5, 25);
+  const corroborationBonus = Math.min((sourceCount - 1) * 6, 14);
   let recencyBonus = 0;
   if (publishedAt) {
     const ageHours = (Date.now() - new Date(publishedAt).getTime()) / 3600000;
-    if (ageHours < 3) recencyBonus = 6;
-    else if (ageHours < 12) recencyBonus = 2;
+    if (ageHours < 1) recencyBonus = 16;
+    else if (ageHours < 3) recencyBonus = 12;
+    else if (ageHours < 6) recencyBonus = 8;
+    else if (ageHours < 12) recencyBonus = 4;
   }
-  return Math.max(40, Math.min(99, 55 + impactBonus + corroborationBonus + recencyBonus));
+  // Image priority bonus: stories with rich visual media perform drastically better on social
+  const imageBonus = hasImage ? 12 : 0;
+  return Math.max(40, Math.min(99, 45 + impactBonus + corroborationBonus + recencyBonus + imageBonus));
 }
 
-// ── NEWS ────────────────────────────────────────────────────────────────────
+function classifyViralTier(score) {
+  if (score >= 80) return { tier: "trending", label: "🔥 Trending", color: "#ff5a1f" };
+  if (score >= 65) return { tier: "mid", label: "⚡ Mid-Tier", color: "#f59e0b" };
+  return { tier: "low", label: "📌 Low-Tier", color: "#64748b" };
+}
+
 app.get("/api/news", async (req, res) => {
   const { niche } = req.query;
   if (!niche) return res.status(400).json({ error: "niche required" });
@@ -1473,10 +1356,12 @@ app.get("/api/news", async (req, res) => {
       const normalized = merged.map(a => ({ title: a.title, summary: a.summary, _raw: a }));
       // Raised from 20 — with three sources merged there's enough real
       // volume now to comfortably clear "at least 20 live" after filtering.
-      const kept = filterAndScoreArticles(normalized, niche).slice(0, 30);
+      const kept = (filterAndScoreArticles(normalized, niche, { threshold: 0 }) || []).slice(0, 40);
       if (kept.length) {
         const articles = kept.map((k, i) => {
           const a = k._raw;
+          const score = computeContentScore(`${a.title} ${a.summary}`, { sourceCount: a.sourceCount, publishedAt: a.publishedAt, hasImage: !!a.image });
+          const tierInfo = classifyViralTier(score);
           return {
             id: `${niche.replace(/\s/g, "_")}_${i}_${Date.now()}`,
             niche,
@@ -1485,12 +1370,15 @@ app.get("/api/news", async (req, res) => {
             image: a.image || null,
             url: a.url,
             source: a.source || "",
-            score: computeContentScore(`${a.title} ${a.summary}`, { sourceCount: a.sourceCount, publishedAt: a.publishedAt }),
+            score,
+            viralTier: tierInfo.tier,
+            viralLabel: tierInfo.label,
+            hasImage: !!a.image,
             tags: extractTags(a.title, niche),
             timestamp: new Date(a.publishedAt || Date.now()).getTime()
           };
         });
-        cacheSet(_ck, { articles }, 10*60*1000); return res.json({ articles });
+        cacheSet(_ck, { articles }, 60*60*1000); return res.json({ articles });
       }
     }
     // RSS fallback (BBC/etc) — only if all three keyed sources came back empty
@@ -1501,11 +1389,13 @@ app.get("/api/news", async (req, res) => {
       summary: item.contentSnippet || (item.content ? item.content.slice(0, 1600) : ""),
       _raw: item
     }));
-    const kept = filterAndScoreArticles(normalized, niche).slice(0, 8);
+    const kept = (filterAndScoreArticles(normalized, niche, { threshold: 0 }) || []).slice(0, 40);
     const filteredItems = await Promise.all(kept.map(async (k, i) => {
       const item = k._raw;
       let sourceImage = extractFeedImage(item);
       if (!sourceImage && item.link) sourceImage = await fetchOgImage(item.link);
+      const score = computeContentScore(`${item.title} ${item.contentSnippet||""}`, { publishedAt: item.isoDate, hasImage: !!sourceImage });
+      const tierInfo = classifyViralTier(score);
       return {
         id: `${niche.replace(/\s/g, "_")}_rss_${i}_${Date.now()}`,
         niche,
@@ -1514,12 +1404,15 @@ app.get("/api/news", async (req, res) => {
         image: sourceImage,
         url: item.link,
         source: feed.title || "",
-        score: computeContentScore(`${item.title} ${item.contentSnippet||""}`, { publishedAt: item.isoDate }),
+        score,
+        viralTier: tierInfo.tier,
+        viralLabel: tierInfo.label,
+        hasImage: !!sourceImage,
         tags: extractTags(item.title, niche),
         timestamp: new Date(item.isoDate || Date.now()).getTime()
       };
     }));
-    cacheSet(_ck, { articles: filteredItems }, 90*60*1000); res.json({ articles: filteredItems });
+    cacheSet(_ck, { articles: filteredItems }, 60*60*1000); res.json({ articles: filteredItems });
   } catch (e) {
     console.error("News error:", e.message);
     res.status(500).json({ error: e.message });
@@ -1541,9 +1434,11 @@ app.get("/api/blog-feed", async (req, res) => {
   await Promise.allSettled(feeds.map(async feedUrl => {
     try {
       const feed = await parser.parseURL(feedUrl);
-      const items = await Promise.all((feed.items || []).slice(0, 6).map(async (item, i) => {
+      const items = await Promise.all((feed.items || []).slice(0, 8).map(async (item, i) => {
         let imageUrl = extractFeedImage(item);
         if (!imageUrl && item.link) imageUrl = await fetchOgImage(item.link);
+        const score = computeContentScore(`${item.title} ${item.contentSnippet||""}`, { publishedAt: item.isoDate, hasImage: !!imageUrl });
+        const tierInfo = classifyViralTier(score);
         return {
           id: `blog_${niche}_${feedUrl}_${i}_${Date.now()}`,
           niche,
@@ -1552,7 +1447,10 @@ app.get("/api/blog-feed", async (req, res) => {
           image: imageUrl,
           url: item.link,
           source: feed.title || feedUrl,
-          score: computeContentScore(`${item.title} ${item.contentSnippet||""}`, { publishedAt: item.isoDate }),
+          score,
+          viralTier: tierInfo.tier,
+          viralLabel: tierInfo.label,
+          hasImage: !!imageUrl,
           tags: ["Blog", ...extractTags(item.title, niche)],
           timestamp: new Date(item.isoDate || Date.now()).getTime()
         };
@@ -1571,7 +1469,7 @@ app.get("/api/blog-feed", async (req, res) => {
     if (!key || seen.has(key)) return false;
     seen.add(key); return true;
   });
-  const _payload = { articles: filteredBlogs.slice(0, 25) }; cacheSet(_ck, _payload, 90*60*1000); res.json(_payload);
+  const _payload = { articles: filteredBlogs.slice(0, 40) }; cacheSet(_ck, _payload, 60*60*1000); res.json(_payload);
 });
 
 // ── TWITTER (Nitter) ────────────────────────────────────────────────────────
@@ -1584,6 +1482,8 @@ app.get("/api/twitter-feed", async (req, res) => {
       const feed = await parser.parseURL(`${base}/${handle}/rss`);
       const items = (feed.items || []).slice(0, 8).map((item, i) => {
         const imageUrl = extractFeedImage(item);
+        const score = computeContentScore(`${item.title} ${item.contentSnippet||""}`, { publishedAt: item.isoDate, hasImage: !!imageUrl });
+        const tierInfo = classifyViralTier(score);
         return {
           id: `twitter_${handle}_${Date.now()}_${i}`,
           headline: item.title,
@@ -1591,7 +1491,10 @@ app.get("/api/twitter-feed", async (req, res) => {
           image: imageUrl,
           url: item.link,
           source: `@${handle}`,
-          score: computeContentScore(`${item.title} ${item.contentSnippet||""}`, { publishedAt: item.isoDate }),
+          score,
+          viralTier: tierInfo.tier,
+          viralLabel: tierInfo.label,
+          hasImage: !!imageUrl,
           tags: ["Twitter"],
           niche: niche || "News",
           timestamp: new Date(item.isoDate || Date.now()).getTime()
