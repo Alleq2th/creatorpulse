@@ -203,6 +203,11 @@ body{padding-bottom:var(--tab-h);letter-spacing:-0.005em}
 .badge-src{background:transparent;color:var(--mu2);font-weight:500}
 
 /* Viral Tiers & News Engine Badges */
+
+.stat-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; margin-right: 5px; flex-shrink: 0; }
+.dot-trending { background: #ff5722; box-shadow: 0 0 6px rgba(255,87,34,0.6); }
+.dot-mid { background: #f59e0b; }
+.dot-low { background: #94a3b8; }
 .badge-tier{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;font-size:11px;font-weight:700;line-height:1;letter-spacing:0.02em;text-transform:uppercase}
 .badge-tier-trending{background:rgba(255,87,34,0.16);color:#ff7043;border:1px solid rgba(255,112,67,0.45);box-shadow:0 0 12px -2px rgba(255,87,34,0.3)}
 .badge-tier-mid{background:rgba(245,158,11,0.14);color:#fbbf24;border:1px solid rgba(245,158,11,0.4)}
@@ -2040,6 +2045,16 @@ body{padding-bottom:var(--tab-h);letter-spacing:-0.005em}
   .h-sub { font: 500 9px var(--sans); color: var(--mu); line-height: 1.1; }
   .h-fmt-vis { height: 24px; display: flex; align-items: center; justify-content: center; color: var(--tx); }
   .h-fmt-vis svg { width: 18px; height: 18px; display: block; }
+  .h-emoji { font-size: 18px; line-height: 1; height: 24px; display: flex; align-items: center; justify-content: center; }
+  .h-emoji-glyph { font-size: 17px; line-height: 1; }
+  .h-fmt-car { display: flex; gap: 2.5px; align-items: center; justify-content: center; height: 24px; }
+  .h-fmt-car span { width: 5px; height: 11px; border-radius: 1.5px; border: 1.5px solid var(--tx); display: block; opacity: 0.75; }
+  .h-fmt-car span:nth-child(2) { height: 14px; opacity: 1; border-color: var(--ac); }
+  .h-card.active .h-fmt-car span { border-color: var(--tx); }
+  .cp-script-card { background: var(--sf); border: 1px solid var(--br); border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+  .script-timing-pill { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--sf2); color: var(--mu); border: 1px solid var(--br); }
+  .script-reader-body { padding: 14px; font-size: 14.5px; line-height: 1.65; color: var(--tx); white-space: pre-wrap; font-family: var(--sans); background: var(--sf2); border-radius: 0 0 8px 8px; word-break: break-word; }
+
   .h-color-preview { width: 40px; height: 28px; border-radius: 5px; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,0.12); }
   .h-color-bar { position: absolute; top: 0; left: 0; right: 0; height: 2.5px; }
   .h-color-text { font: 900 13px Anton, Impact, sans-serif; }
@@ -2070,7 +2085,7 @@ body{padding-bottom:var(--tab-h);letter-spacing:-0.005em}
 <script src="plus-ai/ui.js?v=30"></script>
 <script src="plus-ai/actions.js?v=30"></script>
 <script src="plus-ai/index.js?v=30"></script>
-<script src="core.js?v=35"></script>
+<script src="core.js?v=36"></script>
 <script src="lib/studioPerf.js?v=30"></script>
 <script src="studio.js?v=30"></script>
 <script src="app.js?v=30"></script>

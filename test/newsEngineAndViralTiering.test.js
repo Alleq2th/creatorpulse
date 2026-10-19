@@ -44,17 +44,17 @@ test("server.js viral tiering classifies scores correctly with image priority", 
   // High score >= 80 -> trending
   const highTier = classify(85);
   assert.equal(highTier.tier, "trending");
-  assert.equal(highTier.label, "🔥 Trending");
+  assert.equal(highTier.label, "Trending");
 
   // Mid score 65-79 -> mid
   const midTier = classify(72);
   assert.equal(midTier.tier, "mid");
-  assert.equal(midTier.label, "⚡ Mid-Tier");
+  assert.equal(midTier.label, "Mid-Tier");
 
   // Low score < 65 -> low
   const lowTier = classify(55);
   assert.equal(lowTier.tier, "low");
-  assert.equal(lowTier.label, "📌 Low-Tier");
+  assert.equal(lowTier.label, "Curated");
 });
 
 test("public/core.js sorts trends by viral tier first, then score, then image readiness", () => {

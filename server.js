@@ -1319,9 +1319,9 @@ function computeContentScore(text, { sourceCount = 1, publishedAt, hasImage = fa
 }
 
 function classifyViralTier(score) {
-  if (score >= 80) return { tier: "trending", label: "🔥 Trending", color: "#ff5a1f" };
-  if (score >= 65) return { tier: "mid", label: "⚡ Mid-Tier", color: "#f59e0b" };
-  return { tier: "low", label: "📌 Low-Tier", color: "#64748b" };
+  if (score >= 80) return { tier: "trending", label: "Trending", color: "#ff5a1f" };
+  if (score >= 65) return { tier: "mid", label: "Mid-Tier", color: "#f59e0b" };
+  return { tier: "low", label: "Curated", color: "#64748b" };
 }
 
 app.get("/api/news", async (req, res) => {
@@ -1358,26 +1358,30 @@ app.get("/api/news", async (req, res) => {
       // volume now to comfortably clear "at least 20 live" after filtering.
       const kept = (filterAndScoreArticles(normalized, niche, { threshold: 0 }) || []).slice(0, 40);
       if (kept.length) {
-        const articles = kept.map((k, i) => {
+        const articles = await Promise.all(kept.map(async (k, i) => {
           const a = k._raw;
-          const score = computeContentScore(`${a.title} ${a.summary}`, { sourceCount: a.sourceCount, publishedAt: a.publishedAt, hasImage: !!a.image });
+          let sourceImage = a.image;
+          if (!sourceImage && a.url) {
+            try { sourceImage = await fetchOgImage(a.url); } catch (e) {}
+          }
+          const score = computeContentScore(`${a.title} ${a.summary}`, { sourceCount: a.sourceCount, publishedAt: a.publishedAt, hasImage: !!sourceImage });
           const tierInfo = classifyViralTier(score);
           return {
             id: `${niche.replace(/\s/g, "_")}_${i}_${Date.now()}`,
             niche,
             headline: a.title,
             summary: a.summary,
-            image: a.image || null,
+            image: sourceImage || null,
             url: a.url,
             source: a.source || "",
             score,
             viralTier: tierInfo.tier,
             viralLabel: tierInfo.label,
-            hasImage: !!a.image,
+            hasImage: !!sourceImage,
             tags: extractTags(a.title, niche),
             timestamp: new Date(a.publishedAt || Date.now()).getTime()
           };
-        });
+        }));
         cacheSet(_ck, { articles }, 60*60*1000); return res.json({ articles });
       }
     }
