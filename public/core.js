@@ -830,9 +830,9 @@ async function loadTrends(silent = false){
     let tier = t.viralTier;
     let label = t.viralLabel;
     if (!tier) {
-      if (score >= 80) { tier = "trending"; label = "🔥 Trending"; }
-      else if (score >= 65) { tier = "mid"; label = "⚡ Mid-Tier"; }
-      else { tier = "low"; label = "📌 Low-Tier"; }
+      if (score >= 80) { tier = "trending"; label = "Trending"; }
+      else if (score >= 65) { tier = "mid"; label = "Mid-Tier"; }
+      else { tier = "low"; label = "Curated"; }
     }
     t.viralTier = tier;
     t.viralLabel = label;
@@ -942,13 +942,12 @@ function renderTrend(t){
     }).join("");
 
     const fmtIcon = (c) => {
-      const svg = /carousel/i.test(c) ? '<rect x="7" y="3" width="14" height="14" rx="2"/><rect x="3" y="7" width="14" height="14" rx="2" fill="currentColor" fill-opacity=".22"/>'
-        : /graphic|thumbnail/i.test(c) ? '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>'
-        : /caption|hashtag/i.test(c) ? '<path d="M4 9h16M4 15h16M10 3 8 21M16 3l-2 18"/>'
-        : /script|short/i.test(c) ? '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 8h20M7 4v4M12 4v4M17 4v4"/>'
-        : /thread/i.test(c) ? '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M6 9v6m12-6a6 6 0 0 0-6 6"/>'
-        : '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>';
-      return `<div class="h-fmt-vis"><svg viewBox="0 0 24 24" aria-hidden="true">${svg}</svg></div>`;
+      if (/carousel/i.test(c)) return `<div class="h-fmt-vis h-fmt-car"><span></span><span></span><span></span></div>`;
+      if (/graphic|thumbnail/i.test(c)) return `<div class="h-fmt-vis"><span class="h-emoji-glyph">📸</span></div>`;
+      if (/caption|hashtag/i.test(c)) return `<div class="h-fmt-vis"><span class="h-emoji-glyph">#️⃣</span></div>`;
+      if (/script|short|reel/i.test(c)) return `<div class="h-fmt-vis"><span class="h-emoji-glyph">🎬</span></div>`;
+      if (/thread/i.test(c)) return `<div class="h-fmt-vis"><span class="h-emoji-glyph">🧵</span></div>`;
+      return `<div class="h-fmt-vis"><span class="h-emoji-glyph">💬</span></div>`;
     };
     const ctChips = (PTYPES[plat]||[]).map(c => {
       const isAct = ct === c;
@@ -959,18 +958,12 @@ function renderTrend(t){
       </button>`;
     }).join("");
 
-    const TONE_ICONS = {
-      normal:'<circle cx="12" cy="12" r="9"/><path d="M8 12h8"/>',
-      funny:'<circle cx="12" cy="12" r="9"/><path d="M8 14s1.5 2 4 2 4-2 4-2M9 9h.01M15 9h.01"/>',
-      educative:'<path d="m2 10 10-5 10 5-10 5zM6 12v5c3 3 9 3 12 0v-5M22 10v6"/>',
-      hype:'<path d="M12 2c2 4 7 7 7 13a7 7 0 0 1-14 0c0-3 2-6 4-8 0 3 1 4 2 5 1-3 1-6 1-10z"/>',
-      storytelling:'<path d="M2 4h6a4 4 0 0 1 4 4v13a4 4 0 0 0-4-4H2zM22 4h-6a4 4 0 0 0-4 4v13a4 4 0 0 1 4-4h6z"/>'
-    };
+    const TONE_VIS = { normal:"😐", funny:"😂", educative:"🧠", hype:"🔥", storytelling:"📖" };
     const toneChips = TONES.map(x => {
       const isAct = tone === x.id;
       return `<button class="h-card h-card-tone ${isAct?'active':''}" onclick="setTone('${t.id}','${x.id}')">
         <div class="h-badge">${isAct?'✓':''}</div>
-        <div class="h-icon-svg"><svg viewBox="0 0 24 24" aria-hidden="true">${TONE_ICONS[x.id]||TONE_ICONS.normal}</svg></div>
+        <div class="h-emoji">${TONE_VIS[x.id] || "💬"}</div>
         <div class="h-name">${x.label}</div>
       </button>`;
     }).join("");
@@ -1099,9 +1092,9 @@ function renderTrend(t){
     </div>`;
   }
   const tier = t.viralTier || (t.score >= 80 ? 'trending' : t.score >= 65 ? 'mid' : 'low');
-  const tierLabel = t.viralLabel || (tier === 'trending' ? '🔥 Trending' : tier === 'mid' ? '⚡ Mid-Tier' : '📌 Low-Tier');
+  const tierLabel = `<span class="stat-dot dot-${tier}"></span>${tier === 'trending' ? 'Trending' : tier === 'mid' ? 'Mid-Tier' : 'Curated'}`;
   const srcTag = t.source?`<span class="tsep">·</span><span class="badge-src">${esc(t.source)}</span>`:"";
-  const imgReadyPill = t.image ? `<span class="badge badge-img-ready">🖼️ Visual ready</span>` : "";
+  const imgReadyPill = t.image ? `<span class="badge badge-img-ready"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:3px"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>Photo Ready</span>` : "";
   const veloCls = (()=>{ const st=trendVelocity(t).state; return st==='peaking'?'tc-peaking':st==='rising'?'tc-rising':''; })();
   return `<div class="tc ${exp?'exp':''} tc-tier-${tier} ${veloCls}" id="tc-${t.id}">
     <div class="th" onclick="toggle('${t.id}')">
@@ -1345,6 +1338,30 @@ function renderOut(o, tid, idx){
     </div>`;
   }
   const content = String(o.content||"");
+  const isScript = /script|short|reel/i.test(o.label||"") || /script/i.test(o.contentType||"") || o.isScript;
+  if(isScript){
+    const words = content.trim().split(/\s+/).filter(Boolean).length;
+    const estSec = Math.round((words / 135) * 60);
+    const timeFormatted = estSec >= 60 ? `${Math.floor(estSec/60)}m ${estSec%60}s` : `${estSec}s`;
+    return `<div class="oc cp-script-card">
+      <div class="oh" style="padding:12px 14px 10px;border-bottom:1px solid var(--br)">
+        <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0">
+          <span class="ol" style="font-weight:700">🎬 ${esc(o.label||"Script")}</span>
+          <span class="script-timing-pill">${words} words · ~${timeFormatted}</span>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="btn bo bxs tipbtn" data-tip="Copy full script" title="Copy script" aria-label="Copy script" onclick="copyTxt(\`${content.replace(/`/g,"\\`")}\`)">${I.copy} Copy</button>
+          <button class="btn bp bxs tipbtn" data-tip="Record in Studio" title="Record in Studio" aria-label="Record in Studio" onclick="studioShootScript('${tid}',${idx})">${I.cam} Studio</button>
+        </div>
+      </div>
+      <div class="script-reader-body">${esc(content)}</div>
+      <div class="ofoot">
+        <button class="btn bo bxs tipbtn" data-tip="Copy full script" title="Copy script" aria-label="Copy script" onclick="copyTxt(\`${content.replace(/`/g,"\\`")}\`)">${I.copy} Copy</button>
+        <button class="btn bp bxs tipbtn" data-tip="Save to library" title="Save to library" aria-label="Save to library" onclick="saveOut('${tid}',${idx})">${I.save} Save</button>
+      </div>
+    </div>`;
+  }
+
   return `<div class="oc">
     <div class="oh">
       <span class="ol">${esc(o.label||"Draft")}</span>
@@ -1360,6 +1377,20 @@ function renderOut(o, tid, idx){
     </div>
   </div>`;
 }
+
+window.studioShootScript = (tid, idx) => {
+  const o = S.outs[tid]?.[idx];
+  const t = S.trends.find(x => x.id === tid);
+  const text = o?.content || "";
+  const title = t?.headline || o?.label || "Script";
+  if (typeof window.svOpenWithScript === "function") {
+    window.svOpenWithScript(text, title);
+    toast("Opening in Studio teleprompter…");
+  } else {
+    copyTxt(text);
+    toast("Script copied! Switch to Studio tab to record.");
+  }
+};
 
 window.setSlideBackgroundImage = async (tid, idx, slideIdx, file) => {
   if (!file) return;
@@ -1526,7 +1557,7 @@ window.gen = async (tid, all) => {
             `${category.name} single post. Raw source headline: "${t.headline}". Full source text: ${sourceText}`, tone
           );
           const single = extractJSON(sr) || {};
-          slideArr = [{ type: "body", headline: single.headline || t.headline, body: single.body || sourceText, tag: single.tag || null, ctaLine: "FOLLOW FOR MORE →" }];
+          slideArr = [{ type: "body", headline: single.headline || t.headline, body: single.body || sourceText, tag: single.tag || null, ctaLine: "FOLLOW FOR MORE →", sourceLabel: t.source || null, useCover: isSingle }];
         } else if(!useDedicatedOutro){
           // 2-5 slides: CTA folded onto the last body slide instead of
           // spending a whole separate slide on it. Hook + body slides all
@@ -1539,7 +1570,7 @@ window.gen = async (tid, all) => {
           const { parsed, slides: rawSlides } = await generateSlidesWithCount(promptStr, ctxStr, tone, bodyCount);
           const bodySlides = rawSlides.map(s => ({ ...s, type: "body" }));
           if(bodySlides.length) bodySlides[bodySlides.length - 1].ctaLine = "FOLLOW FOR MORE →";
-          const hookSlide = { type: "hook", headline: parsed.hookHeadline || t.headline, supportingText: parsed.hookTease || sourceText.split(/(?<=[.!?])\s/).slice(0,2).join(" "), emphasisLine: 1 };
+          const hookSlide = { type: "hook", headline: parsed.hookHeadline || t.headline, supportingText: parsed.hookTease || sourceText.split(/(?<=[.!?])\s/).slice(0,2).join(" "), emphasisLine: 1, sourceLabel: t.source || null };
           slideArr = [hookSlide, ...bodySlides];
         } else {
           // 6+ slides: there's enough real content that a dedicated CTA
@@ -1549,7 +1580,7 @@ window.gen = async (tid, all) => {
           const ctxStr = `${category.name} carousel. Raw source headline: "${t.headline}". Full source text: ${sourceText}`;
           const { parsed, slides: rawSlides } = await generateSlidesWithCount(promptStr, ctxStr, tone, bodyCount);
           const bodySlides = rawSlides.map(s => ({ ...s, type: "body" }));
-          const hookSlide = { type: "hook", headline: parsed.hookHeadline || t.headline, supportingText: parsed.hookTease || sourceText.split(/(?<=[.!?])\s/).slice(0,2).join(" "), emphasisLine: 1 };
+          const hookSlide = { type: "hook", headline: parsed.hookHeadline || t.headline, supportingText: parsed.hookTease || sourceText.split(/(?<=[.!?])\s/).slice(0,2).join(" "), emphasisLine: 1, sourceLabel: t.source || null };
           slideArr = [hookSlide, ...bodySlides, ctaOutroSlide(t.niche)];
         }
         // Real cards (actual text, actual numbers) — not AI-generated art, which
@@ -2147,9 +2178,9 @@ function pageHome(){
   const filterStrip = S.trends.length ? `
     <div class="tier-filter-strip">
       <button class="tier-chip ${S.tierFilter==='all'?'active':''}" onclick="setTierFilter('all')">All (${S.trends.length})</button>
-      <button class="tier-chip tier-chip-trending ${S.tierFilter==='trending'?'active':''}" onclick="setTierFilter('trending')">🔥 Trending (${trendingCount})</button>
-      <button class="tier-chip tier-chip-mid ${S.tierFilter==='mid'?'active':''}" onclick="setTierFilter('mid')">⚡ Mid-Tier (${midCount})</button>
-      <button class="tier-chip tier-chip-low ${S.tierFilter==='low'?'active':''}" onclick="setTierFilter('low')">📌 Low-Tier (${lowCount})</button>
+      <button class="tier-chip tier-chip-trending ${S.tierFilter==='trending'?'active':''}" onclick="setTierFilter('trending')"><span class="stat-dot dot-trending"></span>Trending (${trendingCount})</button>
+      <button class="tier-chip tier-chip-mid ${S.tierFilter==='mid'?'active':''}" onclick="setTierFilter('mid')"><span class="stat-dot dot-mid"></span>Mid-Tier (${midCount})</button>
+      <button class="tier-chip tier-chip-low ${S.tierFilter==='low'?'active':''}" onclick="setTierFilter('low')"><span class="stat-dot dot-low"></span>Curated (${lowCount})</button>
     </div>` : "";
 
   return `<main class="page active">${topBar(`${S.trends.length||0} live stories`, null, true)}
@@ -2157,9 +2188,9 @@ function pageHome(){
       <div class="hi">Welcome back</div>
       <div class="nm">${esc(first)}</div>
       <div class="hero-stats-row">
-        <span class="hero-stat-pill stat-trending">🔥 ${trendingCount} Trending</span>
-        <span class="hero-stat-pill stat-mid">⚡ ${midCount} Mid-Tier</span>
-        <span class="hero-stat-pill stat-low">📌 ${lowCount} Low-Tier</span>
+        <span class="hero-stat-pill stat-trending"><span class="stat-dot dot-trending"></span>${trendingCount} Trending</span>
+        <span class="hero-stat-pill stat-mid"><span class="stat-dot dot-mid"></span>${midCount} Mid-Tier</span>
+        <span class="hero-stat-pill stat-low"><span class="stat-dot dot-low"></span>${lowCount} Curated</span>
       </div>
       <div class="hero-refresh-meta">Refreshes hourly · ${S.trends.length} fresh stories ready</div>
       <button class="hero-chip" onclick="document.getElementById('feed').scrollIntoView({behavior:'smooth'})"><span class="n">${peaking||S.trends.length||0}</span><span>${chipTxt}</span><span class="go">›</span></button>

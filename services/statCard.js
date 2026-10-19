@@ -436,11 +436,12 @@ function pillHeader(p, f, categoryName, slug, slideNum, totalSlides, typo) {
   const label = (categoryName||"").toUpperCase();
   const pillW = 84 + label.length * 19;
   const icon = categoryIconSVG(slug);
+  const isSingle = (totalSlides || 1) <= 1;
   return `
     <rect x="${m}" y="${f.headerY-34}" width="${pillW}" height="52" rx="26" fill="none" stroke="${p.accent}" stroke-width="2"/>
     <g transform="translate(${m+20},${f.headerY-16})" color="${p.accent}">${icon}</g>
     <text x="${m+58}" y="${f.headerY}" font-family="${fontBody}" font-size="26" font-weight="700" fill="${p.primaryText}" letter-spacing="1.5">${escXml(label)}</text>
-    <text x="${f.w - m}" y="${f.headerY}" font-family="${fontBody}" font-size="26" font-weight="700" fill="${p.secondaryText}" text-anchor="end">${slideNum||1} / ${totalSlides||1}</text>`;
+    ${isSingle ? "" : `<text x="${f.w - m}" y="${f.headerY}" font-family="${fontBody}" font-size="26" font-weight="700" fill="${p.secondaryText}" text-anchor="end">${slideNum||1} / ${totalSlides||1}</text>`}`;
 }
 
 // Fading accent line + swipe cue, used at the foot of hook slides.
@@ -470,12 +471,28 @@ function renderHookSVG(p, f, slide, category, scrimStrength, typo) {
   const fontHead = (typo && typo.headline) ? typo.headline : FONT_SERIF;
   const fontBody = (typo && typo.body) ? typo.body : FONT_SANS;
   const m = f.margin;
+  const isSingle = (slide.totalSlides || 1) <= 1;
+  const isTall = f.h > 1500;
   const { lines, size } = fitMultilineText(slide.headline, f.hookHeadlineSize, f.hookHeadlineChars, f.hookMaxLines);
   const lineH = Math.round(f.hookHeadlineLine * (size / f.hookHeadlineSize));
   const startY = Math.round(f.h * f.hookHeadlineY);
   const emphasisIdx = slide.emphasisLine != null ? slide.emphasisLine : (lines.length >= 3 ? 1 : -1);
   const supportY = startY + lines.length * lineH + f.hookSupportGap;
-  const supportLines = slide.supportingText ? fitSupportText(slide.supportingText, f.hookSupportChars, f.hookSupportMaxLines) : [];
+  const supportLines = (slide.supportingText || slide.body) ? fitSupportText(slide.supportingText || slide.body, f.hookSupportChars, f.hookSupportMaxLines) : [];
+
+  const footerY = isTall ? f.h - 220 : f.h - 80;
+  let footerSVG = "";
+  if (isSingle) {
+    const ctaText = slide.ctaLine ? String(slide.ctaLine).toUpperCase() : "";
+    const srcText = slide.sourceLabel ? ("SOURCE: " + slide.sourceLabel).toUpperCase() : "";
+    footerSVG = `
+      <g opacity="0.95">
+        ${srcText ? `<text x="${m}" y="${footerY - (ctaText ? 36 : 0)}" font-family="${fontBody}" font-size="20" font-weight="700" letter-spacing="1.5" fill="${p.secondaryText}">${escXml(srcText)}</text>` : ""}
+        ${ctaText ? `<text x="${m}" y="${footerY}" font-family="${fontHead}" font-size="32" font-weight="800" letter-spacing="2" fill="${p.accent}">${escXml(ctaText)}</text>` : ""}
+      </g>`;
+  } else {
+    footerSVG = swipeFooter(p, f, typo);
+  }
 
   return `
   <svg width="${f.w}" height="${f.h}" viewBox="0 0 ${f.w} ${f.h}" xmlns="http://www.w3.org/2000/svg">
@@ -483,7 +500,7 @@ function renderHookSVG(p, f, slide, category, scrimStrength, typo) {
     ${pillHeader(p, f, category.displayName, category.slug, slide.slideNumber, slide.totalSlides, typo)}
     <text x="${m}" y="${startY}" font-family="${fontHead}" font-size="${size}" font-weight="700">${tspansEmphasis(lines, m, startY, lineH, emphasisIdx, p.accent, p.primaryText)}</text>
     ${supportLines.length ? `<text x="${m}" y="${supportY}" font-family="${fontBody}" font-size="${f.hookSupportSize}" fill="${p.secondaryText}">${tspans(supportLines, m, supportY, f.hookSupportLine)}</text>` : ""}
-    ${swipeFooter(p, f, typo)}
+    ${footerSVG}
   </svg>`;
 }
 
@@ -775,7 +792,7 @@ function renderBodySVG(p, f, slide, category, scrimStrength, typo) {
     ${hasCtaLine ? `<text x="${m}" y="${footerDividerY - 32}" font-family="${fontHead}" font-size="34" fill="${p.accent}">${escXml((slide.ctaLine||"").toUpperCase())}</text>` : ""}
     <rect x="${m}" y="${footerDividerY}" width="${f.w-2*m}" height="1" fill="${p.muted}" opacity="0.4"/>
     ${slide.tag ? `<rect x="${m}" y="${footerY-32}" width="${40+slide.tag.length*15}" height="44" rx="22" fill="none" stroke="${p.muted}" stroke-width="1.5"/><text x="${m+20}" y="${footerY-4}" font-family="${fontBody}" font-size="22" font-weight="600" letter-spacing="1" fill="${p.secondaryText}">${escXml((slide.tag||"").toUpperCase())}</text>` : ""}
-    ${hasCtaLine ? "" : swipeArrow(p, f, f.w - m, footerY - 4)}
+    ${(hasCtaLine || (slide.totalSlides || 1) <= 1) ? "" : swipeArrow(p, f, f.w - m, footerY - 4)}
   </svg>`;
 }
 
@@ -908,7 +925,11 @@ async function renderStatCard(slide, category, paletteKey, format, imageUrl, opt
   const cat = typeof category === "string" ? { displayName: category, slug: "default" } : (category || { displayName: "", slug: "default" });
 
   let cover = slide.customImage ? await coverFromBase64(slide.customImage, f.w, f.h) : null;
-  if (!cover && (type === "hook" || slide.useCover || slide.imageUrl)) cover = await fetchCoverImage(slide.imageUrl || imageUrl, f.w, f.h);
+  const isSingle = (slide.totalSlides || 1) <= 1;
+  const isFirstSlide = (slide.slideNumber || 1) === 1;
+  const wantsCover = type === "hook" || slide.useCover || slide.imageUrl || isFirstSlide || isSingle;
+  const photoUrl = slide.imageUrl || (wantsCover ? imageUrl : null);
+  if (!cover && photoUrl) cover = await fetchCoverImage(photoUrl, f.w, f.h);
   if (!cover) {
     const localPath = pickLocalBackground(cat.slug, type);
     if (localPath) cover = await coverFromLocalFile(localPath, f.w, f.h);

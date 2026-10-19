@@ -15,12 +15,13 @@ test("core.js implements progressive disclosure with Done/Change toggles and hid
   assert.match(CORE_JS, /window\.toggleRail = \(tid, label\) =>/);
 });
 
-test("core.js replaces emoji glyphs with clean app-like SVG icons for tones and formats", () => {
-  assert.match(CORE_JS, /const TONE_ICONS = \{/);
-  assert.match(CORE_JS, /h-icon-svg/);
-  assert.doesNotMatch(CORE_JS, /const TONE_VIS = \{normal:\["😐"/);
+test("core.js renders compact interactive format and tone glyphs without blank boxes", () => {
+  assert.match(CORE_JS, /const TONE_VIS = \{/);
+  assert.match(CORE_JS, /h-emoji/);
   assert.match(CORE_JS, /const fmtIcon = \(c\) =>/);
   assert.match(CORE_JS, /h-fmt-vis/);
+  assert.match(CORE_JS, /h-card-tone/);
+  assert.match(CORE_JS, /h-card-fmt/);
 });
 
 test("core.js selection handlers advance progressively to next step and collapse previous", () => {
