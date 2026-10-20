@@ -31,7 +31,7 @@ const I = {
 // ─── DATA ───────────────────────────────────────────────────────────────────
 const NICHES = {"Sports":["Football/Soccer","Basketball","Tennis","Cricket","Formula 1","Boxing","MMA/UFC","WWE Wrestling","American Football","Baseball","Ice Hockey","Golf","Rugby","Athletics/Track","Cycling","Swimming","Esports","Volleyball"],"Entertainment":["Celebrity Gossip","Music (Afrobeats)","Music (Hip-Hop)","Music (Pop)","Music (R&B)","Music (K-Pop)","Music (Amapiano)","Movies & TV","Anime","Korean Drama","Bollywood","Pop Culture"],"Gaming":["Console Gaming","PC Gaming","Mobile Gaming","Game Reviews","Twitch Streaming","YouTube Gaming"],"Lifestyle":["Travel","Food & Recipes","Fitness & Gym","Mental Health","Relationships & Dating","Parenting","Minimalism","Home Decor","Pets"],"Fashion & Beauty":["Streetwear","Luxury Fashion","Skincare","Makeup","Haircare"],"Finance":["Personal Finance","Crypto","Stock Market","Side Hustles","Business News","Real Estate Investing","Budgeting"],"Tech":["AI & Tech News","Gadget Reviews","Coding & Dev Life","Startups","Cybersecurity","Space & Science"],"Education":["Science","History","Language Learning","Productivity","Study Tips","Philosophy","Psychology"],"Commentary":["Yapping Videos","Hot Takes","Rants","Storytelling","Political Commentary","True Crime","Mystery & Unexplained"],"Trends":["Viral Dances","Trend Reaction","Challenge Content"],"Creator":["YouTube Growth","Social Media Tips","Brand Deals","Monetization Advice"],"Professional":["Medicine & Health","Law","Marketing","Entrepreneurship","Motivational Speaking"],"Culture":["Faith & Religion","African Culture","Caribbean Culture","Astrology","Self-Development"]};
 const PLATS = [{id:"tiktok",label:"TikTok"},{id:"instagram",label:"Instagram"},{id:"youtube",label:"YouTube"},{id:"twitter",label:"X"},{id:"facebook",label:"Facebook"},{id:"linkedin",label:"LinkedIn"}];
-const PTYPES = {tiktok:["TikTok Script","TikTok No-Face Graphic","Caption + Hashtags"],instagram:["IG Reel Script","IG Carousel","Caption + Hashtags"],youtube:["Long Form Script","YouTube Short Script","Title + Description","Thumbnail"],twitter:["Hot Take Tweet","Engagement Tweet","Thread (5 tweets)"],facebook:["Long-Form Post","Engagement Post"],linkedin:["Thought Leadership","Professional Update"]};
+const PTYPES = {tiktok:["TikTok Script","TikTok No-Face Graphic","TikTok Silent Camera","Caption + Hashtags"],instagram:["IG Reel Script","IG Carousel","Caption + Hashtags"],youtube:["Long Form Script","YouTube Short Script","Title + Description","Thumbnail"],twitter:["Hot Take Tweet","Engagement Tweet","Thread (5 tweets)"],facebook:["Long-Form Post","Engagement Post"],linkedin:["Thought Leadership","Professional Update"]};
 const TONES = [{id:"normal",label:"Neutral"},{id:"funny",label:"Banter"},{id:"educative",label:"Educative"},{id:"hype",label:"Hot Take"},{id:"storytelling",label:"Storytelling"}];
 // Gradient palette options exposed to the user — must match the PALETTE keys
 // in services/statCard.js.
@@ -1515,10 +1515,11 @@ window.gen = async (tid, all) => {
     const types = all ? (PTYPES[plat]||[]) : [ct];
     const out = [];
     for(const c of types){
-      if(c === "IG Carousel" || c === "TikTok No-Face Graphic"){
+      if(c === "IG Carousel" || c === "TikTok No-Face Graphic" || c === "TikTok Silent Camera"){
         const category = nicheToCategory(t.niche);
-        const isSingle = c === "TikTok No-Face Graphic";
-        const cardFormat = isSingle ? "tiktok" : plat;
+        const isSilentCamera = c === "TikTok Silent Camera";
+        const isSingle = c === "TikTok No-Face Graphic" || isSilentCamera;
+        const cardFormat = isSilentCamera ? "tiktok_silent" : isSingle ? "tiktok" : plat;
         const requestedCount = isSingle ? 1 : (S.slideCount[tid] || 4);
         // Only 6+ slides earns a dedicated CTA slide — below that, there's
         // too little actual story to justify spending a whole slide on
@@ -1557,7 +1558,7 @@ window.gen = async (tid, all) => {
             `${category.name} single post. Raw source headline: "${t.headline}". Full source text: ${sourceText}`, tone
           );
           const single = extractJSON(sr) || {};
-          slideArr = [{ type: "body", headline: single.headline || t.headline, body: single.body || sourceText, tag: single.tag || null, ctaLine: "FOLLOW FOR MORE →", sourceLabel: t.source || null, useCover: isSingle }];
+          slideArr = [{ type: isSilentCamera ? "hook" : "body", headline: single.headline || t.headline, supportingText: isSilentCamera ? (single.body || sourceText) : undefined, body: isSilentCamera ? undefined : (single.body || sourceText), tag: single.tag || null, ctaLine: "FOLLOW FOR MORE →", sourceLabel: t.source || null, useCover: isSingle, silentCamera: isSilentCamera }];
         } else if(!useDedicatedOutro){
           // 2-5 slides: CTA folded onto the last body slide instead of
           // spending a whole separate slide on it. Hook + body slides all
