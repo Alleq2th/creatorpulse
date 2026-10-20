@@ -403,6 +403,63 @@ function backgroundLayer(p, f, scrimStrength, slideType) {
   return `<defs>${gradientDefs(p, f.w, f.h)}</defs><rect width="${f.w}" height="${f.h}" fill="url(#bgGrad)"/>${decorativeTexture(p, f, slideType)}`;
 }
 
+// Polished no-source-image treatment: intentional editorial canvas with a
+// clearly labeled source-photo fallback, instead of a blank/dark placeholder.
+function photoMissingLayer(p, f, typo) {
+  const font = (typo && typo.body) ? typo.body : FONT_SANS;
+  const labelY = Math.round(f.h * 0.62);
+  const cx = f.w - f.margin - 82;
+  const cy = labelY - 6;
+  return `<defs>
+    ${gradientDefs(p, f.w, f.h)}
+    <radialGradient id="fallbackGlow" cx="${cx}" cy="${cy}" r="${Math.max(f.w, f.h) * 0.58}" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="${p.accent}" stop-opacity="0.23"/><stop offset="100%" stop-color="${p.accent}" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="fallbackGrid" width="64" height="64" patternUnits="userSpaceOnUse">
+      <path d="M 64 0 L 0 0 0 64" fill="none" stroke="${p.accent}" stroke-width="1" stroke-opacity="0.055"/>
+    </pattern>
+  </defs>
+  <rect width="${f.w}" height="${f.h}" fill="url(#bgGrad)"/>
+  <rect width="${f.w}" height="${f.h}" fill="url(#fallbackGlow)"/>
+  <rect width="${f.w}" height="${f.h}" fill="url(#fallbackGrid)"/>
+  <rect x="${f.margin}" y="${f.margin}" width="${f.w-2*f.margin}" height="${f.h-2*f.margin}" rx="26" fill="none" stroke="${p.accent}" stroke-opacity="0.18" stroke-width="2"/>
+  <g transform="translate(${cx},${cy-32})" fill="none" stroke="${p.accent}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="0.9">
+    <rect x="-32" y="-24" width="64" height="48" rx="8"/><circle cx="-12" cy="-8" r="5"/><path d="m-28 16 17-16 11 10 8-7 20 17"/>
+  </g>
+  <text x="${cx}" y="${labelY+45}" text-anchor="middle" font-family="${font}" font-size="22" font-weight="700" letter-spacing="2" fill="${p.secondaryText}">SOURCE PHOTO UNAVAILABLE</text>`;
+}
+
+// Compose a photo as a deliberate editorial feature: portrait-first crop,
+// rounded frame, subtle accent border and gradient treatment on the full
+// canvas. This keeps the article photo visible while leaving designed space
+// for the headline and supporting copy.
+async function buildEditorialPhotoCover(source, p, f, typo, type) {
+  if (!source) return null;
+  try {
+    const tall = f.h > 1500;
+    const photoW = f.w - 2 * f.margin;
+    const photoH = Math.round(f.h * (tall ? 0.43 : 0.39));
+    const photoTop = Math.round(f.h * (tall ? 0.29 : 0.27));
+    const radius = Math.round(f.w * 0.022);
+    let photo = await sharp(source.buffer)
+      .resize(photoW, photoH, { fit: "cover", position: sharp.strategy.attention, withoutEnlargement: false })
+      .modulate({ saturation: 1.04 })
+      .jpeg({ quality: 92, mozjpeg: true })
+      .toBuffer();
+    const mask = Buffer.from(`<svg width="${photoW}" height="${photoH}" xmlns="http://www.w3.org/2000/svg"><rect width="${photoW}" height="${photoH}" rx="${radius}" fill="#fff"/></svg>`);
+    photo = await sharp(photo).composite([{ input: mask, blend: "dest-in" }]).png().toBuffer();
+    const baseSvg = `<svg width="${f.w}" height="${f.h}" xmlns="http://www.w3.org/2000/svg">${photoMissingLayer(p, f, typo).replace(/SOURCE PHOTO UNAVAILABLE/g, "")}</svg>`;
+    const accent = Buffer.from(`<svg width="${f.w}" height="${f.h}" xmlns="http://www.w3.org/2000/svg"><rect x="${f.margin}" y="${photoTop}" width="${photoW}" height="${photoH}" rx="${radius}" fill="none" stroke="${p.accent}" stroke-opacity="0.72" stroke-width="3"/><rect x="${f.margin+8}" y="${photoTop+8}" width="${photoW-16}" height="${photoH-16}" rx="${Math.max(2,radius-8)}" fill="none" stroke="#ffffff" stroke-opacity="0.14" stroke-width="1"/></svg>`);
+    const base = await sharp(Buffer.from(baseSvg)).png().toBuffer();
+    return await sharp(base).composite([
+      { input: photo, left: f.margin, top: photoTop },
+      { input: accent }
+    ]).png().toBuffer();
+  } catch (e) {
+    return null;
+  }
+}
+
 // ── Header ────────────────────────────────────────────────────────────
 // Plain variant (body/outro slides): [icon] CATEGORY | divider ... counter,
 // with a segmented progress-dash row underneath.
@@ -840,7 +897,7 @@ async function fetchCoverImage(imageUrl, w, h) {
     if (!r.ok) return null;
     const arrayBuffer = await r.arrayBuffer();
     const buf = Buffer.from(arrayBuffer);
-    const cover = await sharp(buf).resize(w, h, { fit: "cover", position: "attention" }).jpeg({ quality: 90 }).toBuffer();
+    const cover = await sharp(buf).resize(w, h, { fit: "cover", position: sharp.strategy.attention }).jpeg({ quality: 90 }).toBuffer();
     const stats = await sharp(cover).stats();
     const avgLum = stats.channels.slice(0, 3).reduce((s, c) => s + c.mean, 0) / 3 / 255; // 0-1
     return { buffer: cover, brightness: avgLum };
@@ -887,7 +944,7 @@ function pickLocalBackground(slug, slideType) {
 // mirroring fetchCoverImage's output shape so both sources are interchangeable.
 async function coverFromLocalFile(filePath, w, h) {
   try {
-    const cover = await sharp(filePath).resize(w, h, { fit: "cover", position: "attention" }).jpeg({ quality: 90 }).toBuffer();
+    const cover = await sharp(filePath).resize(w, h, { fit: "cover", position: sharp.strategy.attention }).jpeg({ quality: 90 }).toBuffer();
     const stats = await sharp(cover).stats();
     const avgLum = stats.channels.slice(0, 3).reduce((s, c) => s + c.mean, 0) / 3 / 255;
     return { buffer: cover, brightness: avgLum };
@@ -904,7 +961,7 @@ async function coverFromBase64(dataUrl, w, h) {
   try {
     const base64 = String(dataUrl).replace(/^data:image\/\w+;base64,/, "");
     const buf = Buffer.from(base64, "base64");
-    const cover = await sharp(buf).resize(w, h, { fit: "cover", position: "attention" }).jpeg({ quality: 90 }).toBuffer();
+    const cover = await sharp(buf).resize(w, h, { fit: "cover", position: sharp.strategy.attention }).jpeg({ quality: 90 }).toBuffer();
     const stats = await sharp(cover).stats();
     const avgLum = stats.channels.slice(0, 3).reduce((s, c) => s + c.mean, 0) / 3 / 255;
     return { buffer: cover, brightness: avgLum };
@@ -940,7 +997,16 @@ async function renderStatCard(slide, category, paletteKey, format, imageUrl, opt
     : type === "outro" ? renderOutroSVG(p, f, slide, cat, scrimStrength, typo)
     : renderBodySVG(p, f, slide, cat, scrimStrength, typo);
 
-  const textLayer = await sharp(Buffer.from(svg)).png().toBuffer();
+  const photoUrlForCard = slide.imageUrl || imageUrl;
+  const labels = [];
+  if (slide.silentCamera) {
+    labels.push(`<g><rect x="${f.margin}" y="${f.h-142}" width="310" height="42" rx="21" fill="${p.backgroundEnd}" fill-opacity="0.82" stroke="${p.accent}" stroke-opacity="0.8" stroke-width="2"/><text x="${f.margin+20}" y="${f.h-114}" font-family="${typo.body}" font-size="17" font-weight="700" letter-spacing="1.4" fill="${p.primaryText}">SILENT CAMERA · ON-SCREEN TEXT</text></g>`);
+  }
+  if (photoUrlForCard && !cover && !slide.customImage) {
+    labels.push(`<g><rect x="${f.margin}" y="${f.h-198}" width="300" height="42" rx="21" fill="${p.backgroundEnd}" fill-opacity="0.88" stroke="${p.accent}" stroke-opacity="0.7" stroke-width="2"/><text x="${f.margin+20}" y="${f.h-170}" font-family="${typo.body}" font-size="17" font-weight="700" letter-spacing="1.2" fill="${p.primaryText}">SOURCE PHOTO UNAVAILABLE</text></g>`);
+  }
+  const labeledSvg = labels.length ? svg.replace("</svg>", `${labels.join("")}</svg>`) : svg;
+  const textLayer = await sharp(Buffer.from(labeledSvg)).png().toBuffer();
   if (!cover) return textLayer;
   return sharp(cover.buffer).composite([{ input: textLayer }]).png().toBuffer();
 }
@@ -979,6 +1045,8 @@ module.exports = {
   resolveFormat,
   resolveTypography,
   resolveDensity,
+  photoMissingLayer,
+  buildEditorialPhotoCover,
   CATEGORY_ICON,
   CATEGORY_ICON_OVERRIDES
 };
