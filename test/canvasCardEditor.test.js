@@ -30,5 +30,5 @@ test('server renderer supports saved positions and sizes for headline and suppor
 test('canvas editor is responsive, touch-enabled, and has a fresh browser cache key', () => {
   assert.match(html, /cp-canvas-stage[^}]*touch-action:none/);
   assert.match(html, /cp-canvas-resize/);
-  assert.match(html, /core\.js\?v=38/);
+  assert.match(html, /core\.js\?v=39/);
 });
