@@ -1301,6 +1301,15 @@ function renderPlatformMockup(o, tid, idx, curPlat) {
   return `<div class="mock-wrap">${tabs}${inner}</div>`;
 }
 
+function renderCardCanvasEditor(o, tid, idx, slideIndex, slide, imageUrl, aspectRatio) {
+  const key = `${tid}-${idx}-${slideIndex}`;
+  const layout = slide?.textLayout || {};
+  const headline = layout.headline || { x: 0.08, y: 0.25, width: 0.78, height: 0.2 };
+  const support = layout.supportingText || { x: 0.08, y: 0.48, width: 0.78, height: 0.18 };
+  const box = (name, label, pos) => `<div class="cp-canvas-block" data-canvas-key="${key}" data-canvas-block="${name}" tabindex="0" role="slider" aria-label="Drag or resize ${label}" style="left:${pos.x*100}%;top:${pos.y*100}%;width:${pos.width*100}%;height:${pos.height*100}%"><span class="cp-canvas-label">${label}</span><button type="button" class="cp-canvas-resize" data-canvas-resize="true" aria-label="Resize ${label}"></button></div>`;
+  return `<details class="cp-canvas-editor"><summary>Edit layout on canvas</summary><div class="cp-canvas-instructions">Drag a block to move it. Drag its lower-right handle to resize. Apply to update the card image.</div><div class="cp-canvas-stage" data-canvas-stage="${key}" style="aspect-ratio:${aspectRatio}"><img src="${imageUrl||slide?.img||o.img||''}" alt="Card canvas preview" draggable="false" onerror="cardImgFail(this, this.dataset.fb)" data-fb="${slide?.localImg||o.fallbackImg||''}"/><div class="cp-canvas-blocks" data-canvas-key="${key}" data-slide-index="${slideIndex}" data-card-key="${tid}-${idx}">${box('headline','Headline',headline)}${box('supportingText','Supporting text',support)}</div></div><div class="cp-canvas-actions"><button type="button" class="btn bo bxs" onclick="resetCardCanvas('${tid}',${idx},${slideIndex})">Reset layout</button><button type="button" class="btn bp bxs" onclick="applyCanvasLayout('${tid}',${idx},${slideIndex})">Apply layout</button></div></details>`;
+}
+
 function renderOut(o, tid, idx){
   if(!o) return "";
   const prevKey = `${tid}-${idx}`;
@@ -1319,6 +1328,7 @@ function renderOut(o, tid, idx){
       <div class="oh">${badge}<span style="font-size:10.5px;color:var(--mu)">Swipe format above to test</span></div>
       ${mockupHTML}
       ${o.isCard ? `<details style="margin:0 10px 10px;background:var(--sf);border-radius:6px;padding:8px 12px;border:1px solid var(--br)"><summary style="cursor:pointer;font-size:11px;font-weight:600;color:var(--mu2)">Edit text &amp; framing</summary><div style="display:grid;gap:8px;padding-top:10px"><label style="font-size:11px;color:var(--mu2)">Headline<textarea oninput="setCardText('${tid}',${idx},'headline',this.value)" style="width:100%;min-height:54px">${esc(o.editSlide?.headline||S.trends.find(t=>t.id===tid)?.headline||'')}</textarea></label><label style="font-size:11px;color:var(--mu2)">Supporting text<textarea oninput="setCardText('${tid}',${idx},'supportingText',this.value)" style="width:100%;min-height:54px">${esc(o.editSlide?.supportingText||'')}</textarea></label><label style="font-size:11px;color:var(--mu2)">Move headline vertically<input type="range" min="-240" max="240" step="8" value="${Number(o.editSlide?.textOffset||0)}" oninput="setCardText('${tid}',${idx},'textOffset',this.value)" style="width:100%"/></label><button class="btn bo bxs" onclick="applyCardText('${tid}',${idx})">Update card text</button></div></details>` : ""}
+      ${o.isCard ? renderCardCanvasEditor(o,tid,idx,0,o.editSlide||{headline:S.trends.find(t=>t.id===tid)?.headline||o.label},o.img,aspectRatioCSS.replace('/','/')) : ""}
       <details style="margin:0 10px 10px;background:var(--sf);border-radius:6px;padding:8px 12px;border:1px solid var(--br)">
         <summary style="cursor:pointer;font-size:11px;font-weight:600;color:var(--mu2)">View raw image canvas</summary>
         <div style="padding:10px 0"><img loading="lazy" decoding="async" src="${o.img}" data-fb="${o.fallbackImg||""}" onerror="cardImgFail(this, this.dataset.fb)" style="width:100%;max-width:280px;margin:0 auto;display:block;aspect-ratio:${aspectRatioCSS};object-fit:contain;border-radius:6px"/></div>
@@ -1332,7 +1342,7 @@ function renderOut(o, tid, idx){
   }
   if(o.type === "carousel"){
     const slideText = s => [s.headline, s.stat && s.statLabel ? `${s.stat} — ${s.statLabel}` : s.stat, s.sectionLabel, s.body, s.supportingText].filter(Boolean).join("\n");
-    const slides = (o.slides||[]).map((s,si)=>`<div style="padding:8px 0;border-bottom:1px solid var(--br)"><div style="display:flex;align-items:center;justify-content:space-between"><div style="font-size:10px;color:var(--mu);font-weight:600">Slide ${s.slideNumber} · ${esc(s.type||"")}</div><div style="display:flex;gap:4px;align-items:center">${o._imgLoading===si?`<span style="font-size:10px;color:var(--mu)">Applying…</span>`:`${s.img?`<button class="btn bo bxs tipbtn" data-tip="Download this slide" title="Download this slide" aria-label="Download slide ${s.slideNumber}" onclick="dl('${s.img}','slide-${s.slideNumber}.png')" style="padding:3px 8px">${I.dl}</button>`:""}<input type="file" accept="image/*" id="slideimg-${tid}-${idx}-${si}" style="display:none" onchange="setSlideBackgroundImage('${tid}',${idx},${si},this.files[0])"/><button class="btn bo bxs tipbtn" data-tip="Use your own photo as this slide's background" title="Add background image" aria-label="Add background image for slide ${s.slideNumber}" onclick="document.getElementById('slideimg-${tid}-${idx}-${si}').click()" style="padding:3px 8px">${I.image}</button>`}</div></div>${s.img?`<img loading="lazy" decoding="async" src="${s.img}" data-fb="${s.localImg||""}" onerror="cardImgFail(this, this.dataset.fb)" style="width:100%;border-radius:6px;margin-top:6px;aspect-ratio:4/5;object-fit:cover"/>`:""}<details style="margin-top:7px"><summary style="cursor:pointer;font-size:10px;color:var(--mu2)">Edit this slide</summary><div style="display:grid;gap:6px;padding:7px 0"><label style="font-size:10px;color:var(--mu2)">Headline<textarea oninput="setSlideText('${tid}',${idx},${si},'headline',this.value)" style="width:100%;min-height:42px">${esc(s._edit?.headline??s.headline??'')}</textarea></label><label style="font-size:10px;color:var(--mu2)">Supporting text<textarea oninput="setSlideText('${tid}',${idx},${si},'supportingText',this.value)" style="width:100%;min-height:42px">${esc(s._edit?.supportingText??s.supportingText??s.body??'')}</textarea></label><label style="font-size:10px;color:var(--mu2)">Move headline vertically<input type="range" min="-240" max="240" step="8" value="${Number(s._edit?.textOffset??s.textOffset??0)}" oninput="setSlideText('${tid}',${idx},${si},'textOffset',this.value)" style="width:100%"/></label><button class="btn bo bxs" onclick="applyCardText('${tid}',${idx},${si})">Update slide</button></div></details></div>`).join("");
+    const slides = (o.slides||[]).map((s,si)=>`<div style="padding:8px 0;border-bottom:1px solid var(--br)"><div style="display:flex;align-items:center;justify-content:space-between"><div style="font-size:10px;color:var(--mu);font-weight:600">Slide ${s.slideNumber} · ${esc(s.type||"")}</div><div style="display:flex;gap:4px;align-items:center">${o._imgLoading===si?`<span style="font-size:10px;color:var(--mu)">Applying…</span>`:`${s.img?`<button class="btn bo bxs tipbtn" data-tip="Download this slide" title="Download this slide" aria-label="Download slide ${s.slideNumber}" onclick="dl('${s.img}','slide-${s.slideNumber}.png')" style="padding:3px 8px">${I.dl}</button>`:""}<input type="file" accept="image/*" id="slideimg-${tid}-${idx}-${si}" style="display:none" onchange="setSlideBackgroundImage('${tid}',${idx},${si},this.files[0])"/><button class="btn bo bxs tipbtn" data-tip="Use your own photo as this slide's background" title="Add background image" aria-label="Add background image for slide ${s.slideNumber}" onclick="document.getElementById('slideimg-${tid}-${idx}-${si}').click()" style="padding:3px 8px">${I.image}</button>`}</div></div>${s.img?`<img loading="lazy" decoding="async" src="${s.img}" data-fb="${s.localImg||""}" onerror="cardImgFail(this, this.dataset.fb)" style="width:100%;border-radius:6px;margin-top:6px;aspect-ratio:4/5;object-fit:cover"/>`:""}${renderCardCanvasEditor(o,tid,idx,si,s,s.img,"4/5")}<details style="margin-top:7px"><summary style="cursor:pointer;font-size:10px;color:var(--mu2)">Edit this slide</summary><div style="display:grid;gap:6px;padding:7px 0"><label style="font-size:10px;color:var(--mu2)">Headline<textarea oninput="setSlideText('${tid}',${idx},${si},'headline',this.value)" style="width:100%;min-height:42px">${esc(s._edit?.headline??s.headline??'')}</textarea></label><label style="font-size:10px;color:var(--mu2)">Supporting text<textarea oninput="setSlideText('${tid}',${idx},${si},'supportingText',this.value)" style="width:100%;min-height:42px">${esc(s._edit?.supportingText??s.supportingText??s.body??'')}</textarea></label><label style="font-size:10px;color:var(--mu2)">Move headline vertically<input type="range" min="-240" max="240" step="8" value="${Number(s._edit?.textOffset??s.textOffset??0)}" oninput="setSlideText('${tid}',${idx},${si},'textOffset',this.value)" style="width:100%"/></label><button class="btn bo bxs" onclick="applyCardText('${tid}',${idx},${si})">Update slide</button></div></details></div>`).join("");
     const cp = (o.slides||[]).map(s=>`SLIDE ${s.slideNumber}: ${slideText(s)}`).join("\n\n");
     const imgs = (o.slides||[]).map(s=>s.img).filter(Boolean);
     const dlAllBtn = imgs.length ? `<button class="btn bo bxs tipbtn" data-tip="Download all slide images" title="Download all slides" aria-label="Download all slides" onclick='dlAll(${JSON.stringify(imgs)})'>${I.dl} All</button>` : "";
@@ -1506,6 +1516,49 @@ window.setCardDensity = (tid,v) => { S.cardDensity=S.cardDensity||{}; S.railExp=
 window.setBrandPreset = (tid,id) => { const b=BRAND_PRESETS[id]; if(!b)return; S.brandPreset[tid]=id; S.palette[tid]=b.palette; S.cardTheme[tid]=b.theme; S.cardTypography[tid]=b.typography; render(); };
 window.setFocalPoint = (tid,axis,value) => { S.focalPoint=S.focalPoint||{}; const p=S.focalPoint[tid]||{x:50,y:50}; p[axis]=Number(value); S.focalPoint[tid]=p; const el=document.querySelector(`[data-focal-label="${tid}"]`); if(el)el.textContent=`${p.x}% · ${p.y}%`; };
 window.applyFocalPoint = async (tid,idx) => { const o=S.outs[tid]?.[idx]; if(!o)return; const p=S.focalPoint[tid]||{x:50,y:50}; const ctx=o._renderCtx||{category:nicheToCategory(S.trends.find(t=>t.id===tid)?.niche),palette:S.palette[tid]||"noir_orange",format:o.aspect||"instagram",imageUrl:S.trends.find(t=>t.id===tid)?.image,theme:S.cardTheme[tid],typography:S.cardTypography[tid],density:S.cardDensity[tid]}; o._imgLoading=0; render(); try { const slides=o.type==="carousel"?o.slides:[{headline:S.trends.find(t=>t.id===tid)?.headline||o.label, type:"hook", slideNumber:1,totalSlides:1,imageUrl:ctx.imageUrl}]; const cd=await generateCardsWithRetry({...ctx,slides,focalPoint:{x:p.x/100,y:p.y/100},brand:BRAND_PRESETS[S.brandPreset[tid]||"creator"]}); (cd.images||[]).forEach((img,i)=>{if(o.type==="carousel"&&o.slides[i])o.slides[i].img=img; else if(i===0)o.img=img;}); } catch(e){toast("Couldn't reframe the source image. Try again.");} o._imgLoading=null; render(); };
+const cardCanvasPointer = (() => {
+  let active = null;
+  document.addEventListener("pointerdown", (event) => {
+    const block = event.target.closest(".cp-canvas-block");
+    if (!block) return;
+    const stage = block.closest(".cp-canvas-stage");
+    if (!stage) return;
+    const rect = stage.getBoundingClientRect();
+    const resizing = !!event.target.closest("[data-canvas-resize]");
+    const boxRect = block.getBoundingClientRect();
+    active = { block, rect, startX:event.clientX, startY:event.clientY, left:boxRect.left-rect.left, top:boxRect.top-rect.top, width:boxRect.width, height:boxRect.height, resizing };
+    block.setPointerCapture?.(event.pointerId);
+    block.classList.add("is-active");
+    event.preventDefault();
+  });
+  document.addEventListener("pointermove", (event) => {
+    if (!active) return;
+    const {block,rect,startX,startY,left,top,width,height,resizing}=active;
+    const dx=event.clientX-startX, dy=event.clientY-startY;
+    const w=resizing?Math.max(44,Math.min(rect.width-left,width+dx)):width;
+    const h=resizing?Math.max(36,Math.min(rect.height-top,height+dy)):height;
+    const x=resizing?left:Math.max(0,Math.min(rect.width-width,left+dx));
+    const y=resizing?top:Math.max(0,Math.min(rect.height-height,top+dy));
+    block.style.left=`${x/rect.width*100}%`; block.style.top=`${y/rect.height*100}%`;
+    block.style.width=`${w/rect.width*100}%`; block.style.height=`${h/rect.height*100}%`;
+  });
+  const finish=()=>{ if(!active)return; active.block.classList.remove("is-active"); active=null; };
+  document.addEventListener("pointerup",finish); document.addEventListener("pointercancel",finish);
+  return true;
+})();
+window.resetCardCanvas = (tid,idx,slideIndex) => { const slide=S.outs[tid]?.[idx]?.type==="carousel"?S.outs[tid][idx].slides[slideIndex]:S.outs[tid]?.[idx]?.editSlide; if(slide)delete slide.textLayout; render(); };
+window.applyCanvasLayout = async (tid,idx,slideIndex) => {
+  const o=S.outs[tid]?.[idx]; if(!o)return;
+  const blocks=document.querySelectorAll(`[data-canvas-key="${tid}-${idx}-${slideIndex}"][data-canvas-block]`);
+  const stage=document.querySelector(`[data-canvas-stage="${tid}-${idx}-${slideIndex}"]`); if(!stage)return;
+  const rect=stage.getBoundingClientRect(), layout={};
+  blocks.forEach(el=>{const b=el.getBoundingClientRect();layout[el.dataset.canvasBlock]={x:(b.left-rect.left)/rect.width,y:(b.top-rect.top)/rect.height,width:b.width/rect.width,height:b.height/rect.height};});
+  const slide=o.type==="carousel"?o.slides[slideIndex]:(o.editSlide||(o.editSlide={type:"hook",headline:S.trends.find(t=>t.id===tid)?.headline||o.label,slideNumber:1,totalSlides:1,imageUrl:o._renderCtx?.imageUrl}));
+  slide.textLayout=layout;
+  const ctx=o._renderCtx; if(!ctx)return;
+  try { const cd=await generateCardsWithRetry({...ctx,slides:[slide],focalPoint:S.focalPoint[tid]?{x:S.focalPoint[tid].x/100,y:S.focalPoint[tid].y/100}:null,brand:BRAND_PRESETS[S.brandPreset[tid]||"creator"]}); if(cd.images?.[0]){if(o.type==="carousel")slide.img=cd.images[0];else o.img=cd.images[0]; render();toast("Card layout updated");} } catch(e){toast("Couldn't apply that layout. Try again.");}
+};
+
 window.setCardText = (tid,idx,key,value) => { const o=S.outs[tid]?.[idx]; if(!o)return; o.editSlide=o.editSlide||{type:"hook",headline:S.trends.find(t=>t.id===tid)?.headline||o.label,slideNumber:1,totalSlides:1,imageUrl:o._renderCtx?.imageUrl}; o.editSlide[key]=key==="textOffset"?Number(value):value; };
 window.setSlideText = (tid,idx,slideIndex,key,value) => { const slide=S.outs[tid]?.[idx]?.slides?.[slideIndex]; if(!slide)return; slide._edit=slide._edit||{}; slide._edit[key]=key==="textOffset"?Number(value):value; };
 window.applyCardText = async (tid,idx,slideIndex=null) => { const o=S.outs[tid]?.[idx]; if(!o)return; const ctx=o._renderCtx; if(!ctx){toast("This image cannot be edited as a card.");return;} const carouselSlide=o.type==="carousel"?o.slides[slideIndex??0]:null; const base=carouselSlide||o.editSlide||{type:"hook",headline:S.trends.find(t=>t.id===tid)?.headline||o.label,slideNumber:1,totalSlides:1,imageUrl:ctx.imageUrl}; const edited={...base,...(carouselSlide?carouselSlide._edit||{}:o.editSlide||{})}; try { const cd=await generateCardsWithRetry({...ctx,slides:[edited],focalPoint:S.focalPoint[tid]?{x:S.focalPoint[tid].x/100,y:S.focalPoint[tid].y/100}:null,brand:BRAND_PRESETS[S.brandPreset[tid]||"creator"]}); if(cd.images?.[0]) { if(carouselSlide){carouselSlide.img=cd.images[0];carouselSlide._edit=edited;} else {o.img=cd.images[0];o.editSlide=edited;} render(); toast("Card text updated"); } } catch(e){toast("Couldn't update the card text.");} };
@@ -1626,7 +1679,7 @@ window.gen = async (tid, all) => {
         const localOpts = { palette: S.palette[tid] || "noir_orange", theme: S.cardTheme[tid] || "modern_dark", typography: S.cardTypography[tid] || "impact", density: S.cardDensity[tid] || "balanced", format: cardFormat, total: slideArr.length };
         slideArr.forEach((s,i)=>{ s.slideNumber = i+1; if (articleImage && !s.customImage) s.imageUrl = articleImage; s.localImg = localCardImage(s, localOpts); s.img = cardImgs[i] || s.localImg; });
         const imgsFinal = slideArr.map(s=>s.img);
-        out.push(isSingle ? {type:"image", img: imgsFinal[0], fallbackImg: slideArr[0].localImg, aspect: isThumbnail ? "youtube" : isSilentCamera ? "tiktok" : "tiktok", isCard:true, silentCamera:isSilentCamera, sourceLabel:t.source||"Article photo", _renderCtx:{category,palette:localOpts.palette,format:cardFormat,imageUrl:articleImage,theme:localOpts.theme,typography:localOpts.typography,density:localOpts.density}} : {type:"carousel", slides: slideArr, images: imgsFinal, _renderCtx: { category, palette: localOpts.palette, format: cardFormat, imageUrl: articleImage, theme: localOpts.theme, typography: localOpts.typography, density: localOpts.density }});
+        out.push(isSingle ? {type:"image", img: imgsFinal[0], fallbackImg: slideArr[0].localImg, aspect: isThumbnail ? "youtube" : isSilentCamera ? "tiktok" : "tiktok", isCard:true, editSlide:slideArr[0], silentCamera:isSilentCamera, sourceLabel:t.source||"Article photo", _renderCtx:{category,palette:localOpts.palette,format:cardFormat,imageUrl:articleImage,theme:localOpts.theme,typography:localOpts.typography,density:localOpts.density}} : {type:"carousel", slides: slideArr, images: imgsFinal, _renderCtx: { category, palette: localOpts.palette, format: cardFormat, imageUrl: articleImage, theme: localOpts.theme, typography: localOpts.typography, density: localOpts.density }});
       } else if(/image/i.test(c)){
         const aspect = aspectForContent(plat, c);
         if(t.image){

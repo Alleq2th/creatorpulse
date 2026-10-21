@@ -538,6 +538,18 @@ function swipeArrow(p, f, x, y, typo) {
 
 // ── Slides ────────────────────────────────────────────────────────────
 
+function textLayoutTransform(slide, key, f, base) {
+  const target = slide.textLayout?.[key];
+  if (!target || !Number.isFinite(Number(target.x)) || !Number.isFinite(Number(target.y))) return "";
+  const bw = Math.max(1, base.width), bh = Math.max(1, base.height);
+  const width = Math.max(0.08, Math.min(1, Number(target.width) || bw / f.w)) * f.w;
+  const height = Math.max(0.04, Math.min(1, Number(target.height) || bh / f.h)) * f.h;
+  const sx = width / bw, sy = height / bh;
+  const x = Math.max(0, Math.min(f.w - width, Number(target.x) * f.w));
+  const y = Math.max(0, Math.min(f.h - height, Number(target.y) * f.h));
+  return `transform="matrix(${sx} 0 0 ${sy} ${x - sx * base.x} ${y - sy * base.y})"`;
+}
+
 function renderHookSVG(p, f, slide, category, scrimStrength, typo) {
   const fontHead = (typo && typo.headline) ? typo.headline : FONT_SERIF;
   const fontBody = (typo && typo.body) ? typo.body : FONT_SANS;
@@ -569,8 +581,8 @@ function renderHookSVG(p, f, slide, category, scrimStrength, typo) {
   <svg width="${f.w}" height="${f.h}" viewBox="0 0 ${f.w} ${f.h}" xmlns="http://www.w3.org/2000/svg">
     ${backgroundLayer(p, f, scrimStrength, "hook")}
     ${pillHeader(p, f, category.displayName, category.slug, slide.slideNumber, slide.totalSlides, typo)}
-    <text x="${m}" y="${startY}" font-family="${fontHead}" font-size="${size}" font-weight="700">${tspansEmphasis(lines, m, startY, lineH, emphasisIdx, p.accent, p.primaryText)}</text>
-    ${supportLines.length ? `<text x="${m}" y="${supportY}" font-family="${fontBody}" font-size="${f.hookSupportSize}" fill="${p.secondaryText}">${tspans(supportLines, m, supportY, f.hookSupportLine)}</text>` : ""}
+    <g ${textLayoutTransform(slide, "headline", f, { x: m, y: startY - size, width: f.w - 2*m, height: Math.max(lineH, lines.length * lineH) })}><text x="${m}" y="${startY}" font-family="${fontHead}" font-size="${size}" font-weight="700">${tspansEmphasis(lines, m, startY, lineH, emphasisIdx, p.accent, p.primaryText)}</text></g>
+    ${supportLines.length ? `<g ${textLayoutTransform(slide, "supportingText", f, { x: m, y: supportY - f.hookSupportSize, width: f.w - 2*m, height: Math.max(f.hookSupportLine, supportLines.length * f.hookSupportLine) })}><text x="${m}" y="${supportY}" font-family="${fontBody}" font-size="${f.hookSupportSize}" fill="${p.secondaryText}">${tspans(supportLines, m, supportY, f.hookSupportLine)}</text></g>` : ""}
     ${footerSVG}
   </svg>`;
 }
@@ -858,8 +870,8 @@ function renderBodySVG(p, f, slide, category, scrimStrength, typo) {
     ${backgroundLayer(p, f, scrimStrength, "body")}
     ${plainHeader(p, f, category.displayName, category.slug, slide.slideNumber, slide.totalSlides, typo)}
     ${slide.sectionLabel ? `<rect x="${m}" y="${sectionLabelY-20}" width="4" height="24" fill="${p.accent}"/><text x="${m+18}" y="${sectionLabelY}" font-family="${fontBody}" font-size="${f.sectionLabelSize}" font-weight="700" letter-spacing="1.5" fill="${p.accent}">${escXml((slide.sectionLabel||"").toUpperCase())}</text>` : ""}
-    <text x="${m}" y="${headlineStartY}" font-family="${fontHead}" font-size="${hSize}" font-weight="400" fill="${p.primaryText}">${tspans(hLines, m, headlineStartY, hLineH)}</text>
-    ${middleSVG}
+    <g ${textLayoutTransform(slide, "headline", f, { x: m, y: headlineStartY - hSize, width: f.w - 2*m, height: Math.max(hLineH, hLines.length * hLineH) })}><text x="${m}" y="${headlineStartY}" font-family="${fontHead}" font-size="${hSize}" font-weight="400" fill="${p.primaryText}">${tspans(hLines, m, headlineStartY, hLineH)}</text></g>
+    <g ${textLayoutTransform(slide, "supportingText", f, { x: m, y: afterHeadlineY - 40, width: f.w - 2*m, height: Math.max(180, middleBlockH) })}>${middleSVG}</g>
     ${hasCtaLine ? `<text x="${m}" y="${footerDividerY - 32}" font-family="${fontHead}" font-size="34" fill="${p.accent}">${escXml((slide.ctaLine||"").toUpperCase())}</text>` : ""}
     <rect x="${m}" y="${footerDividerY}" width="${f.w-2*m}" height="1" fill="${p.muted}" opacity="0.4"/>
     ${slide.tag ? `<rect x="${m}" y="${footerY-32}" width="${40+slide.tag.length*15}" height="44" rx="22" fill="none" stroke="${p.muted}" stroke-width="1.5"/><text x="${m+20}" y="${footerY-4}" font-family="${fontBody}" font-size="22" font-weight="600" letter-spacing="1" fill="${p.secondaryText}">${escXml((slide.tag||"").toUpperCase())}</text>` : ""}
@@ -883,8 +895,8 @@ function renderOutroSVG(p, f, slide, category, scrimStrength, typo) {
   <svg width="${f.w}" height="${f.h}" viewBox="0 0 ${f.w} ${f.h}" xmlns="http://www.w3.org/2000/svg">
     ${backgroundLayer(p, f, scrimStrength, "outro")}
     ${plainHeader(p, f, category.displayName, category.slug, slide.slideNumber, slide.totalSlides, typo)}
-    <text x="${m}" y="${startY}" font-family="${fontHead}" font-size="${size}" font-weight="700">${tspansEmphasis(lines, m, startY, lineH, emphasisIdx, p.accent, p.primaryText)}</text>
-    ${supportLines.length ? `<text x="${m}" y="${supportY}" font-family="${fontBody}" font-size="${f.hookSupportSize}" fill="${p.secondaryText}">${tspans(supportLines, m, supportY, f.hookSupportLine)}</text>` : ""}
+    <g ${textLayoutTransform(slide, "headline", f, { x: m, y: startY - size, width: f.w - 2*m, height: Math.max(lineH, lines.length * lineH) })}><text x="${m}" y="${startY}" font-family="${fontHead}" font-size="${size}" font-weight="700">${tspansEmphasis(lines, m, startY, lineH, emphasisIdx, p.accent, p.primaryText)}</text></g>
+    ${supportLines.length ? `<g ${textLayoutTransform(slide, "supportingText", f, { x: m, y: supportY - f.hookSupportSize, width: f.w - 2*m, height: Math.max(f.hookSupportLine, supportLines.length * f.hookSupportLine) })}><text x="${m}" y="${supportY}" font-family="${fontBody}" font-size="${f.hookSupportSize}" fill="${p.secondaryText}">${tspans(supportLines, m, supportY, f.hookSupportLine)}</text></g>` : ""}
     <defs><linearGradient id="fadeLine2" x1="${m}" y1="0" x2="${f.w-m}" y2="0" gradientUnits="userSpaceOnUse">
       <stop offset="0%" stop-color="${p.accent}" stop-opacity="1"/><stop offset="100%" stop-color="${p.accent}" stop-opacity="0"/>
     </linearGradient></defs>
@@ -1016,7 +1028,7 @@ async function renderYouTubeThumbnail(slide, imageUrl, options = {}) {
   const typo = resolveTypography(options.typography || "impact");
   const headline = escXml(String(slide.headline || slide.claim || "Story breakdown").toUpperCase().slice(0, 76));
   const brand = options.brand?.name ? escXml(String(options.brand.name).slice(0, 28)) : "CREATORPULSE";
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><defs><linearGradient id="shade" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".88"/><stop offset=".7" stop-color="#000" stop-opacity=".18"/><stop offset="1" stop-color="#000" stop-opacity=".05"/></linearGradient></defs><rect width="100%" height="100%" fill="url(#shade)"/><rect x="62" y="74" width="10" height="570" rx="5" fill="${p.accent}"/><text x="104" y="143" fill="${p.accent}" font-family="${typo.body}" font-size="25" font-weight="800" letter-spacing="3">${brand}</text><foreignObject x="100" y="205" width="760" height="420"><div xmlns="http://www.w3.org/1999/xhtml" style="font-family:${typo.headline};font-size:74px;line-height:1.02;font-weight:900;color:${p.primaryText};text-shadow:0 3px 14px #000">${headline}</div></foreignObject></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><defs><linearGradient id="shade" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".88"/><stop offset=".7" stop-color="#000" stop-opacity=".18"/><stop offset="1" stop-color="#000" stop-opacity=".05"/></linearGradient></defs><rect width="100%" height="100%" fill="url(#shade)"/><rect x="62" y="74" width="10" height="570" rx="5" fill="${p.accent}"/><text x="104" y="143" fill="${p.accent}" font-family="${typo.body}" font-size="25" font-weight="800" letter-spacing="3">${brand}</text><g ${textLayoutTransform(slide, "headline", {w:width,h:height}, {x:100,y:205,width:760,height:420})}><foreignObject x="100" y="205" width="760" height="420"><div xmlns="http://www.w3.org/1999/xhtml" style="font-family:${typo.headline};font-size:74px;line-height:1.02;font-weight:900;color:${p.primaryText};text-shadow:0 3px 14px #000">${headline}</div></foreignObject></g></svg>`;
   const layer = await sharp(Buffer.from(svg)).png().toBuffer();
   if (!cover) return sharp(layer).composite([{input: Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720"><rect x="850" y="560" width="365" height="58" rx="12" fill="#111" stroke="${p.accent}" stroke-width="2"/><text x="875" y="597" fill="#fff" font-size="19" font-family="Arial" font-weight="700">SOURCE PHOTO UNAVAILABLE</text></svg>`), left:0, top:0}]).png().toBuffer();
   return sharp(cover.buffer).composite([{ input: layer }]).png().toBuffer();
