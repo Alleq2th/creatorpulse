@@ -165,7 +165,7 @@ const S = {
   onboard: { step:0, name:"", niches:[], platforms:[], primary:"", ppd:3 },
   tab: "home",
   trends: [], notifs: [], schedule: [], saved: [], eventsCache: {},
-  loading: {}, expanded: {}, plat: {}, ctype: {}, tone: {}, palette: {}, slideCount: {}, cardTheme: {}, cardTypography: {}, cardDensity: {}, brandPreset: {}, focalPoint: {}, previewPlat: {}, previewSlideIdx: {}, previewMode: {}, outs: {}, recs: {},
+  loading: {}, expanded: {}, plat: {}, ctype: {}, tone: {}, palette: {}, slideCount: {}, cardTheme: {}, cardTypography: {}, cardDensity: {}, brandPreset: {}, focalPoint: {}, previewPlat: {}, previewSlideIdx: {}, previewMode: {}, outputEditing: {}, outs: {}, recs: {},
   cal: { y: new Date().getFullYear(), m: new Date().getMonth() },
   calView: "agenda", // agenda | week | month — agenda is the default per rebuild
   // Which calendar rows the user has tapped open. Keyed by the item's own
@@ -1368,6 +1368,8 @@ function renderOut(o, tid, idx){
   const content = String(o.content||"");
   const isScript = /script|short|reel/i.test(o.label||"") || /script/i.test(o.contentType||"") || o.isScript;
   if(isScript){
+    const editKey = `${tid}-${idx}`;
+    const isEditing = !!S.outputEditing?.[editKey];
     const words = content.trim().split(/\s+/).filter(Boolean).length;
     const estSec = Math.round((words / 135) * 60);
     const timeFormatted = estSec >= 60 ? `${Math.floor(estSec/60)}m ${estSec%60}s` : `${estSec}s`;
@@ -1378,11 +1380,14 @@ function renderOut(o, tid, idx){
           <span class="script-timing-pill">${words} words · ~${timeFormatted}</span>
         </div>
         <div style="display:flex;gap:6px;align-items:center">
+          <button class="btn bo bxs" type="button" aria-pressed="${isEditing}" onclick="toggleOutputEdit('${tid}',${idx})">${isEditing ? 'Done' : 'Edit'}</button>
           <button class="btn bo bxs tipbtn" data-tip="Copy full script" title="Copy script" aria-label="Copy script" onclick="copyTxt(\`${content.replace(/`/g,"\\`")}\`)">${I.copy} Copy</button>
           <button class="btn bp bxs tipbtn" data-tip="Record in Studio" title="Record in Studio" aria-label="Record in Studio" onclick="studioShootScript('${tid}',${idx})">${I.cam} Studio</button>
         </div>
       </div>
-      <div class="script-reader-body">${esc(content)}</div>
+      ${isEditing
+        ? `<textarea class="cp-output-editor" aria-label="Edit ${esc(o.label||'script')}" oninput="setOutputContent('${tid}',${idx},this.value)">${esc(content)}</textarea>`
+        : `<div class="script-reader-body">${esc(content)}</div>`}
       <div class="ofoot">
         <button class="btn bo bxs tipbtn" data-tip="Copy full script" title="Copy script" aria-label="Copy script" onclick="copyTxt(\`${content.replace(/`/g,"\\`")}\`)">${I.copy} Copy</button>
         <button class="btn bp bxs tipbtn" data-tip="Save to library" title="Save to library" aria-label="Save to library" onclick="saveOut('${tid}',${idx})">${I.save} Save</button>
@@ -1390,16 +1395,20 @@ function renderOut(o, tid, idx){
     </div>`;
   }
 
-  return `<div class="oc">
+  const editKey = `${tid}-${idx}`;
+  const isEditing = !!S.outputEditing?.[editKey];
+  return `<div class="oc cp-text-output">
     <div class="oh">
       <span class="ol">${esc(o.label||"Draft")}</span>
-      <button class="btn bo bxs tipbtn" data-tip="Copy draft" title="Copy draft" aria-label="Copy draft" onclick="copyTxt(\`${content.replace(/`/g,"\\`")}\`)">${I.copy}</button>
+      <div class="cp-text-actions">
+        <button class="btn bo bxs" type="button" aria-pressed="${isEditing}" onclick="toggleOutputEdit('${tid}',${idx})">${isEditing ? 'Done' : 'Edit'}</button>
+        <button class="btn bo bxs tipbtn" data-tip="Copy draft" title="Copy draft" aria-label="Copy draft" onclick="copyOutput('${tid}',${idx})">${I.copy}</button>
+      </div>
     </div>
-    ${mockupHTML}
-    <details style="margin:0 10px 10px;background:var(--sf);border-radius:6px;padding:8px 12px;border:1px solid var(--br)">
-      <summary style="cursor:pointer;font-size:11px;font-weight:600;color:var(--mu2)">View raw text draft</summary>
-      <div class="ob" style="padding:8px 0">${esc(content)}</div>
-    </details>
+    ${isEditing
+      ? `<textarea class="cp-output-editor" aria-label="Edit ${esc(o.label||'draft')}" oninput="setOutputContent('${tid}',${idx},this.value)">${esc(content)}</textarea>`
+      : `<div class="cp-text-reader">${esc(content)}</div>`}
+    <div class="cp-edit-note">Edits stay in this draft until you save.</div>
     <div class="ofoot">
       <button class="btn bp bxs tipbtn" data-tip="Save to library" title="Save to library" aria-label="Save to library" onclick="saveOut('${tid}',${idx})">${I.save} Save</button>
     </div>
@@ -1562,6 +1571,17 @@ window.applyCanvasLayout = async (tid,idx,slideIndex) => {
 window.setCardText = (tid,idx,key,value) => { const o=S.outs[tid]?.[idx]; if(!o)return; o.editSlide=o.editSlide||{type:"hook",headline:S.trends.find(t=>t.id===tid)?.headline||o.label,slideNumber:1,totalSlides:1,imageUrl:o._renderCtx?.imageUrl}; o.editSlide[key]=key==="textOffset"?Number(value):value; };
 window.setSlideText = (tid,idx,slideIndex,key,value) => { const slide=S.outs[tid]?.[idx]?.slides?.[slideIndex]; if(!slide)return; slide._edit=slide._edit||{}; slide._edit[key]=key==="textOffset"?Number(value):value; };
 window.applyCardText = async (tid,idx,slideIndex=null) => { const o=S.outs[tid]?.[idx]; if(!o)return; const ctx=o._renderCtx; if(!ctx){toast("This image cannot be edited as a card.");return;} const carouselSlide=o.type==="carousel"?o.slides[slideIndex??0]:null; const base=carouselSlide||o.editSlide||{type:"hook",headline:S.trends.find(t=>t.id===tid)?.headline||o.label,slideNumber:1,totalSlides:1,imageUrl:ctx.imageUrl}; const edited={...base,...(carouselSlide?carouselSlide._edit||{}:o.editSlide||{})}; try { const cd=await generateCardsWithRetry({...ctx,slides:[edited],focalPoint:S.focalPoint[tid]?{x:S.focalPoint[tid].x/100,y:S.focalPoint[tid].y/100}:null,brand:BRAND_PRESETS[S.brandPreset[tid]||"creator"]}); if(cd.images?.[0]) { if(carouselSlide){carouselSlide.img=cd.images[0];carouselSlide._edit=edited;} else {o.img=cd.images[0];o.editSlide=edited;} render(); toast("Card text updated"); } } catch(e){toast("Couldn't update the card text.");} };
+window.copyOutput = (tid, idx) => { const output=S.outs[tid]?.[idx]; if(output) copyTxt(output.content||""); };
+window.toggleOutputEdit = (tid, idx) => {
+  const key = `${tid}-${idx}`;
+  S.outputEditing = S.outputEditing || {};
+  S.outputEditing[key] = !S.outputEditing[key];
+  render();
+};
+window.setOutputContent = (tid, idx, value) => {
+  const output = S.outs[tid]?.[idx];
+  if (output) output.content = value;
+};
 window.setPreviewPlat = (key, plat) => { S.previewPlat = S.previewPlat || {}; S.previewPlat[key] = plat; render(); };
 window.setPreviewSlide = (key, idx) => { S.previewSlideIdx = S.previewSlideIdx || {}; S.previewSlideIdx[key] = idx; render(); };
 window.setPreviewMode = (key, mode) => { S.previewMode = S.previewMode || {}; S.previewMode[key] = mode; render(); };
