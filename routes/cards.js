@@ -77,10 +77,10 @@ router.post("/generate-cards", async (req, res) => {
   }
   activeGenerations++;
   try {
-    const { slides, category, palette, format, imageUrl, theme, typography, density } = req.body;
+    const { slides, category, palette, format, imageUrl, theme, typography, density, focalPoint, brand } = req.body;
     if (!Array.isArray(slides) || !slides.length) return res.status(400).json({ error: "slides required" });
     const capped = slides.slice(0, 10);
-    const images = await renderCardSet(capped, category, palette, format, imageUrl, { theme, typography, density });
+    const images = await renderCardSet(capped, category, palette, format, imageUrl, { theme, typography, density, focalPoint, brand });
     res.json({ images });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -95,7 +95,7 @@ router.post("/pulse-ai-stat-card", async (req, res) => {
   }
   activeGenerations++;
   try {
-    let { topic = "Trending Topic", format = "instagram", palette = "noir_orange", category, slides, imageUrl, niche, theme, typography, density } = req.body || {};
+    let { topic = "Trending Topic", format = "instagram", palette = "noir_orange", category, slides, imageUrl, niche, theme, typography, density, focalPoint, brand } = req.body || {};
     
     // Resolve live image if not supplied
     let imageInfo = null;
@@ -114,7 +114,7 @@ router.post("/pulse-ai-stat-card", async (req, res) => {
     }
 
     const catObj = typeof category === "string" ? { displayName: category, slug: "default" } : (category || { displayName: topic.slice(0, 24), slug: "default" });
-    const images = await renderCardSet(slides, catObj, palette, format, imageUrl, { theme, typography, density });
+    const images = await renderCardSet(slides, catObj, palette, format, imageUrl, { theme, typography, density, focalPoint, brand, palette });
 
     res.json({
       success: true,

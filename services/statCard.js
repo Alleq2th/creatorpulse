@@ -51,7 +51,9 @@ const FORMATS = {
 };
 function resolveFormat(format, densityKey) {
   const f = String(format || "instagram").toLowerCase();
-  const base = (f.includes("tiktok") || f.includes("reel") || f.includes("story") || f.includes("9:16")) ? FORMATS.tiktok : FORMATS.instagram;
+  const base = f.includes("youtube_thumbnail") || f.includes("thumbnail")
+    ? { ...FORMATS.instagram, w: 1280, h: 720, margin: 72, hookHeadlineSize: 88, hookHeadlineLine: 96, hookHeadlineChars: 22, hookMaxLines: 3, hookHeadlineY: 0.62, hookSupportGap: 36, hookSupportSize: 30, hookSupportLine: 38, hookSupportChars: 50, hookSupportMaxLines: 2 }
+    : (f.includes("tiktok") || f.includes("reel") || f.includes("story") || f.includes("9:16")) ? FORMATS.tiktok : FORMATS.instagram;
   const dens = resolveDensity(densityKey);
   const scale = dens.fontScale;
   const charsMod = dens.charsMod;
@@ -175,6 +177,18 @@ const TYPOGRAPHIES = {
     name: "Modern Mono",
     headline: "'IBM Plex Mono', 'Space Mono', monospace",
     body: "'IBM Plex Mono', monospace"
+  },
+  condensed_sans: {
+    id: "condensed_sans",
+    name: "Condensed Display",
+    headline: "'Arial Narrow', 'Roboto Condensed', Impact, sans-serif",
+    body: "Inter, Arial, sans-serif"
+  },
+  classic_serif: {
+    id: "classic_serif",
+    name: "Classic Editorial",
+    headline: "Georgia, 'Times New Roman', serif",
+    body: "Georgia, 'Times New Roman', serif"
   }
 };
 
@@ -532,7 +546,7 @@ function renderHookSVG(p, f, slide, category, scrimStrength, typo) {
   const isTall = f.h > 1500;
   const { lines, size } = fitMultilineText(slide.headline, f.hookHeadlineSize, f.hookHeadlineChars, f.hookMaxLines);
   const lineH = Math.round(f.hookHeadlineLine * (size / f.hookHeadlineSize));
-  const startY = Math.round(f.h * f.hookHeadlineY);
+  const startY = Math.max(Math.round(f.h * 0.16), Math.min(Math.round(f.h * 0.76), Math.round(f.h * f.hookHeadlineY) + Number(slide.textOffset || 0)));
   const emphasisIdx = slide.emphasisLine != null ? slide.emphasisLine : (lines.length >= 3 ? 1 : -1);
   const supportY = startY + lines.length * lineH + f.hookSupportGap;
   const supportLines = (slide.supportingText || slide.body) ? fitSupportText(slide.supportingText || slide.body, f.hookSupportChars, f.hookSupportMaxLines) : [];
@@ -889,7 +903,7 @@ function resolveType(slide, index, total) {
 // Fetches + cover-crops a background photo, and measures its average
 // brightness so the scrim can darken proportionally (a bright photo needs a
 // stronger overlay than an already-dark one to keep text legible).
-async function fetchCoverImage(imageUrl, w, h) {
+async function fetchCoverImage(imageUrl, w, h, focalPoint) {
   if (!imageUrl) return null;
   try {
     const signal = typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined;
@@ -897,7 +911,19 @@ async function fetchCoverImage(imageUrl, w, h) {
     if (!r.ok) return null;
     const arrayBuffer = await r.arrayBuffer();
     const buf = Buffer.from(arrayBuffer);
-    const cover = await sharp(buf).resize(w, h, { fit: "cover", position: sharp.strategy.attention }).jpeg({ quality: 90 }).toBuffer();
+    let pipeline = sharp(buf);
+    const meta = await pipeline.metadata();
+    const focalX = Math.max(0, Math.min(1, Number(focalPoint?.x ?? 0.5)));
+    const focalY = Math.max(0, Math.min(1, Number(focalPoint?.y ?? 0.5)));
+    if (focalPoint && meta.width && meta.height) {
+      const scale = Math.max(w / meta.width, h / meta.height);
+      const cropW = Math.max(1, Math.round(w / scale));
+      const cropH = Math.max(1, Math.round(h / scale));
+      const left = Math.round(Math.max(0, Math.min(meta.width - cropW, focalX * meta.width - cropW / 2)));
+      const top = Math.round(Math.max(0, Math.min(meta.height - cropH, focalY * meta.height - cropH / 2)));
+      pipeline = pipeline.extract({ left, top, width: cropW, height: cropH });
+    }
+    const cover = await pipeline.resize(w, h, { fit: "cover", position: focalPoint ? "centre" : sharp.strategy.attention }).jpeg({ quality: 90 }).toBuffer();
     const stats = await sharp(cover).stats();
     const avgLum = stats.channels.slice(0, 3).reduce((s, c) => s + c.mean, 0) / 3 / 255; // 0-1
     return { buffer: cover, brightness: avgLum };
@@ -957,11 +983,23 @@ async function coverFromLocalFile(filePath, w, h) {
 // the browser as a base64 data URL), mirroring fetchCoverImage's output
 // shape so all three background sources — user upload, live article photo,
 // local niche library — are interchangeable through the same scrim pipeline.
-async function coverFromBase64(dataUrl, w, h) {
+async function coverFromBase64(dataUrl, w, h, focalPoint) {
   try {
     const base64 = String(dataUrl).replace(/^data:image\/\w+;base64,/, "");
     const buf = Buffer.from(base64, "base64");
-    const cover = await sharp(buf).resize(w, h, { fit: "cover", position: sharp.strategy.attention }).jpeg({ quality: 90 }).toBuffer();
+    let pipeline = sharp(buf);
+    const meta = await pipeline.metadata();
+    const focalX = Math.max(0, Math.min(1, Number(focalPoint?.x ?? 0.5)));
+    const focalY = Math.max(0, Math.min(1, Number(focalPoint?.y ?? 0.5)));
+    if (focalPoint && meta.width && meta.height) {
+      const scale = Math.max(w / meta.width, h / meta.height);
+      const cropW = Math.max(1, Math.round(w / scale));
+      const cropH = Math.max(1, Math.round(h / scale));
+      const left = Math.round(Math.max(0, Math.min(meta.width - cropW, focalX * meta.width - cropW / 2)));
+      const top = Math.round(Math.max(0, Math.min(meta.height - cropH, focalY * meta.height - cropH / 2)));
+      pipeline = pipeline.extract({ left, top, width: cropW, height: cropH });
+    }
+    const cover = await pipeline.resize(w, h, { fit: "cover", position: focalPoint ? "centre" : sharp.strategy.attention }).jpeg({ quality: 90 }).toBuffer();
     const stats = await sharp(cover).stats();
     const avgLum = stats.channels.slice(0, 3).reduce((s, c) => s + c.mean, 0) / 3 / 255;
     return { buffer: cover, brightness: avgLum };
@@ -970,7 +1008,24 @@ async function coverFromBase64(dataUrl, w, h) {
   }
 }
 
+async function renderYouTubeThumbnail(slide, imageUrl, options = {}) {
+  const width = 1280, height = 720;
+  const cover = slide.customImage ? await coverFromBase64(slide.customImage, width, height, options.focalPoint || slide.focalPoint)
+    : await fetchCoverImage(slide.imageUrl || imageUrl, width, height, options.focalPoint || slide.focalPoint);
+  const p = resolvePalette(options.palette || "noir_orange", options.theme || "modern_dark");
+  const typo = resolveTypography(options.typography || "impact");
+  const headline = escXml(String(slide.headline || slide.claim || "Story breakdown").toUpperCase().slice(0, 76));
+  const brand = options.brand?.name ? escXml(String(options.brand.name).slice(0, 28)) : "CREATORPULSE";
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><defs><linearGradient id="shade" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".88"/><stop offset=".7" stop-color="#000" stop-opacity=".18"/><stop offset="1" stop-color="#000" stop-opacity=".05"/></linearGradient></defs><rect width="100%" height="100%" fill="url(#shade)"/><rect x="62" y="74" width="10" height="570" rx="5" fill="${p.accent}"/><text x="104" y="143" fill="${p.accent}" font-family="${typo.body}" font-size="25" font-weight="800" letter-spacing="3">${brand}</text><foreignObject x="100" y="205" width="760" height="420"><div xmlns="http://www.w3.org/1999/xhtml" style="font-family:${typo.headline};font-size:74px;line-height:1.02;font-weight:900;color:${p.primaryText};text-shadow:0 3px 14px #000">${headline}</div></foreignObject></svg>`;
+  const layer = await sharp(Buffer.from(svg)).png().toBuffer();
+  if (!cover) return sharp(layer).composite([{input: Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720"><rect x="850" y="560" width="365" height="58" rx="12" fill="#111" stroke="${p.accent}" stroke-width="2"/><text x="875" y="597" fill="#fff" font-size="19" font-family="Arial" font-weight="700">SOURCE PHOTO UNAVAILABLE</text></svg>`), left:0, top:0}]).png().toBuffer();
+  return sharp(cover.buffer).composite([{ input: layer }]).png().toBuffer();
+}
+
 async function renderStatCard(slide, category, paletteKey, format, imageUrl, options = {}) {
+  if (String(format || "").toLowerCase().includes("thumbnail")) {
+    return renderYouTubeThumbnail(slide, imageUrl, { ...options, palette: paletteKey });
+  }
   const themeKey = options.theme || slide.theme || "modern_dark";
   const typoKey = options.typography || slide.typography || "impact";
   const densityKey = options.density || slide.density || "balanced";
@@ -981,16 +1036,13 @@ async function renderStatCard(slide, category, paletteKey, format, imageUrl, opt
   const type = resolveType(slide, (slide.slideNumber || 1) - 1, slide.totalSlides || 1);
   const cat = typeof category === "string" ? { displayName: category, slug: "default" } : (category || { displayName: "", slug: "default" });
 
-  let cover = slide.customImage ? await coverFromBase64(slide.customImage, f.w, f.h) : null;
+  let cover = slide.customImage ? await coverFromBase64(slide.customImage, f.w, f.h, options.focalPoint || slide.focalPoint) : null;
   const isSingle = (slide.totalSlides || 1) <= 1;
   const isFirstSlide = (slide.slideNumber || 1) === 1;
   const wantsCover = type === "hook" || slide.useCover || slide.imageUrl || isFirstSlide || isSingle;
   const photoUrl = slide.imageUrl || (wantsCover ? imageUrl : null);
-  if (!cover && photoUrl) cover = await fetchCoverImage(photoUrl, f.w, f.h);
-  if (!cover) {
-    const localPath = pickLocalBackground(cat.slug, type);
-    if (localPath) cover = await coverFromLocalFile(localPath, f.w, f.h);
-  }
+  if (!cover && photoUrl) cover = await fetchCoverImage(photoUrl, f.w, f.h, options.focalPoint || slide.focalPoint);
+  const hasRequestedArticleImage = !!(slide.imageUrl || imageUrl);
   const scrimStrength = cover ? cover.brightness : null;
 
   const svg = type === "hook" ? renderHookSVG(p, f, slide, cat, scrimStrength, typo)
@@ -999,11 +1051,18 @@ async function renderStatCard(slide, category, paletteKey, format, imageUrl, opt
 
   const photoUrlForCard = slide.imageUrl || imageUrl;
   const labels = [];
+  if (options.brand?.name) {
+    const name = escXml(String(options.brand.name).slice(0, 28));
+    const bottom = options.brand.placement === "bottom-left";
+    const y = bottom ? f.h - 128 : 150;
+    labels.push(`<g><rect x="${f.margin}" y="${y-34}" width="${Math.min(440, name.length*19+44)}" height="46" rx="23" fill="${p.backgroundEnd}" fill-opacity="0.82" stroke="${p.accent}" stroke-opacity="0.82" stroke-width="2"/><text x="${f.margin+20}" y="${y-4}" font-family="${typo.body}" font-size="20" font-weight="800" letter-spacing="1.2" fill="${p.primaryText}">${name}</text></g>`);
+  }
   if (slide.silentCamera) {
     labels.push(`<g><rect x="${f.margin}" y="${f.h-142}" width="310" height="42" rx="21" fill="${p.backgroundEnd}" fill-opacity="0.82" stroke="${p.accent}" stroke-opacity="0.8" stroke-width="2"/><text x="${f.margin+20}" y="${f.h-114}" font-family="${typo.body}" font-size="17" font-weight="700" letter-spacing="1.4" fill="${p.primaryText}">SILENT CAMERA · ON-SCREEN TEXT</text></g>`);
   }
-  if (photoUrlForCard && !cover && !slide.customImage) {
-    labels.push(`<g><rect x="${f.margin}" y="${f.h-198}" width="300" height="42" rx="21" fill="${p.backgroundEnd}" fill-opacity="0.88" stroke="${p.accent}" stroke-opacity="0.7" stroke-width="2"/><text x="${f.margin+20}" y="${f.h-170}" font-family="${typo.body}" font-size="17" font-weight="700" letter-spacing="1.2" fill="${p.primaryText}">SOURCE PHOTO UNAVAILABLE</text></g>`);
+  if (!cover && !slide.customImage) {
+    const missingText = hasRequestedArticleImage ? "SOURCE PHOTO UNAVAILABLE" : "NO ARTICLE PHOTO PROVIDED";
+    labels.push(`<g><rect x="${f.margin}" y="${f.h-198}" width="390" height="42" rx="21" fill="${p.backgroundEnd}" fill-opacity="0.92" stroke="${p.accent}" stroke-opacity="0.9" stroke-width="2"/><text x="${f.margin+20}" y="${f.h-170}" font-family="${typo.body}" font-size="17" font-weight="700" letter-spacing="1.2" fill="${p.primaryText}">${missingText}</text></g>`);
   }
   const labeledSvg = labels.length ? svg.replace("</svg>", `${labels.join("")}</svg>`) : svg;
   const textLayer = await sharp(Buffer.from(labeledSvg)).png().toBuffer();
@@ -1047,6 +1106,8 @@ module.exports = {
   resolveDensity,
   photoMissingLayer,
   buildEditorialPhotoCover,
+  fetchCoverImage,
+  renderYouTubeThumbnail,
   CATEGORY_ICON,
   CATEGORY_ICON_OVERRIDES
 };

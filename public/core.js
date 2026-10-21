@@ -48,8 +48,15 @@ const CARD_TYPOGRAPHIES = [
   { id: "impact", label: "Impact Bold" },
   { id: "modern_sans", label: "Modern Sans" },
   { id: "editorial_serif", label: "Editorial Serif" },
-  { id: "code_mono", label: "Modern Mono" }
+  { id: "code_mono", label: "Modern Mono" },
+  { id: "condensed_sans", label: "Condensed Display" },
+  { id: "classic_serif", label: "Classic Editorial" }
 ];
+const BRAND_PRESETS = {
+  editorial: { label: "Editorial", palette: "electric_blue", theme: "editorial_warm", typography: "editorial_serif", name: "THE DAILY EDIT" },
+  creator: { label: "Creator Bold", palette: "noir_orange", theme: "modern_dark", typography: "impact", name: "CREATORPULSE" },
+  minimal: { label: "Minimal Studio", palette: "white_platinum", theme: "clean_light", typography: "modern_sans", name: "STUDIO NOTES" }
+};
 
 const CARD_DENSITIES = [
   { id: "punchy", label: "Punchy" },
@@ -66,7 +73,7 @@ const PALETTES = [
 // ── Visual metadata for the pickers + local card fallback ──
 const PALETTE_VIS = {noir_orange:["#0d0d0f","#ff6a1a"],electric_blue:["#05122b","#2f7bff"],emerald:["#04170f","#18c37e"],violet:["#140a24","#9b5cff"],crimson:["#170507","#e3263b"],gold:["#141005","#f2b630"],hot_pink:["#1a0612","#ff3fa4"],sky_blue:["#061722","#3cc3ff"],deep_teal:["#03181a","#14a3a0"],royal_indigo:["#0a0b2a","#5b5ff5"],sunset_coral:["#1d0b08","#ff7a59"],white_platinum:["#f4f4f2","#1a1a1a"]};
 const THEME_VIS = {modern_dark:{bg:"#111114",fg:"#ffffff",mu:"#8a8a93"},clean_light:{bg:"#fafaf7",fg:"#111111",mu:"#6b6b6b"},cyber_neon:{bg:"#07021a",fg:"#e9fbff",mu:"#7ef9ff"},editorial_warm:{bg:"#f3ebdd",fg:"#2a1d12",mu:"#8a6d4e"}};
-const TYPO_VIS = {impact:{f:"Anton, Impact, sans-serif",w:400,up:true},modern_sans:{f:"Inter, Arial, sans-serif",w:800,up:false},editorial_serif:{f:"'Playfair Display', Georgia, serif",w:900,up:false},code_mono:{f:"'IBM Plex Mono', monospace",w:500,up:true}};
+const TYPO_VIS = {impact:{f:"Anton, Impact, sans-serif",w:400,up:true},modern_sans:{f:"Inter, Arial, sans-serif",w:800,up:false},editorial_serif:{f:"'Playfair Display', Georgia, serif",w:900,up:false},code_mono:{f:"'IBM Plex Mono', monospace",w:500,up:true},condensed_sans:{f:"'Arial Narrow', Impact, sans-serif",w:900,up:true},classic_serif:{f:"Georgia, 'Times New Roman', serif",w:700,up:false}};
 const DENSITY_VIS = {punchy:1,balanced:2,detailed:4};
 const FORMAT_VIS = {"Script":"🎬","Graphic":"🖼️","Carousel":"🗂️","Caption":"#️⃣","Thumbnail":"🖼️","Title":"🔤","Tweet":"💬","Thread":"🧵","Post":"📝","Thought":"💡","Update":"📣"};
 const PLAT_LOGO = {
@@ -158,7 +165,7 @@ const S = {
   onboard: { step:0, name:"", niches:[], platforms:[], primary:"", ppd:3 },
   tab: "home",
   trends: [], notifs: [], schedule: [], saved: [], eventsCache: {},
-  loading: {}, expanded: {}, plat: {}, ctype: {}, tone: {}, palette: {}, slideCount: {}, cardTheme: {}, cardTypography: {}, cardDensity: {}, previewPlat: {}, previewSlideIdx: {}, previewMode: {}, outs: {}, recs: {},
+  loading: {}, expanded: {}, plat: {}, ctype: {}, tone: {}, palette: {}, slideCount: {}, cardTheme: {}, cardTypography: {}, cardDensity: {}, brandPreset: {}, focalPoint: {}, previewPlat: {}, previewSlideIdx: {}, previewMode: {}, outs: {}, recs: {},
   cal: { y: new Date().getFullYear(), m: new Date().getMonth() },
   calView: "agenda", // agenda | week | month — agenda is the default per rebuild
   // Which calendar rows the user has tapped open. Keyed by the item's own
@@ -983,10 +990,12 @@ function renderTrend(t){
       </button>`;
     }).join("");
 
-    const showPalette = ct === "IG Carousel" || ct === "TikTok No-Face Graphic";
+    const showPalette = ct === "IG Carousel" || ct === "TikTok No-Face Graphic" || ct === "TikTok Silent Camera" || ct === "Thumbnail";
     const cardTheme = S.cardTheme[t.id] || "modern_dark";
     const cardTypography = S.cardTypography[t.id] || "impact";
     const cardDensity = S.cardDensity[t.id] || "balanced";
+    const brandPreset = S.brandPreset[t.id] || "creator";
+    const focal = S.focalPoint[t.id] || {x:50,y:50};
 
     const themeChips = CARD_THEMES.map(x => {
       const isAct = cardTheme === x.id;
@@ -1026,6 +1035,7 @@ function renderTrend(t){
       </button>`;
     }).join("");
 
+    const brandChips = Object.entries(BRAND_PRESETS).map(([id,b]) => `<button class="h-card h-card-theme ${brandPreset===id?'active':''}" onclick="setBrandPreset('${t.id}','${id}')"><div class="h-theme-preview" style="background:${PALETTE_VIS[b.palette][0]};color:#fff;border-color:${PALETTE_VIS[b.palette][1]}"><span style="font-family:${TYPO_VIS[b.typography].f}">Aa</span><span class="h-theme-line" style="background:${PALETTE_VIS[b.palette][1]}"></span></div><div class="h-name">${b.label}</div></button>`).join("");
     const slideCount = S.slideCount[t.id] || 4;
     const slideCountChips = [1,2,3,4,5,6,7,8].map(n => {
       const isAct = slideCount === n;
@@ -1077,6 +1087,8 @@ function renderTrend(t){
         ${showPalette ? hRail('Visual Theme', themeLabel, themeChips) : ""}
         ${showPalette ? hRail('Typography', typoLabel, typoChips) : ""}
         ${showPalette ? hRail('Text Density', densityLabel, densityChips) : ""}
+        ${showPalette ? hRail('Brand Preset', BRAND_PRESETS[brandPreset].label, brandChips) : ""}
+        ${showPalette ? `<div class="h-step"><div class="h-step-hd"><span class="h-step-l">Photo focal point</span><span class="h-step-v" data-focal-label="${t.id}">${focal.x}% · ${focal.y}%</span></div><div style="display:grid;grid-template-columns:70px 1fr;gap:4px 10px;padding:8px 10px"><label style="font-size:11px">Horizontal</label><input type="range" min="0" max="100" value="${focal.x}" oninput="setFocalPoint('${t.id}','x',this.value)"/><label style="font-size:11px">Vertical</label><input type="range" min="0" max="100" value="${focal.y}" oninput="setFocalPoint('${t.id}','y',this.value)"/><span></span><button class="btn bo bxs" onclick="applyFocalPoint('${t.id}',0)">Apply framing</button></div></div>` : ""}
         ${showSlideCount ? hRail('Number of Slides', `${slideCount} slides`, slideCountChips) : ""}
       </div>
       <div class="action-row">
@@ -1192,6 +1204,10 @@ function renderPlatformMockup(o, tid, idx, curPlat) {
         </div>
       </div>`;
   } else if (curPlat === "tiktok") {
+    const silent = !!o.silentCamera;
+    const silentText = curSlide ? [curSlide.headline,curSlide.supportingText,curSlide.body].filter(Boolean).join(" ") : textContent;
+    const safeZones = silent ? `<div style="position:absolute;inset:10% 8% 24%;border:1px dashed rgba(255,255,255,.76);z-index:2;pointer-events:none;border-radius:8px"><span style="position:absolute;top:5px;left:7px;background:rgba(0,0,0,.62);color:#fff;padding:3px 6px;font-size:9px;border-radius:4px">TEXT SAFE ZONE</span></div>` : "";
+    const silentWarning = silent && silentText.length > 90 ? `<div style="position:absolute;top:42px;left:8px;right:8px;background:rgba(160,35,22,.94);color:white;padding:6px 8px;font-size:10px;z-index:4;border-radius:5px">Text is ${silentText.length} characters. Keep Silent Camera overlay under 90 for readability.</div>` : "";
     const slideImg = curSlide?.img || o.img || "";
     const slideFb = curSlide?.localImg || o.fallbackImg || "";
     const mediaEl = slideImg
@@ -1201,6 +1217,7 @@ function renderPlatformMockup(o, tid, idx, curPlat) {
     inner = `
       <div class="mock-shell mock-tt mock-tt-shell">
         ${mediaEl}
+        ${safeZones}${silentWarning}
         <div class="mock-tt-top">
           <span>Following</span>
           <span class="active">For You</span>
@@ -1301,6 +1318,7 @@ function renderOut(o, tid, idx){
     return `<div class="oc">
       <div class="oh">${badge}<span style="font-size:10.5px;color:var(--mu)">Swipe format above to test</span></div>
       ${mockupHTML}
+      ${o.isCard ? `<details style="margin:0 10px 10px;background:var(--sf);border-radius:6px;padding:8px 12px;border:1px solid var(--br)"><summary style="cursor:pointer;font-size:11px;font-weight:600;color:var(--mu2)">Edit text &amp; framing</summary><div style="display:grid;gap:8px;padding-top:10px"><label style="font-size:11px;color:var(--mu2)">Headline<textarea oninput="setCardText('${tid}',${idx},'headline',this.value)" style="width:100%;min-height:54px">${esc(o.editSlide?.headline||S.trends.find(t=>t.id===tid)?.headline||'')}</textarea></label><label style="font-size:11px;color:var(--mu2)">Supporting text<textarea oninput="setCardText('${tid}',${idx},'supportingText',this.value)" style="width:100%;min-height:54px">${esc(o.editSlide?.supportingText||'')}</textarea></label><label style="font-size:11px;color:var(--mu2)">Move headline vertically<input type="range" min="-240" max="240" step="8" value="${Number(o.editSlide?.textOffset||0)}" oninput="setCardText('${tid}',${idx},'textOffset',this.value)" style="width:100%"/></label><button class="btn bo bxs" onclick="applyCardText('${tid}',${idx})">Update card text</button></div></details>` : ""}
       <details style="margin:0 10px 10px;background:var(--sf);border-radius:6px;padding:8px 12px;border:1px solid var(--br)">
         <summary style="cursor:pointer;font-size:11px;font-weight:600;color:var(--mu2)">View raw image canvas</summary>
         <div style="padding:10px 0"><img loading="lazy" decoding="async" src="${o.img}" data-fb="${o.fallbackImg||""}" onerror="cardImgFail(this, this.dataset.fb)" style="width:100%;max-width:280px;margin:0 auto;display:block;aspect-ratio:${aspectRatioCSS};object-fit:contain;border-radius:6px"/></div>
@@ -1314,7 +1332,7 @@ function renderOut(o, tid, idx){
   }
   if(o.type === "carousel"){
     const slideText = s => [s.headline, s.stat && s.statLabel ? `${s.stat} — ${s.statLabel}` : s.stat, s.sectionLabel, s.body, s.supportingText].filter(Boolean).join("\n");
-    const slides = (o.slides||[]).map((s,si)=>`<div style="padding:8px 0;border-bottom:1px solid var(--br)"><div style="display:flex;align-items:center;justify-content:space-between"><div style="font-size:10px;color:var(--mu);font-weight:600">Slide ${s.slideNumber} · ${esc(s.type||"")}</div><div style="display:flex;gap:4px;align-items:center">${o._imgLoading===si?`<span style="font-size:10px;color:var(--mu)">Applying…</span>`:`${s.img?`<button class="btn bo bxs tipbtn" data-tip="Download this slide" title="Download this slide" aria-label="Download slide ${s.slideNumber}" onclick="dl('${s.img}','slide-${s.slideNumber}.png')" style="padding:3px 8px">${I.dl}</button>`:""}<input type="file" accept="image/*" id="slideimg-${tid}-${idx}-${si}" style="display:none" onchange="setSlideBackgroundImage('${tid}',${idx},${si},this.files[0])"/><button class="btn bo bxs tipbtn" data-tip="Use your own photo as this slide's background" title="Add background image" aria-label="Add background image for slide ${s.slideNumber}" onclick="document.getElementById('slideimg-${tid}-${idx}-${si}').click()" style="padding:3px 8px">${I.image}</button>`}</div></div>${s.img?`<img loading="lazy" decoding="async" src="${s.img}" data-fb="${s.localImg||""}" onerror="cardImgFail(this, this.dataset.fb)" style="width:100%;border-radius:6px;margin-top:6px;aspect-ratio:4/5;object-fit:cover"/>`:""}</div>`).join("");
+    const slides = (o.slides||[]).map((s,si)=>`<div style="padding:8px 0;border-bottom:1px solid var(--br)"><div style="display:flex;align-items:center;justify-content:space-between"><div style="font-size:10px;color:var(--mu);font-weight:600">Slide ${s.slideNumber} · ${esc(s.type||"")}</div><div style="display:flex;gap:4px;align-items:center">${o._imgLoading===si?`<span style="font-size:10px;color:var(--mu)">Applying…</span>`:`${s.img?`<button class="btn bo bxs tipbtn" data-tip="Download this slide" title="Download this slide" aria-label="Download slide ${s.slideNumber}" onclick="dl('${s.img}','slide-${s.slideNumber}.png')" style="padding:3px 8px">${I.dl}</button>`:""}<input type="file" accept="image/*" id="slideimg-${tid}-${idx}-${si}" style="display:none" onchange="setSlideBackgroundImage('${tid}',${idx},${si},this.files[0])"/><button class="btn bo bxs tipbtn" data-tip="Use your own photo as this slide's background" title="Add background image" aria-label="Add background image for slide ${s.slideNumber}" onclick="document.getElementById('slideimg-${tid}-${idx}-${si}').click()" style="padding:3px 8px">${I.image}</button>`}</div></div>${s.img?`<img loading="lazy" decoding="async" src="${s.img}" data-fb="${s.localImg||""}" onerror="cardImgFail(this, this.dataset.fb)" style="width:100%;border-radius:6px;margin-top:6px;aspect-ratio:4/5;object-fit:cover"/>`:""}<details style="margin-top:7px"><summary style="cursor:pointer;font-size:10px;color:var(--mu2)">Edit this slide</summary><div style="display:grid;gap:6px;padding:7px 0"><label style="font-size:10px;color:var(--mu2)">Headline<textarea oninput="setSlideText('${tid}',${idx},${si},'headline',this.value)" style="width:100%;min-height:42px">${esc(s._edit?.headline??s.headline??'')}</textarea></label><label style="font-size:10px;color:var(--mu2)">Supporting text<textarea oninput="setSlideText('${tid}',${idx},${si},'supportingText',this.value)" style="width:100%;min-height:42px">${esc(s._edit?.supportingText??s.supportingText??s.body??'')}</textarea></label><label style="font-size:10px;color:var(--mu2)">Move headline vertically<input type="range" min="-240" max="240" step="8" value="${Number(s._edit?.textOffset??s.textOffset??0)}" oninput="setSlideText('${tid}',${idx},${si},'textOffset',this.value)" style="width:100%"/></label><button class="btn bo bxs" onclick="applyCardText('${tid}',${idx},${si})">Update slide</button></div></details></div>`).join("");
     const cp = (o.slides||[]).map(s=>`SLIDE ${s.slideNumber}: ${slideText(s)}`).join("\n\n");
     const imgs = (o.slides||[]).map(s=>s.img).filter(Boolean);
     const dlAllBtn = imgs.length ? `<button class="btn bo bxs tipbtn" data-tip="Download all slide images" title="Download all slides" aria-label="Download all slides" onclick='dlAll(${JSON.stringify(imgs)})'>${I.dl} All</button>` : "";
@@ -1414,7 +1432,7 @@ window.setSlideBackgroundImage = async (tid, idx, slideIdx, file) => {
   o._imgLoading = slideIdx; render();
   try {
     const { category, palette, format, imageUrl, theme, typography, density } = o._renderCtx;
-    const cd = await generateCardsWithRetry({slides: o.slides, category, palette, format, imageUrl, theme, typography, density});
+    const cd = await generateCardsWithRetry({slides: o.slides, category, palette, format, imageUrl, theme, typography, density, focalPoint:S.focalPoint[tid]?{x:S.focalPoint[tid].x/100,y:S.focalPoint[tid].y/100}:null, brand:BRAND_PRESETS[S.brandPreset[tid]||"creator"]});
     const newImgs = cd.images || [];
     o.slides.forEach((s,i)=>{ if(newImgs[i]) s.img = newImgs[i]; });
     o.images = newImgs;
@@ -1485,6 +1503,12 @@ window.setSlideCount = (tid,n) => { S.slideCount[tid]=n; S.railExp = S.railExp |
 window.setCardTheme = (tid,v) => { S.cardTheme=S.cardTheme||{}; S.railExp=S.railExp||{}; S.cardTheme[tid]=v; S.railExp[tid+"_visualtheme"]=false; render(); };
 window.setCardTypography = (tid,v) => { S.cardTypography=S.cardTypography||{}; S.railExp=S.railExp||{}; S.cardTypography[tid]=v; S.railExp[tid+"_typography"]=false; render(); };
 window.setCardDensity = (tid,v) => { S.cardDensity=S.cardDensity||{}; S.railExp=S.railExp||{}; S.cardDensity[tid]=v; S.railExp[tid+"_textdensity"]=false; render(); };
+window.setBrandPreset = (tid,id) => { const b=BRAND_PRESETS[id]; if(!b)return; S.brandPreset[tid]=id; S.palette[tid]=b.palette; S.cardTheme[tid]=b.theme; S.cardTypography[tid]=b.typography; render(); };
+window.setFocalPoint = (tid,axis,value) => { S.focalPoint=S.focalPoint||{}; const p=S.focalPoint[tid]||{x:50,y:50}; p[axis]=Number(value); S.focalPoint[tid]=p; const el=document.querySelector(`[data-focal-label="${tid}"]`); if(el)el.textContent=`${p.x}% · ${p.y}%`; };
+window.applyFocalPoint = async (tid,idx) => { const o=S.outs[tid]?.[idx]; if(!o)return; const p=S.focalPoint[tid]||{x:50,y:50}; const ctx=o._renderCtx||{category:nicheToCategory(S.trends.find(t=>t.id===tid)?.niche),palette:S.palette[tid]||"noir_orange",format:o.aspect||"instagram",imageUrl:S.trends.find(t=>t.id===tid)?.image,theme:S.cardTheme[tid],typography:S.cardTypography[tid],density:S.cardDensity[tid]}; o._imgLoading=0; render(); try { const slides=o.type==="carousel"?o.slides:[{headline:S.trends.find(t=>t.id===tid)?.headline||o.label, type:"hook", slideNumber:1,totalSlides:1,imageUrl:ctx.imageUrl}]; const cd=await generateCardsWithRetry({...ctx,slides,focalPoint:{x:p.x/100,y:p.y/100},brand:BRAND_PRESETS[S.brandPreset[tid]||"creator"]}); (cd.images||[]).forEach((img,i)=>{if(o.type==="carousel"&&o.slides[i])o.slides[i].img=img; else if(i===0)o.img=img;}); } catch(e){toast("Couldn't reframe the source image. Try again.");} o._imgLoading=null; render(); };
+window.setCardText = (tid,idx,key,value) => { const o=S.outs[tid]?.[idx]; if(!o)return; o.editSlide=o.editSlide||{type:"hook",headline:S.trends.find(t=>t.id===tid)?.headline||o.label,slideNumber:1,totalSlides:1,imageUrl:o._renderCtx?.imageUrl}; o.editSlide[key]=key==="textOffset"?Number(value):value; };
+window.setSlideText = (tid,idx,slideIndex,key,value) => { const slide=S.outs[tid]?.[idx]?.slides?.[slideIndex]; if(!slide)return; slide._edit=slide._edit||{}; slide._edit[key]=key==="textOffset"?Number(value):value; };
+window.applyCardText = async (tid,idx,slideIndex=null) => { const o=S.outs[tid]?.[idx]; if(!o)return; const ctx=o._renderCtx; if(!ctx){toast("This image cannot be edited as a card.");return;} const carouselSlide=o.type==="carousel"?o.slides[slideIndex??0]:null; const base=carouselSlide||o.editSlide||{type:"hook",headline:S.trends.find(t=>t.id===tid)?.headline||o.label,slideNumber:1,totalSlides:1,imageUrl:ctx.imageUrl}; const edited={...base,...(carouselSlide?carouselSlide._edit||{}:o.editSlide||{})}; try { const cd=await generateCardsWithRetry({...ctx,slides:[edited],focalPoint:S.focalPoint[tid]?{x:S.focalPoint[tid].x/100,y:S.focalPoint[tid].y/100}:null,brand:BRAND_PRESETS[S.brandPreset[tid]||"creator"]}); if(cd.images?.[0]) { if(carouselSlide){carouselSlide.img=cd.images[0];carouselSlide._edit=edited;} else {o.img=cd.images[0];o.editSlide=edited;} render(); toast("Card text updated"); } } catch(e){toast("Couldn't update the card text.");} };
 window.setPreviewPlat = (key, plat) => { S.previewPlat = S.previewPlat || {}; S.previewPlat[key] = plat; render(); };
 window.setPreviewSlide = (key, idx) => { S.previewSlideIdx = S.previewSlideIdx || {}; S.previewSlideIdx[key] = idx; render(); };
 window.setPreviewMode = (key, mode) => { S.previewMode = S.previewMode || {}; S.previewMode[key] = mode; render(); };
@@ -1514,12 +1538,20 @@ window.gen = async (tid, all) => {
   try {
     const types = all ? (PTYPES[plat]||[]) : [ct];
     const out = [];
+    let articleImage = t.image || null;
     for(const c of types){
-      if(c === "IG Carousel" || c === "TikTok No-Face Graphic" || c === "TikTok Silent Camera"){
+      if(c === "IG Carousel" || c === "TikTok No-Face Graphic" || c === "TikTok Silent Camera" || c === "Thumbnail"){
         const category = nicheToCategory(t.niche);
+        if (!articleImage) {
+          try {
+            const photoResult = await api(`/api/stock-photo?query=${encodeURIComponent((t.headline || "") + " " + (t.niche || ""))}&count=1`);
+            articleImage = photoResult.photos?.[0]?.url || null;
+          } catch (e) { console.warn("Story photo lookup failed", e); }
+        }
         const isSilentCamera = c === "TikTok Silent Camera";
-        const isSingle = c === "TikTok No-Face Graphic" || isSilentCamera;
-        const cardFormat = isSilentCamera ? "tiktok_silent" : isSingle ? "tiktok" : plat;
+        const isThumbnail = c === "Thumbnail";
+        const isSingle = c === "TikTok No-Face Graphic" || isSilentCamera || isThumbnail;
+        const cardFormat = isSilentCamera ? "tiktok_silent" : isThumbnail ? "youtube_thumbnail" : isSingle ? "tiktok" : plat;
         const requestedCount = isSingle ? 1 : (S.slideCount[tid] || 4);
         // Only 6+ slides earns a dedicated CTA slide — below that, there's
         // too little actual story to justify spending a whole slide on
@@ -1558,7 +1590,7 @@ window.gen = async (tid, all) => {
             `${category.name} single post. Raw source headline: "${t.headline}". Full source text: ${sourceText}`, tone
           );
           const single = extractJSON(sr) || {};
-          slideArr = [{ type: isSilentCamera ? "hook" : "body", headline: single.headline || t.headline, supportingText: isSilentCamera ? (single.body || sourceText) : undefined, body: isSilentCamera ? undefined : (single.body || sourceText), tag: single.tag || null, ctaLine: "FOLLOW FOR MORE →", sourceLabel: t.source || null, useCover: isSingle, silentCamera: isSilentCamera }];
+          slideArr = [{ type: isSilentCamera || isThumbnail ? "hook" : "body", headline: single.headline || t.headline, supportingText: isSilentCamera ? (single.body || sourceText) : undefined, body: isSilentCamera ? undefined : (single.body || sourceText), tag: single.tag || null, ctaLine: "FOLLOW FOR MORE →", sourceLabel: t.source || null, useCover: isSingle, silentCamera: isSilentCamera, imageUrl:articleImage }];
         } else if(!useDedicatedOutro){
           // 2-5 slides: CTA folded onto the last body slide instead of
           // spending a whole separate slide on it. Hook + body slides all
@@ -1588,14 +1620,14 @@ window.gen = async (tid, all) => {
         // can't reliably render legible text. See services/statCard.js.
         let cardImgs = [];
         try {
-          const cd = await generateCardsWithRetry({slides: slideArr, category, palette: S.palette[tid] || "noir_orange", format: cardFormat, imageUrl: t.image || null, theme: S.cardTheme[tid] || "modern_dark", typography: S.cardTypography[tid] || "impact", density: S.cardDensity[tid] || "balanced"});
+          const cd = await generateCardsWithRetry({slides: slideArr, category, palette: S.palette[tid] || "noir_orange", format: cardFormat, imageUrl: articleImage, theme: S.cardTheme[tid] || "modern_dark", typography: S.cardTypography[tid] || "impact", density: S.cardDensity[tid] || "balanced", focalPoint: S.focalPoint[tid] ? {x:S.focalPoint[tid].x/100,y:S.focalPoint[tid].y/100} : null, brand: BRAND_PRESETS[S.brandPreset[tid] || "creator"]});
           cardImgs = (cd.images || []).map(u => (u && !/^(https?:|data:|blob:)/.test(u)) ? API + (u.startsWith('/')?'':'/') + u : u);
         } catch(e){ console.warn("generate-cards failed, using local cards", e); }
         const localOpts = { palette: S.palette[tid] || "noir_orange", theme: S.cardTheme[tid] || "modern_dark", typography: S.cardTypography[tid] || "impact", density: S.cardDensity[tid] || "balanced", format: cardFormat, total: slideArr.length };
-        slideArr.forEach((s,i)=>{ s.slideNumber = i+1; s.localImg = localCardImage(s, localOpts); s.img = cardImgs[i] || s.localImg; });
+        slideArr.forEach((s,i)=>{ s.slideNumber = i+1; if (articleImage && !s.customImage) s.imageUrl = articleImage; s.localImg = localCardImage(s, localOpts); s.img = cardImgs[i] || s.localImg; });
         const imgsFinal = slideArr.map(s=>s.img);
-        out.push(isSingle ? {type:"image", img: imgsFinal[0], fallbackImg: slideArr[0].localImg, aspect: "tiktok", isCard:true} : {type:"carousel", slides: slideArr, images: imgsFinal, _renderCtx: { category, palette: localOpts.palette, format: cardFormat, imageUrl: t.image || null, theme: localOpts.theme, typography: localOpts.typography, density: localOpts.density }});
-      } else if(c === "Thumbnail" || /image/i.test(c)){
+        out.push(isSingle ? {type:"image", img: imgsFinal[0], fallbackImg: slideArr[0].localImg, aspect: isThumbnail ? "youtube" : isSilentCamera ? "tiktok" : "tiktok", isCard:true, silentCamera:isSilentCamera, sourceLabel:t.source||"Article photo", _renderCtx:{category,palette:localOpts.palette,format:cardFormat,imageUrl:articleImage,theme:localOpts.theme,typography:localOpts.typography,density:localOpts.density}} : {type:"carousel", slides: slideArr, images: imgsFinal, _renderCtx: { category, palette: localOpts.palette, format: cardFormat, imageUrl: articleImage, theme: localOpts.theme, typography: localOpts.typography, density: localOpts.density }});
+      } else if(/image/i.test(c)){
         const aspect = aspectForContent(plat, c);
         if(t.image){
           // The article/post this trend came from already has a real photo —
