@@ -185,6 +185,8 @@ function svIcon(name){
     sparkle: '<path d="m12 3 2 6 6 2-6 2-2 6-2-6-6-2 6-2z"/>',
     volume:  '<path d="M11 5 6 9H2v6h4l5 4zM15 9a5 5 0 0 1 0 6M19 5a10 10 0 0 1 0 14"/>',
     down:    '<path d="M12 3v12m0 0 4-4m-4 4-4-4M4 19h16"/>',
+    news:    '<path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8M15 18h-5M10 6h8v4h-8V6Z"',
+    create:  '<path d="m23 7-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2"/>',
     grid:    '<rect x="3" y="3" width="7" height="7" rx="1.6"/><rect x="14" y="3" width="7" height="7" rx="1.6"/><rect x="3" y="14" width="7" height="7" rx="1.6"/><rect x="14" y="14" width="7" height="7" rx="1.6"/>',
     fx:      '<path d="M12 3v3m0 12v3m9-9h-3M6 12H3m14.5-6.5-2 2m-7 7-2 2m11 0-2-2m-7-7-2-2"/>',
     cut:     '<circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.12 15.88M14.47 14.48 20 20"/>',
@@ -3541,23 +3543,35 @@ window.svOpenWithScript = function (text, projectName){
 
 function svStartView(st){
   const has = st.clips.length;
-  return `<div class="sv-root" id="sv-root" style="padding:0">
+  return `<div class="sv-root sv-create-home" id="sv-root" style="padding:0">
     <div class="sv-bar">
-      <div class="sv-bar-title">Create Studio</div>
-      <div class="sv-bar-r"><button class="sv-icon-btn" data-act="exitCamera" aria-label="Back">${svIcon('close')}</button></div>
+      <div class="sv-bar-title">Create</div>
+      <div class="sv-bar-r"><button class="sv-icon-btn" data-act="exitCamera" aria-label="Back to Home">${svIcon('close')}</button></div>
     </div>
-    <div style="flex:1;display:flex;flex-direction:column;justify-content:center;gap:14px;padding:0 20px 40px">
-      <div style="font-family:var(--serif,Georgia,serif);font-size:30px;font-weight:600;letter-spacing:-.02em;line-height:1.15">
-        Record it, edit it,<br>post it.
-      </div>
-      <div style="color:var(--mu);font-size:13.5px;line-height:1.6;margin-bottom:8px">
-        Talk to camera with your script on screen, then trim, caption and export — all without leaving CreatorPulse.
-      </div>
-      <button class="sv-btn-wide primary" data-act="newProject">${svIconSm('video')} Start recording</button>
-      <button class="sv-btn-wide ghost" data-act="upload2">${svIconSm('upload')} Upload a video instead</button>
-      ${has ? `<button class="sv-btn-wide ghost" data-act="toEditor">${svIconSm('layers')} Continue editing (${st.clips.length})</button>` : ''}
-      <input type="file" id="sv-upload" accept="video/*" multiple hidden>
+    <section class="sv-create-intro" aria-labelledby="sv-create-title">
+      <span class="sv-create-eyebrow">YOUR CREATIVE WORKSPACE</span>
+      <h1 id="sv-create-title">What are you making today?</h1>
+      <p>Start with a story to shape a post, or jump into the video studio.</p>
+    </section>
+    <div class="sv-create-choices" aria-label="Choose a creation starting point">
+      <button class="sv-create-choice sv-create-choice-featured" type="button" onclick="setTab('home')">
+        <span class="sv-create-choice-icon" aria-hidden="true">${svIcon('news')}</span>
+        <span class="sv-create-choice-copy"><strong>Start with a story</strong><span>Explore live stories, then choose a format and generate content.</span></span>
+        <span class="sv-create-choice-arrow" aria-hidden="true">↗</span>
+      </button>
+      <button class="sv-create-choice" type="button" data-act="newProject">
+        <span class="sv-create-choice-icon" aria-hidden="true">${svIcon('create')}</span>
+        <span class="sv-create-choice-copy"><strong>Record a video</strong><span>Use the camera, on-screen script, and editing tools.</span></span>
+        <span class="sv-create-choice-arrow" aria-hidden="true">→</span>
+      </button>
+      <button class="sv-create-choice" type="button" data-act="upload2">
+        <span class="sv-create-choice-icon" aria-hidden="true">${svIcon('upload')}</span>
+        <span class="sv-create-choice-copy"><strong>Upload a video</strong><span>Bring a clip into the existing Studio editor.</span></span>
+        <span class="sv-create-choice-arrow" aria-hidden="true">→</span>
+      </button>
+      ${has ? `<button class="sv-create-choice sv-create-continue" type="button" data-act="toEditor"><span class="sv-create-choice-icon" aria-hidden="true">${svIcon('layers')}</span><span class="sv-create-choice-copy"><strong>Continue editing</strong><span>${st.clips.length} saved ${st.clips.length===1?'clip':'clips'} in your Studio session.</span></span><span class="sv-create-choice-arrow" aria-hidden="true">→</span></button>` : ''}
     </div>
+    <input type="file" id="sv-upload" accept="video/*" multiple hidden>
   </div>`;
 }
 
