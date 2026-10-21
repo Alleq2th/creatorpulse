@@ -1073,12 +1073,13 @@ function renderTrend(t){
 
     panel = `<div class="cp">
       <div class="countdown">
-        <span class="countdown-label">Post before</span>
+        <span class="countdown-label">Suggested window</span>
         <span class="countdown-time" data-countdown="${postBy}">calculating…</span>
+        <span class="timing-note">Estimated from story freshness</span>
       </div>
-      <div class="why"><div class="why-label">Why this matters</div><div class="why-body">${esc(rec||t.summary||"This is trending in your niche right now — the earlier you post, the more upside on reach.")}</div></div>
+      <div class="why"><div class="why-label">Why this matters</div><div class="why-body">${esc(rec||t.summary||"No additional context is available for this story yet.")}</div></div>
       <div class="best-plat"><span class="em">${PLAT_EMOJI[bp]||"◆"}</span><div style="flex:1"><div class="best-plat-lbl">Best platform</div><div class="best-plat-val">${esc(bpLabel)}</div></div></div>
-      <div class="opp"><div class="opp-head"><span class="opp-lbl">Opportunity</span><span class="opp-val">${opp}/100</span></div><div class="opp-bar"><div class="opp-fill" style="width:${opp}%"></div></div></div>
+      <div class="opp" aria-label="Heuristic opportunity estimate, not a forecast"><div class="opp-head"><span class="opp-lbl">Opportunity estimate</span><span class="opp-val">${opp}/100</span></div><div class="opp-bar"><div class="opp-fill" style="width:${opp}%"></div></div></div>
       <div class="flow">
         ${hRail('Platform', platLabel, platChips)}
         ${hRail('Format', ct, ctChips)}
@@ -1092,7 +1093,7 @@ function renderTrend(t){
         ${showSlideCount ? hRail('Number of Slides', `${slideCount} slides`, slideCountChips) : ""}
       </div>
       <div class="action-row">
-        <button class="action-btn primary" ${load?'disabled':''} onclick="gen('${t.id}',false)">${load?'<span class="sp"></span>':I.bolt}<span>${load?'…':'Generate'}</span></button>
+        <button class="action-btn primary" ${load?'disabled':''} onclick="gen('${t.id}',false)">${load?'<span class="sp"></span>':I.bolt}<span>${load?'…':'Generate content'}</span></button>
         <button class="action-btn" onclick="openRemix('${t.id}')">${I.remix}<span>Remix</span></button>
         <button class="action-btn" onclick="openTitles('${t.id}')">${I.title}<span>Titles</span></button>
         ${plat!=='twitter' ? `<button class="action-btn" onclick="openVideoBlueprint('${t.id}')">${I.bolt}<span>Blueprint</span></button>` : ''}
@@ -1112,14 +1113,13 @@ function renderTrend(t){
     <div class="th" onclick="toggle('${t.id}')">
       ${img}
       <div class="thead">
-        <div class="tmeta-top">
-          <span class="badge badge-tier badge-tier-${tier}">${tierLabel}</span>
-          <span class="badge badge-hot">${t.score||75}% viral</span>
-          ${imgReadyPill}
-          <span class="badge badge-niche">${esc(t.niche)}</span>
-          ${(function(){const v=trendVelocity(t);return `<span class="velo-pill velo-${v.state}"><span class="velo-dot"></span>${v.label}</span>`;})()}
-        </div>
         <div class="thl">${esc(t.headline)}</div>
+        <div class="tmeta-top">
+          <span class="badge badge-niche">${esc(t.niche)}</span>
+          <span class="badge badge-tier badge-tier-${tier}">${tierLabel}</span>
+          ${(function(){const v=trendVelocity(t);return `<span class="velo-pill velo-${v.state}"><span class="velo-dot"></span>${v.label}</span>`;})()}
+          ${imgReadyPill}
+        </div>
         <div class="tmeta"><span>${(t.tags||[]).slice(0,2).map(esc).join(' · ')}</span>${srcTag}</div>
       </div>
       <span class="cv ${exp?'open':''}">${I.chevron}</span>
@@ -2218,11 +2218,11 @@ function renderApp(){
   const TEX = { home:"dots", hooks:"grid", calendar:"cross", create:"diag", profile:"dots", library:"grid", discover:"cross" };
   document.getElementById("root").innerHTML = `<div class="app" data-tex="${TEX[S.tab]||'dots'}">${pageHtml}
     <nav class="tabbar">
-      <button class="tab ${S.tab==='home'?'active':''}" onclick="setTab('home')">${I.home}Home</button>
-      <button class="tab ${S.tab==='hooks'?'active':''}" onclick="setTab('hooks')">${I.hook}Hooks</button>
-      <button class="tab tab-create ${S.tab==='create'?'active':''}" onclick="setTab('create')"><span class="tab-fab">${I.create}</span>Create</button>
-      <button class="tab ${S.tab==='calendar'?'active':''}" onclick="setTab('calendar')">${I.cal}Calendar</button>
-      <button class="tab ${S.tab==='profile'?'active':''}" onclick="setTab('profile')">${I.user}Profile</button>
+      <button class="tab ${S.tab==='home'?'active':''}" aria-current="${S.tab==='home'?'page':'false'}" onclick="setTab('home')">${I.home}Home</button>
+      <button class="tab ${S.tab==='hooks'?'active':''}" aria-current="${S.tab==='hooks'?'page':'false'}" onclick="setTab('hooks')">${I.hook}Hooks</button>
+      <button class="tab tab-create ${S.tab==='create'?'active':''}" aria-current="${S.tab==='create'?'page':'false'}" onclick="setTab('create')"><span class="tab-fab">${I.create}</span>Create</button>
+      <button class="tab ${S.tab==='calendar'?'active':''}" aria-current="${S.tab==='calendar'?'page':'false'}" onclick="setTab('calendar')">${I.cal}Calendar</button>
+      <button class="tab ${S.tab==='profile'?'active':''}" aria-current="${S.tab==='profile'?'page':'false'}" onclick="setTab('profile')">${I.user}Profile</button>
     </nav>
     ${renderSheet()}
     ${typeof renderFloatingCoach === "function" ? renderFloatingCoach() : ""}
@@ -2324,17 +2324,17 @@ function pageHooks(){
   const userNiches = S.user?.niches || [];
   if(!S.hooksNiche && userNiches.length) S.hooksNiche = userNiches[0];
   const active = S.hooksNiche;
-  const nicheChips = userNiches.map(n=>`<button class="chip ${active===n?'active':''}" onclick="setHooksNiche('${esc(n)}')">${esc(n)}</button>`).join("");
+  const nicheChips = userNiches.map(n=>`<button class="chip ${active===n?'active':''}" aria-pressed="${active===n?'true':'false'}" onclick="setHooksNiche('${esc(n)}')">${esc(n)}</button>`).join("");
   const hooks = S.hooksCache[active] || [];
   const q = (S.hooksSearch||"").toLowerCase();
   const filtered = q ? hooks.filter(h=>h.text.toLowerCase().includes(q)) : hooks;
   const list = filtered.length
-    ? filtered.map((h,i)=>`<div class="hook-card"><div class="num">${i+1}</div><div class="txt">${esc(h.text)}</div><div class="hook-actions"><button class="tiny-copy" onclick="copyTxt(\`${h.text.replace(/`/g,'\\`')}\`)">Copy</button><button class="tiny-copy" onclick="prefillHook(\`${h.text.replace(/`/g,'\\`')}\`)">Use</button><button class="tiny-copy" onclick="openBlueprint(\`${h.text.replace(/`/g,'\\`')}\`,'${esc(active)}')">Blueprint</button></div></div>`).join("")
+    ? filtered.map((h,i)=>`<article class="hook-card"><div class="hook-card-kicker">${esc(active||"Niche")} · Hook ${String(i+1).padStart(2,"0")}</div><div class="txt">${esc(h.text)}</div><div class="hook-actions"><button class="tiny-copy" onclick="copyTxt(\`${h.text.replace(/`/g,'\\`')}\`)">Copy</button><button class="tiny-copy hook-use" onclick="prefillHook(\`${h.text.replace(/`/g,'\\`')}\`)">Use hook</button><button class="tiny-copy" onclick="openBlueprint(\`${h.text.replace(/`/g,'\\`')}\`,'${esc(active)}')">Blueprint</button></div></article>`).join("")
     : hooks.length ? `<div style="color:var(--mu);font-size:12px;padding:20px 0;text-align:center">No hooks match "${esc(S.hooksSearch)}".</div>`
     : skHookList(6);
   return `<main class="page active">${topBar("Reusable hooks")}
     <div class="sec-h"><h2>Hooks</h2><span class="sec-meta">50 per niche</span></div>
-    <input class="hook-search" placeholder="Search hooks…" value="${esc(S.hooksSearch)}" oninput="S.hooksSearch=this.value;render()"/>
+    <input class="hook-search" type="search" aria-label="Search hooks" placeholder="Search hooks…" value="${esc(S.hooksSearch)}" oninput="S.hooksSearch=this.value;render()"/>
     ${sectionErr("hooks", `setHooksNiche('${esc(active||"")}')`)}
     <div class="hook-niche-row">${nicheChips || '<span style="color:var(--mu);font-size:12px">Add niches in Profile to see hooks.</span>'}</div>
     ${list}
@@ -2748,9 +2748,9 @@ function pageCalendar(){
       <div class="cal-sub">Plan around what's happening in your world.</div>
     </div>
     <div class="cal-view-switch">
-      <button class="cal-view-btn ${view==='agenda'?'active':''}" onclick="setCalView('agenda')">Agenda</button>
-      <button class="cal-view-btn ${view==='week'?'active':''}" onclick="setCalView('week')">Week</button>
-      <button class="cal-view-btn ${view==='month'?'active':''}" onclick="setCalView('month')">Month</button>
+      <button class="cal-view-btn ${view==='agenda'?'active':''}" aria-pressed="${view==='agenda'?'true':'false'}" onclick="setCalView('agenda')">Agenda</button>
+      <button class="cal-view-btn ${view==='week'?'active':''}" aria-pressed="${view==='week'?'true':'false'}" onclick="setCalView('week')">Week</button>
+      <button class="cal-view-btn ${view==='month'?'active':''}" aria-pressed="${view==='month'?'true':'false'}" onclick="setCalView('month')">Month</button>
     </div>
     ${view==='agenda' ? renderAgendaView() : view==='week' ? renderWeekView() : renderMonthView()}
     <button class="btn bo cal-schedule-btn" onclick="openScheduleSheet()">${I.plus} Schedule Post</button>
