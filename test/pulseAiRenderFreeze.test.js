@@ -138,6 +138,8 @@ test("the service worker cache and the asset version were both bumped", () => {
   const cacheName = (SW_JS.match(/const CACHE_NAME = "([^"]+)"/) || [])[1];
   assert.ok(cacheName, "sw.js must define CACHE_NAME");
   assert.notEqual(cacheName, "creatorpulse-v11", "the cache name must be bumped past the previous build");
-  assert.match(INDEX_HTML, /app\.js\?v=30/, "index.html must request the bumped app.js");
+  const appV = (INDEX_HTML.match(/app\.js\?v=(\d+)/) || [])[1];
+  assert.ok(appV, "index.html must version app.js");
+  assert.ok(Number(appV) >= 30, `index.html must request at least app.js?v=30 (saw ${appV})`);
   assert.doesNotMatch(INDEX_HTML, /\?v=29/, "no asset may still be pinned to the old version");
 });
