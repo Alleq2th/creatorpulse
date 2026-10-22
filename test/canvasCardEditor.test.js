@@ -30,5 +30,10 @@ test('server renderer supports saved positions and sizes for headline and suppor
 test('canvas editor is responsive, touch-enabled, and has a fresh browser cache key', () => {
   assert.match(html, /cp-canvas-stage[^}]*touch-action:none/);
   assert.match(html, /cp-canvas-resize/);
-  assert.match(html, /core\.js\?v=39/);
+  // Assert the version is at least this build's, rather than pinning one
+  // exact number — a cache bump is a deliberate act, not a regression, and
+  // pinning turned every legitimate bump into a red test.
+  const coreV = (html.match(/core\.js\?v=(\d+)/) || [])[1];
+  assert.ok(coreV, 'index.html must version core.js');
+  assert.ok(Number(coreV) >= 39, `core.js version must be >= 39 (saw ${coreV})`);
 });

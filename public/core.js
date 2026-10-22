@@ -684,16 +684,28 @@ async function initPush(){
 
 // ─── GLOBAL COUNTDOWN TIMER (one interval, updates DOM directly) ────────
 let _cpTimer = null;
+// Paint every "suggested window" label from its data-countdown value.
+// Extracted so it can run immediately on paint as well as on the interval.
+function paintCountdowns(){
+  document.querySelectorAll('[data-countdown]').forEach(el=>{
+    const target = parseInt(el.dataset.countdown,10);
+    // No usable timestamp means we genuinely cannot estimate a window.
+    // Say so plainly instead of leaving a spinner-looking label behind.
+    if(!target){ el.textContent = 'No window estimate'; return; }
+    const diff = target - Date.now();
+    if(diff <= 0){ el.textContent = 'Post now'; return; }
+    const h = Math.floor(diff/3600000), m = Math.floor((diff%3600000)/60000);
+    el.textContent = h > 0 ? `${h}h ${m}m left` : `${m}m left`;
+  });
+}
 function startGlobalTimer(){
+  // The interval alone used to be the ONLY thing that ever wrote this label,
+  // so a freshly expanded card sat on "calculating…" for up to 30 seconds and
+  // looked broken. Paint once right now, then keep it fresh.
+  paintCountdowns();
   if(_cpTimer) return;
   _cpTimer = setInterval(()=>{
-    document.querySelectorAll('[data-countdown]').forEach(el=>{
-      const target = parseInt(el.dataset.countdown,10); if(!target) return;
-      const diff = target - Date.now();
-      if(diff <= 0){ el.textContent = 'Post now'; return; }
-      const h = Math.floor(diff/3600000), m = Math.floor((diff%3600000)/60000);
-      el.textContent = `${h}h ${m}m left`;
-    });
+    paintCountdowns();
     if (S.user && S.lastTrendsRefresh && (Date.now() - S.lastTrendsRefresh >= 60 * 60 * 1000)) {
       loadTrends(true);
     }
@@ -2010,6 +2022,10 @@ function render(){
   if(S.mode === "auth") { renderAuth(); return csAfterRender(); }
   if(S.mode === "onboard") { renderOnboard(); return csAfterRender(); }
   renderApp();
+  // Every render replaces the card markup, so any "suggested window" label is
+  // back to its placeholder until something repaints it. Do it here, in the
+  // same frame as the paint, so expanding a story never shows "calculating…".
+  try { paintCountdowns(); } catch(_){}
   csAfterRender();
 }
 
