@@ -545,7 +545,10 @@ body{padding-bottom:calc(var(--tab-h) + env(safe-area-inset-bottom));letter-spac
 
 .countdown{display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--sf2);border:1px solid var(--br2);border-radius:8px;margin-bottom:10px}
 .countdown-label{font-size:11px;font-weight:600;text-transform:none;letter-spacing:0;color:var(--or)}
-.countdown-time{font-family:var(--serif);font-size:16px;font-weight:600;color:var(--tx);letter-spacing:-0.01em;margin-left:auto}
+.countdown-time{font-family:var(--serif);font-size:16px;font-weight:600;color:var(--tx);letter-spacing:-0.01em;margin-left:auto;display:inline-flex;align-items:center;gap:8px}
+.retry-link{font-family:var(--sans);font-size:11px;font-weight:600;letter-spacing:0;color:var(--ac2);background:transparent;border:1px solid var(--br2);border-radius:6px;padding:4px 8px;cursor:pointer;min-height:28px}
+.retry-link:hover{background:var(--sf2)}
+.retry-link:focus-visible{outline:2px solid var(--tint-tx);outline-offset:2px}
 
 .why{background:var(--sf2);border:1px solid var(--br2);border-radius:8px;padding:10px 12px;margin-bottom:10px}
 .why-label{font-size:11px;font-weight:600;text-transform:none;letter-spacing:0;color:var(--ac2);margin-bottom:4px}
@@ -2121,7 +2124,8 @@ body{padding-bottom:calc(var(--tab-h) + env(safe-area-inset-bottom));letter-spac
 <script src="plus-ai/ui.js?v=30"></script>
 <script src="plus-ai/actions.js?v=30"></script>
 <script src="plus-ai/index.js?v=30"></script>
-<script src="core.js?v=40"></script>
+<script src="lib/windowRetry.js?v=41"></script>
+<script src="core.js?v=41"></script>
 <script src="lib/studioPerf.js?v=30"></script>
 <script src="studio.js?v=30"></script>
 <script src="app.js?v=31"></script>

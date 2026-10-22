@@ -42,8 +42,16 @@ test('render() repaints countdowns so expanding a card never shows a stuck label
 });
 
 test('the placeholder is never the only value a label can ever hold', () => {
-  // The data-countdown attribute must always carry a real number so the label
-  // has something to compute from.
-  assert.match(core, /data-countdown="\$\{postBy\}"/);
+  // The data-countdown attribute must carry a real number whenever a window can
+  // be computed, so the label has something to calculate from.
+  //
+  // It is now allowed to be EMPTY when the story has no usable timestamp: the
+  // old `${postBy}` form let trendPostBefore() fall back to `Date.now()` and
+  // emit a confident-looking window for a story that had no basis for one
+  // (spec 5.3 forbids fabricating a posting time). An empty value is what
+  // routes the label to the "Try again" fallback instead. The "undefined"
+  // literal must never appear — see countdownRetry.test.js.
+  assert.match(core, /data-countdown="\$\{postBy == null \? '' : postBy\}"/);
+  assert.ok(!/data-countdown="\$\{postBy\}"/.test(core), 'must not emit the raw postBy, which can be null');
   assert.match(core, /function trendPostBefore/);
 });

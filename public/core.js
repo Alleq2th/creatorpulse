@@ -690,8 +690,26 @@ function paintCountdowns(){
   document.querySelectorAll('[data-countdown]').forEach(el=>{
     const target = parseInt(el.dataset.countdown,10);
     // No usable timestamp means we genuinely cannot estimate a window.
-    // Say so plainly instead of leaving a spinner-looking label behind.
-    if(!target){ el.textContent = 'No window estimate'; return; }
+    // Spec 5.3 asks for a meaningful fallback AND a way out of it, so this is
+    // honest text plus a "Try again" control - never a label that still looks
+    // like it is loading, and never a time invented to fill the space.
+    if(!target || !isFinite(target)){
+      // Only rebuild the markup when we are not already showing it, so the
+      // 30-second tick cannot throw away a tap mid-press.
+      if(el.dataset.retryState !== '1'){
+        el.dataset.retryState = '1';
+        // The attribute STAYS (as an empty string) so the next tick still finds
+        // this element and the guard above keeps its markup intact. Removing it
+        // would strand the element outside the selector and stop the label from
+        // ever being able to resolve again.
+        el.dataset.countdown = '';
+        el.innerHTML = window.cpWindowRetryMarkup
+          ? window.cpWindowRetryMarkup(el.dataset.tid || '')
+          : 'No window estimate';
+      }
+      return;
+    }
+    if(el.dataset.retryState){ delete el.dataset.retryState; el.textContent = ''; }
     const diff = target - Date.now();
     if(diff <= 0){ el.textContent = 'Post now'; return; }
     const h = Math.floor(diff/3600000), m = Math.floor((diff%3600000)/60000);
@@ -756,10 +774,34 @@ function trendVelocity(t){
 }
 function trendPostBefore(t){
   const v = trendVelocity(t);
-  const base = t.timestamp || Date.now();
+  // Delegates to the pure resolver in lib/windowRetry.js so the first paint and
+  // the "Try again" handler can never disagree about what the window is. It
+  // returns null for a story with no usable timestamp instead of silently
+  // anchoring the guess to "now" (spec 5.3: do not fabricate a posting time).
   const hours = v.state==='rising'?12: v.state==='peaking'?6:2;
+  if(window.cpWindowTarget) return window.cpWindowTarget(t, v.state);
+  const base = Number(t && t.timestamp);
+  if(!isFinite(base) || base <= 0) return null;
   return base + hours*3600000;
 }
+// Spec 5.3's escape hatch: the fallback is a real action, not just a sentence.
+// Re-reads the story's niche feed (the usual reason a window is missing is a
+// story that arrived without a timestamp), then repaints. It never writes a
+// "loading" text of its own - render() repaints every label from real state,
+// so the label resolves or honestly shows the retry again.
+window.retryWindowEstimate = async (tid) => {
+  const t = S.trends.find(x=>x.id===tid);
+  if(!t) return render();
+  if(t.niche){
+    try {
+      const list = await fetchNews(t.niche);
+      const fresh = (list||[]).find(a => (a.headline||a.title) === (t.headline||t.title));
+      if(fresh && Number(fresh.timestamp) > 0) t.timestamp = Number(fresh.timestamp);
+    } catch(_){ /* offline: the label simply stays honest */ }
+  }
+  S.expanded[tid] = true;
+  render();
+};
 function trendBestPlatform(t){
   // Was a first-match if-chain checking a handful of keywords — most
   // ordinary headlines (especially sports news) never hit any of those
@@ -1086,7 +1128,7 @@ function renderTrend(t){
     panel = `<div class="cp">
       <div class="countdown">
         <span class="countdown-label">Suggested window</span>
-        <span class="countdown-time" data-countdown="${postBy}">calculating…</span>
+        <span class="countdown-time" data-countdown="${postBy == null ? '' : postBy}" data-tid="${esc(t.id)}">calculating…</span>
         <span class="timing-note">Estimated from story freshness</span>
       </div>
       <div class="why"><div class="why-label">Why this matters</div><div class="why-body">${esc(rec||t.summary||"No additional context is available for this story yet.")}</div></div>
