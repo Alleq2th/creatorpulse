@@ -32,7 +32,7 @@ const core = fs.readFileSync(path.join(root, 'public', 'core.js'), 'utf8');
 const indexHtml = fs.readFileSync(path.join(root, 'public', 'index.html'), 'utf8');
 const sw = fs.readFileSync(path.join(root, 'public', 'sw.js'), 'utf8');
 
-const { cpPickPlatform, cpPlatformBreakdown } = pickLib;
+const { cpPickPlatform, cpPlatformBreakdown, cpPlatformScores } = pickLib;
 const { cpPlatformMarkup } = explainLib;
 
 const PLATS = [
@@ -58,6 +58,21 @@ function legacyBestPlatform(t, user) {
   const ranked = Object.entries(scores).filter(([p]) => plats.includes(p)).sort((a, b) => b[1] - a[1]);
   if (ranked.length && ranked[0][1] > 0) return ranked[0][0];
   return user?.primaryPlatform || plats[0] || 'instagram';
+}
+
+// The same legacy expression, but returning the raw points per platform rather
+// than only the winner. Needed because the winner can stay identical while a
+// weight silently drifts - the exact class of change spec 5.4 forbids.
+function legacyScores(t) {
+  const hay = ((t.headline || '') + ' ' + (t.summary || '')).toLowerCase();
+  const scores = { tiktok: 0, instagram: 0, youtube: 0, twitter: 0 };
+  if (/viral|dance|challenge|meme|reacts?|shocking|stuns|wild|insane|hilarious|prank/.test(hay)) scores.tiktok += 3;
+  if (/\d+%|\$\d|record|stats?|numbers|ranking|top \d|list of/.test(hay)) scores.instagram += 3;
+  if (/photo|aesthetic|fashion|style|design|behind the scenes/.test(hay)) scores.instagram += 2;
+  if (/explain|breakdown|analysis|review|documentary|deep dive|how .* works|why .* happened/.test(hay)) scores.youtube += 3;
+  if (/breaking|takes?|debate|slams|blasts|responds|reacts to|opinion/.test(hay)) scores.twitter += 3;
+  if ((t.score || 0) >= 85) { scores.twitter += 1; scores.youtube += 1; }
+  return scores;
 }
 
 // ── parity: the pick must not move ─────────────────────────────────────────
@@ -109,6 +124,62 @@ test('the pick is IDENTICAL to the original heuristic for every input class', ()
     }
   }
   assert.ok(checked === 600, `expected 600 parity cases, ran ${checked}`);
+});
+
+// The pick-name parity above is necessary but NOT sufficient: the winner can
+// stay the same while the points behind it silently drift (e.g. "+4 to TikTok"
+// instead of "+3"). A changed weight is a change to the meaning of the score,
+// which spec 5.4 forbids - and only the panel would ever show it. So compare
+// every platform's raw points against the legacy expression, not just the winner.
+test('every platform score matches the original weights, not just the winner', () => {
+  const stories = [
+    { headline: 'Star stuns crowd with insane viral dance challenge' },
+    { headline: 'Club record broken as striker hits 30% conversion rate' },
+    { headline: 'Behind the scenes of the new kit photoshoot' },
+    { headline: 'Explained: why the transfer happened and how it works' },
+    { headline: 'Pundit slams referee in breaking rant' },
+    { headline: 'Record breaking deal explained: analysis', summary: 'photo' },
+    { headline: 'United beat City 2-1' },
+    { headline: '' },
+    { headline: 'Big story', score: 85 },
+    { headline: 'Viral meme', score: 90 },
+    { headline: 'Stats dive 12%', score: 30 }
+  ];
+
+  let checked = 0;
+  for (const story of stories) {
+    const got = cpPlatformScores(story);
+    const legacy = legacyScores(story);
+    for (const p of ['tiktok', 'instagram', 'youtube', 'twitter']) {
+      assert.strictEqual(got.scores[p], legacy[p],
+        `${p} points drifted for ${JSON.stringify(story)}: got ${got.scores[p]}, original ${legacy[p]}`);
+      checked++;
+    }
+  }
+  assert.ok(checked === stories.length * 4, `expected ${stories.length * 4} score checks, ran ${checked}`);
+});
+
+// The exact point values, spelled out. This is the test that catches a weight
+// being nudged while the winner happens to stay the same.
+test('each rule awards exactly the points the original expression awarded', () => {
+  const cases = [
+    { headline: 'viral meme', platform: 'tiktok', points: 3 },
+    { headline: 'record 30% jump', platform: 'instagram', points: 3 },
+    { headline: 'aesthetic photoshoot', platform: 'instagram', points: 2 },
+    { headline: 'explained breakdown', platform: 'youtube', points: 3 },
+    { headline: 'breaking opinion', platform: 'twitter', points: 3 }
+  ];
+  for (const c of cases) {
+    const s = cpPlatformScores({ headline: c.headline });
+    assert.strictEqual(s.scores[c.platform], c.points,
+      `"${c.headline}" must award exactly ${c.points} to ${c.platform}, got ${s.scores[c.platform]}`);
+  }
+  // The strong-story bonus is +1 to Twitter and YouTube, and nothing else.
+  const bonus = cpPlatformScores({ headline: 'plain', score: 85 });
+  assert.strictEqual(bonus.scores.twitter, 1, 'the bonus must be +1 to Twitter, not another value');
+  assert.strictEqual(bonus.scores.youtube, 1, 'the bonus must be +1 to YouTube, not another value');
+  assert.strictEqual(bonus.scores.tiktok, 0, 'the bonus must not leak to TikTok');
+  assert.strictEqual(bonus.scores.instagram, 0, 'the bonus must not leak to Instagram');
 });
 
 test('the recommendation is always a string and never empty', () => {
