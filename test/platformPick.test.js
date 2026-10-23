@@ -243,8 +243,35 @@ test('factors the app genuinely does not receive are listed as unavailable', () 
   }
 });
 
+// A story can fire a rule for a platform the creator is NOT on. The pick then
+// legitimately falls back to their primary - but the panel must not say
+// "nothing matched" while showing a rule that plainly matched. Side by side
+// those two sentences contradict each other, which reads as a broken app and
+// (spec 5.4) overstates how certain the system is about having nothing to go on.
+test('a fallback never claims "nothing matched" while a rule visibly matched', () => {
+  const story = {
+    id: 'a',
+    headline: 'New AI model tops coding benchmarks',
+    summary: 'A new model beat previous records on standard coding tests.',
+    score: 66
+  };
+  const b = cpPlatformBreakdown(story, { platforms: ['tiktok'], primary: 'tiktok', plats: PLATS });
+
+  assert.strictEqual(b.pick, 'tiktok', 'the pick stays inside the creator platforms');
+  assert.strictEqual(b.fellBack, true, 'this is a fallback: nothing matched a platform they are on');
+  assert.ok(b.ignored.length > 0, 'the out-of-list match must still be disclosed');
+
+  const rec = b.factors.find(f => f.key === 'recommended');
+  const platsRow = b.factors.find(f => f.key === 'platforms');
+  // The two notes must not contradict: when a rule fired elsewhere, the
+  // platform row has to say so.
+  assert.match(platsRow.note, /did match this story/i,
+    'the platform row must admit a rule matched somewhere, or the panel contradicts itself');
+  assert.ok(!/did match/i.test(rec.note),
+    'the recommended row keeps the narrower "nothing matched your platforms" claim');
+});
+
 test('a platform that out-scored the pick is disclosed, not hidden', () => {
-  // Twitter matches "breaking" but is not one of the creator's platforms.
   const b = cpPlatformBreakdown({ id: 'a', headline: 'Breaking news slams' }, { platforms: ['instagram'], plats: PLATS });
   assert.strictEqual(b.pick, 'instagram', 'the pick is confined to the creator platforms');
   assert.strictEqual(b.ignored.length, 1, 'the stronger non-platform match must be listed');

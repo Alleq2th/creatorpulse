@@ -246,7 +246,12 @@
       value: plats.length ? plats.map(function (p) { return cpPlatformName(p, labelTable); }).join(", ") : "none set",
       state: plats.length ? "real" : "missing",
       note: plats.length
-        ? "Only these were considered. A platform you haven't added is never recommended."
+        ? "Only these were considered. A platform you haven't added is never recommended." +
+          // When a rule fired for a platform the creator is NOT on, the
+          // "Recommended" note above says "nothing matched". That is true of
+          // the platform list but false of the story, and side by side the two
+          // sentences contradict each other. Say which one is meant.
+          (ignored.length ? " One rule below did match this story, but it matched a platform you are not on." : "")
         : "No platforms are set on your profile, so the app used its last-resort default."
     });
 
