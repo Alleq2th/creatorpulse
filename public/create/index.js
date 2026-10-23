@@ -138,6 +138,98 @@
     repaint();
   };
 
+  /* ── arrival from a story card (spec 3.2) ──────────────────────────────────
+   *
+   * Spec 3.2: "a story detail view could offer a prominent action such as
+   * Create content. That action should carry the relevant story context into
+   * the creation workflow."
+   *
+   * BEFORE: the story card's own controls generated in place, and the Create
+   * tab always opened on an empty "What are you creating from?" screen — so the
+   * opportunity score and "Why this platform?" explainers both dead-ended.
+   *
+   * NOW: this seeds the real flow with the story already chosen, the platform
+   * the card was showing, and that platform's format, then opens Create on the
+   * first step that still needs an answer.
+   *
+   * All the WHAT lives in lib/storyToCreate.js so it can be tested in Node; this
+   * function only applies the result to the flow's own setters. If that helper
+   * is missing (a stale cached page), we fall back to plain story-only seeding
+   * rather than navigating nowhere. */
+  window.cpCreateStartFromTrend = function (trend) {
+    var f = F();
+    var S = S_() || {};
+
+    /* Accept either a story object or just an id. The card passes the id (it is
+     * the one thing always in scope in the markup), so resolve it here against
+     * the same list the card rendered from. */
+    var story = trend;
+    if (typeof trend === 'string') {
+      story = null;
+      (S.trends || []).forEach(function (t) { if (t.id === trend) story = t; });
+    }
+    if (!story || !story.id) return false;
+
+    /* The card's live selections, read from the app's own per-story maps — the
+     * same keys setPlat/setCT write. Never a second copy of the choice.
+     *
+     * `picked` matters: core.js's toggle() fills S.plat[tid] with the user's
+     * primary platform the instant a card opens, purely so the rails show
+     * something. That is not a decision. Only a real tap (S.hasSelected) makes
+     * it one — otherwise the flow would carry Instagram while the card read
+     * "Best platform: TikTok". */
+    var picked = !!(S.hasSelected && S.hasSelected[story.id + '_platform']);
+    var seed = (typeof window.cpCreateSeed === 'function')
+      ? window.cpCreateSeed({
+          id: story.id,
+          headline: story.headline,
+          summary: story.summary,
+          niche: story.niche,
+          image: story.image,
+          score: story.score,
+          timestamp: story.timestamp,
+          source: story.source,
+          platform: (S.plat && S.plat[story.id]) || null,
+          format: (S.ctype && S.ctype[story.id]) || null
+        }, {
+          recommended: (typeof window.cpPickPlatform === 'function' && window.cpPickPlatform(story, S.user && S.user.platforms, S.user && S.user.primaryPlatform)) || null,
+          platforms: (S.user && S.user.platforms) || [],
+          ptypes: window.CPEnv.ptypes(),
+          tone: (S.tone && S.tone[story.id]) || 'normal',
+          picked: picked
+        })
+      : null;
+
+    /* Degraded path: no helper, but we still carry the story itself. The user
+     * lands on step 2 and picks the platform — strictly better than dropping
+     * them on an empty step 1. */
+    if (!seed) {
+      seed = {
+        source: 'story',
+        sourceRef: story,
+        platform: (S.hasSelected && S.hasSelected[story.id + '_platform'] ? ((S.plat && S.plat[story.id]) || null) : null),
+        format: null,
+        tone: 'normal',
+        step: 'platform'
+      };
+    }
+
+    var st = reset();
+    st.source = seed.source;
+    st.sourceRef = seed.sourceRef;
+    st.platform = seed.platform;
+    st.format = seed.format;
+    st.tone = seed.tone;
+    f.goto(st, seed.step);
+
+    /* Move to the Create tab and paint. setTab() is the app's own router call —
+     * using it (rather than assigning S.tab) keeps back-navigation and the
+     * per-tab data loading working exactly as they do for a normal tap. */
+    if (typeof window.setTab === 'function') window.setTab('create');
+    else repaint();
+    return true;
+  };
+
   /* ── step 1 handlers ─────────────────────────────────────────────────── */
   window.cpCreateSetSource = function (id) {
     var st = cs();
