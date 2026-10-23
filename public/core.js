@@ -838,11 +838,27 @@ function trendOpportunity(t){
   // it would read as artificially low against real scores. This isn't a
   // trained prediction — it's the same honest heuristic combination as
   // before, just scaled to match what the score actually means now.
+  //
+  // The arithmetic itself now lives in lib/opportunityScore.js, because spec
+  // 5.4 asks for the score to be explainable and an explanation that
+  // recomputes the number separately WILL eventually disagree with the big
+  // number on the card. One implementation, two readers.
+  // The inline expression is kept as a fallback so a missing script degrades
+  // to the old behaviour instead of throwing (that is the freeze class this
+  // codebase already paid for once).
+  if(window.cpOpportunityScore) return window.cpOpportunityScore(t);
   const v = trendVelocity(t);
   const s = t.score || 55;
   const boost = v.state==='rising'? 8 : v.state==='peaking'? 0 : -18;
   return Math.max(15, Math.min(97, Math.round(0.6*s + boost*2 + 15)));
 }
+// Spec 5.4: the explanation must be "accessible without cluttering the
+// interface". Collapsed by default, one tap to open, one tap to close.
+window.toggleOppWhy = (tid) => {
+  S.oppWhy = S.oppWhy || {};
+  S.oppWhy[tid] = !S.oppWhy[tid];
+  render();
+};
 
 
 async function loadTrends(silent = false){
@@ -1133,7 +1149,9 @@ function renderTrend(t){
       </div>
       <div class="why"><div class="why-label">Why this matters</div><div class="why-body">${esc(rec||t.summary||"No additional context is available for this story yet.")}</div></div>
       <div class="best-plat"><span class="em">${PLAT_EMOJI[bp]||"◆"}</span><div style="flex:1"><div class="best-plat-lbl">Best platform</div><div class="best-plat-val">${esc(bpLabel)}</div></div></div>
-      <div class="opp" aria-label="Heuristic opportunity estimate, not a forecast"><div class="opp-head"><span class="opp-lbl">Opportunity estimate</span><span class="opp-val">${opp}/100</span></div><div class="opp-bar"><div class="opp-fill" style="width:${opp}%"></div></div></div>
+      ${(window.cpOpportunityMarkup
+          ? window.cpOpportunityMarkup(t, { score: opp, open: !!(S.oppWhy && S.oppWhy[t.id]), bar: true })
+          : `<div class="opp" aria-label="Heuristic opportunity estimate, not a forecast"><div class="opp-head"><span class="opp-lbl">Opportunity estimate</span><span class="opp-val">${opp}/100</span></div><div class="opp-bar"><div class="opp-fill" style="width:${opp}%"></div></div></div>`)}
       <div class="flow">
         ${hRail('Platform', platLabel, platChips)}
         ${hRail('Format', ct, ctChips)}

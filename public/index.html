@@ -569,6 +569,33 @@ body{padding-bottom:calc(var(--tab-h) + env(safe-area-inset-bottom));letter-spac
 .opp-bar{height:6px;background:var(--sf2);border-radius:99px;overflow:hidden}
 .opp-fill{height:100%;background:var(--ac);border-radius:99px;transition:width .4s}
 
+/* Opportunity score explainer (spec 5.4). Collapsed it is ONE line of text
+   under the bar; open it grows in place. Deliberately no border, no card, no
+   shadow: the spec asks for this to be reachable without adding visual weight
+   to a panel that already carries a window, a "why", a platform and 8 rails. */
+.oppw-toggle{display:inline-flex;align-items:center;gap:4px;margin-top:6px;padding:4px 2px;min-height:28px;
+  background:transparent;border:0;cursor:pointer;font:600 11px/1.2 var(--sans);letter-spacing:0;
+  color:var(--ac2);text-decoration:underline;text-underline-offset:3px;text-decoration-thickness:1px}
+.oppw-toggle:hover{color:var(--tx)}
+.oppw-toggle:focus-visible{outline:2px solid var(--tint-tx);outline-offset:2px;border-radius:4px}
+.oppw-toggle::after{content:"\203A";font-size:13px;line-height:1;transform:rotate(90deg);transition:transform .15s}
+.oppw-toggle[aria-expanded="true"]::after{transform:rotate(-90deg)}
+.oppw{margin-top:8px;padding:10px 12px;background:var(--sf2);border:1px solid var(--br2);border-radius:8px}
+.oppw-math{display:flex;flex-direction:column;gap:3px;padding-bottom:9px;margin-bottom:9px;border-bottom:1px solid var(--br2)}
+.oppw-math-l{font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.oppw-math code{font-family:var(--mono,ui-monospace,monospace);font-size:12px;color:var(--tx);word-break:break-word}
+.oppw-clamp{font-size:11px;color:var(--mu)}
+.oppw-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px}
+.oppw-row{display:grid;grid-template-columns:1fr auto;gap:1px 8px;align-items:baseline}
+.oppw-k{font-size:11px;font-weight:700;color:var(--tx)}
+.oppw-v{font-size:11px;font-weight:600;color:var(--ac2);text-align:right;display:flex;gap:5px;align-items:baseline;justify-content:flex-end;flex-wrap:wrap}
+.oppw-n{grid-column:1/-1;font-size:11px;line-height:1.5;color:var(--mu)}
+.oppw-flag{font-size:9px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--mu);
+  border:1px solid var(--br2);border-radius:4px;padding:1px 4px}
+.oppw-missing .oppw-k{color:var(--mu)}
+.oppw-sec{margin:12px 0 8px;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+.oppw-foot{margin:11px 0 0;font-size:10px;line-height:1.5;color:var(--mu)}
+
 .action-row{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:12px}
 .action-btn{padding:10px 6px;border-radius:9px;background:transparent;border:1px solid var(--br2);color:var(--tx);font:600 10px/1.2 var(--sans);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;text-transform:none;letter-spacing:0;transition:all .15s}
 .action-btn:hover{border-color:var(--ac);color:var(--ac2)}
@@ -2128,7 +2155,13 @@ body{padding-bottom:calc(var(--tab-h) + env(safe-area-inset-bottom));letter-spac
 <script src="plus-ai/actions.js?v=30"></script>
 <script src="plus-ai/index.js?v=30"></script>
 <script src="lib/windowRetry.js?v=41"></script>
-<script src="core.js?v=41"></script>
+<!-- Spec 5.4 explainer. Score first (the single source of truth), then the
+     markup that reads it. Both load BEFORE core.js, so core.js never has to
+     worry about whether they exist - it still guards, because a missing
+     script must degrade rather than freeze the screen. -->
+<script src="lib/opportunityScore.js?v=43"></script>
+<script src="lib/opportunityExplain.js?v=43"></script>
+<script src="core.js?v=43"></script>
 <!-- Create flow (spec PART 6). Order matters: flow.js defines the rules,
      steps/review render from it, generate.js wires to the existing pipeline,
      and index.js exposes the handlers the markup calls. All of them load
