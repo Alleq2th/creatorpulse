@@ -27,10 +27,18 @@
 (function () {
   "use strict";
 
+  // The escaper is shared with the platform explainer. It lives in
+  // lib/htmlEsc.js, which loads first. The local copy below is kept ONLY as a
+  // degradation path: if htmlEsc.js failed to load, escaping must still happen
+  // rather than the panel rendering raw text (the freeze class this codebase
+  // paid for twice). One implementation, one fallback.
+  var ENTITIES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+  function localEsc(v) {
+    return String(v == null ? "" : v).replace(/[&<>"']/g, function (c) { return ENTITIES[c]; });
+  }
   function esc(v) {
-    return String(v == null ? "" : v).replace(/[&<>"']/g, function (c) {
-      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
-    });
+    if (typeof window !== "undefined" && typeof window.cpEsc === "function") return window.cpEsc(v);
+    return localEsc(v);
   }
 
   // The score implementation lives in lib/opportunityScore.js, which loads
@@ -161,8 +169,19 @@
       head + button + body + '</div>';
   }
 
-  var api = { cpOpportunityMarkup: cpOpportunityMarkup };
+  // The factor-row renderers are exported because lib/platformExplain.js
+  // reuses them instead of pasting a second copy. Two panels, one row shape -
+  // so a change to how a factor looks can never apply to only one of them.
+  var api = {
+    cpOpportunityMarkup: cpOpportunityMarkup,
+    cpExplainFactorRow: factorRow,
+    cpExplainMissingRow: missingRow
+  };
 
-  if (typeof window !== "undefined") window.cpOpportunityMarkup = cpOpportunityMarkup;
+  if (typeof window !== "undefined") {
+    window.cpOpportunityMarkup = cpOpportunityMarkup;
+    window.cpExplainFactorRow = factorRow;
+    window.cpExplainMissingRow = missingRow;
+  }
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })();
