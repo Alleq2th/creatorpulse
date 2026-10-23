@@ -1,0 +1,411 @@
+/* CreatorPulse · Create flow — styles.
+ *
+ * Scoped entirely under .cc-* so nothing here can collide with the Studio's
+ * .sv-* classes or the rest of the app. Uses the app's existing design tokens
+ * (spec PART 16: "Do not create a new visual treatment every time a component
+ * appears on a different screen") rather than inventing new colours.
+ *
+ * Spec 7.2: "Avoid unnecessary vertical stacking" — every control here is a
+ * single row or a chip, never a bordered container with nested controls.
+ * Spec 15.3: interactive targets are >= 40px tall.
+ */
+
+.cc-root {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+}
+
+/* ── top bar ───────────────────────────────────────────────────────────── */
+.cc-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px 10px;
+}
+.cc-bar-l { flex: 1; min-width: 0; }
+.cc-bar-title {
+  font-family: var(--font-display, inherit);
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--tx);
+}
+.cc-bar-sub {
+  font-size: 11.5px;
+  color: var(--mu);
+  margin-top: 2px;
+}
+
+.cc-body { padding: 0 16px 12px; }
+
+/* ── progress rail ─────────────────────────────────────────────────────── */
+.cc-progress {
+  display: flex;
+  gap: 4px;
+  margin: 4px 0 20px;
+  padding: 0;
+}
+.cc-dot {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.cc-dot-i {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--sf);
+  border: 1px solid var(--br);
+  color: var(--mu);
+}
+.cc-dot.on .cc-dot-i {
+  background: var(--ac);
+  border-color: var(--ac);
+  color: #fff;
+}
+.cc-dot.done .cc-dot-i {
+  background: transparent;
+  border-color: var(--ac);
+  color: var(--ac);
+}
+.cc-dot-l {
+  font-size: 9.5px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--mu);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.cc-dot.on .cc-dot-l { color: var(--tx); font-weight: 700; }
+
+/* ── headings ──────────────────────────────────────────────────────────── */
+.cc-h1 {
+  font-family: var(--font-display, inherit);
+  font-size: 23px;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+  font-weight: 800;
+  margin: 0 0 6px;
+  color: var(--tx);
+}
+.cc-lede {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--mu);
+  margin: 0 0 16px;
+}
+
+/* ── choice rows (source + format) ─────────────────────────────────────── */
+.cc-choices { display: flex; flex-direction: column; gap: 8px; }
+.cc-choice {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 13px 14px;
+  min-height: 56px;
+  border-radius: 12px;
+  background: var(--sf);
+  border: 1px solid var(--br);
+  color: var(--tx);
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.cc-choice:active { transform: scale(0.995); }
+.cc-choice.on {
+  border-color: var(--ac);
+  background: color-mix(in srgb, var(--ac) 10%, var(--sf));
+}
+.cc-choice:focus-visible {
+  outline: 2px solid var(--ac);
+  outline-offset: 2px;
+}
+.cc-choice-main { flex: 1; min-width: 0; display: block; }
+.cc-choice-t {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--tx);
+}
+.cc-choice-h {
+  display: block;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--mu);
+  margin-top: 3px;
+}
+.cc-choice-a {
+  font-size: 13px;
+  color: var(--mu);
+  flex: 0 0 auto;
+}
+.cc-choice.on .cc-choice-a { color: var(--ac); font-weight: 700; }
+
+/* ── chips (platform / tone) ───────────────────────────────────────────── */
+.cc-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.cc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 14px;
+  min-height: 42px;
+  border-radius: 999px;
+  background: var(--sf);
+  border: 1px solid var(--br);
+  color: var(--tx);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.cc-chip.on {
+  border-color: var(--ac);
+  background: color-mix(in srgb, var(--ac) 14%, var(--sf));
+}
+.cc-chip:focus-visible {
+  outline: 2px solid var(--ac);
+  outline-offset: 2px;
+}
+.cc-chip-e { font-size: 14px; line-height: 1; }
+
+/* ── compact "value — Change" rails (spec 7.2) ─────────────────────────── */
+.cc-rails {
+  margin-top: 18px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--br);
+  background: var(--sf);
+}
+.cc-rails-tight { margin: 0 0 14px; }
+.cc-rail {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 13px;
+  min-height: 44px;
+  border-bottom: 1px solid var(--br);
+}
+.cc-rail:last-child { border-bottom: 0; }
+.cc-rail-l {
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--mu);
+  flex: 0 0 62px;
+}
+.cc-rail-v {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tx);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cc-rail-c {
+  flex: 0 0 auto;
+  background: none;
+  border: 0;
+  padding: 8px 2px;
+  min-height: 36px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ac);
+  cursor: pointer;
+}
+.cc-rail-c:focus-visible {
+  outline: 2px solid var(--ac);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ── pickers ───────────────────────────────────────────────────────────── */
+.cc-picker {
+  margin-top: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--br);
+  background: var(--sf);
+  overflow: hidden;
+}
+.cc-picker-hd {
+  display: block;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mu);
+  font-weight: 700;
+  padding: 11px 13px 7px;
+}
+.cc-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 11px 13px;
+  min-height: 52px;
+  background: none;
+  border: 0;
+  border-top: 1px solid var(--br);
+  color: var(--tx);
+  cursor: pointer;
+}
+.cc-item.on { background: color-mix(in srgb, var(--ac) 10%, transparent); }
+.cc-item:focus-visible { outline: 2px solid var(--ac); outline-offset: -2px; }
+.cc-item-t {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--tx);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.cc-item-m {
+  display: block;
+  font-size: 10.5px;
+  color: var(--mu);
+  margin-top: 2px;
+}
+
+.cc-textarea {
+  display: block;
+  width: 100%;
+  min-height: 96px;
+  padding: 12px 13px;
+  border: 0;
+  border-top: 1px solid var(--br);
+  background: transparent;
+  color: var(--tx);
+  font-family: inherit;
+  font-size: 13.5px;
+  line-height: 1.55;
+  resize: vertical;
+}
+.cc-textarea:focus { outline: 2px solid var(--ac); outline-offset: -2px; }
+
+.cc-note {
+  padding: 0 13px 10px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--mu);
+}
+.cc-empty {
+  padding: 16px 14px;
+  border-radius: 12px;
+  border: 1px dashed var(--br);
+  text-align: center;
+  margin-top: 16px;
+}
+.cc-empty p {
+  margin: 0 0 10px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--mu);
+}
+
+/* ── footer actions ────────────────────────────────────────────────────── */
+.cc-foot {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+  align-items: stretch;
+}
+.cc-back { flex: 0 0 auto; min-height: 46px; }
+.cc-next { flex: 1; min-height: 46px; justify-content: center; }
+
+/* ── result screen ─────────────────────────────────────────────────────── */
+.cc-out { margin-bottom: 14px; }
+.cc-out .oc { margin: 0; }
+.cc-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+  align-items: stretch;
+}
+.cc-a-main { flex: 1; min-height: 46px; justify-content: center; }
+.cc-a { flex: 0 0 auto; min-height: 46px; }
+
+.cc-busy {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 40px 16px;
+  text-align: center;
+}
+.cc-busy p { margin: 0; font-size: 13px; color: var(--mu); }
+
+.cc-fail {
+  padding: 16px 14px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, #ff6b6b 40%, var(--br));
+  background: color-mix(in srgb, #ff6b6b 8%, var(--sf));
+  text-align: center;
+}
+.cc-fail-t {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--tx);
+}
+.cc-pre {
+  margin: 0;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--bg, #111);
+  font-size: 11.5px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  text-align: left;
+  max-height: 300px;
+  overflow: auto;
+  color: var(--tx);
+}
+
+/* Spec 8.5: changes after generating are flagged, never silently swallowed. */
+.cc-stale {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 13px;
+  margin-bottom: 14px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, #ffb020 40%, var(--br));
+  background: color-mix(in srgb, #ffb020 10%, var(--sf));
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--tx);
+}
+.cc-stale-b {
+  flex: 0 0 auto;
+  background: none;
+  border: 1px solid color-mix(in srgb, #ffb020 50%, var(--br));
+  border-radius: 999px;
+  padding: 7px 12px;
+  min-height: 34px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--tx);
+  cursor: pointer;
+}
