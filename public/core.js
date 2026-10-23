@@ -1180,6 +1180,10 @@ function renderTrend(t){
       ${(window.cpOpportunityMarkup
           ? window.cpOpportunityMarkup(t, { score: opp, open: !!(S.oppWhy && S.oppWhy[t.id]), bar: true })
           : `<div class="opp" aria-label="Heuristic opportunity estimate, not a forecast"><div class="opp-head"><span class="opp-lbl">Opportunity estimate</span><span class="opp-val">${opp}/100</span></div><div class="opp-bar"><div class="opp-fill" style="width:${opp}%"></div></div></div>`)}
+      ${""/* Spec 3.2: a story detail view offers a prominent "Create content" action that carries this story's context into the creation workflow. Placed under the score and platform rows, where the user has just decided the story is worth it. The handler reads the card's own platform/format selections, so what they see here is what arrives in Create. */}
+      <button class="btn bp cp-create-cta" type="button" onclick="cpCreateStartFromTrend('${esc(t.id)}')">
+        ${I.bolt}<span>Create content</span>
+      </button>
       <div class="flow">
         ${hRail('Platform', platLabel, platChips)}
         ${hRail('Format', ct, ctChips)}
