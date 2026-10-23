@@ -806,10 +806,20 @@ function trendBestPlatform(t){
   // Was a first-match if-chain checking a handful of keywords — most
   // ordinary headlines (especially sports news) never hit any of those
   // words, so it silently fell through to "just use your primary platform"
-  // most of the time without you knowing that's what was happening. This
-  // scores every platform against several signal groups and picks whichever
-  // actually has the strongest match — still a heuristic, not a trained
-  // model, but a much more honest attempt than "first regex that hits wins."
+  // most of the time without you knowing that's what was happening. The
+  // scoring now lives in lib/platformPick.js, which scores every platform
+  // against several signal groups and picks whichever actually has the
+  // strongest match — still a heuristic, not a trained model, but a much more
+  // honest attempt than "first regex that hits wins."
+  //
+  // The arithmetic moved to the lib because spec 5.4 asks the recommendation
+  // to be explainable, and an explanation that re-runs its own copy of this
+  // walk WILL eventually disagree with the row on the card. One implementation,
+  // two readers: the row, and the "Why this platform?" panel.
+  // The inline version is kept as a fallback so a missing script degrades to
+  // the old behaviour instead of throwing (the freeze class this codebase
+  // already paid for).
+  if(window.cpPickPlatform) return window.cpPickPlatform(t, S.user?.platforms, S.user?.primaryPlatform);
   const plats = S.user?.platforms || ['instagram'];
   const hay = ((t.headline||'')+' '+(t.summary||'')).toLowerCase();
   const scores = { tiktok:0, instagram:0, youtube:0, twitter:0 };
@@ -857,6 +867,15 @@ function trendOpportunity(t){
 window.toggleOppWhy = (tid) => {
   S.oppWhy = S.oppWhy || {};
   S.oppWhy[tid] = !S.oppWhy[tid];
+  render();
+};
+// Same rule, same gesture, for the "Best platform" recommendation (spec 5.1
+// lists the suggested platform as its own block; 5.4 governs how it explains
+// itself). Kept as a separate flag so opening one panel never closes the other
+// by accident.
+window.togglePlatWhy = (tid) => {
+  S.platWhy = S.platWhy || {};
+  S.platWhy[tid] = !S.platWhy[tid];
   render();
 };
 
@@ -1148,7 +1167,16 @@ function renderTrend(t){
         <span class="timing-note">Estimated from story freshness</span>
       </div>
       <div class="why"><div class="why-label">Why this matters</div><div class="why-body">${esc(rec||t.summary||"No additional context is available for this story yet.")}</div></div>
-      <div class="best-plat"><span class="em">${PLAT_EMOJI[bp]||"◆"}</span><div style="flex:1"><div class="best-plat-lbl">Best platform</div><div class="best-plat-val">${esc(bpLabel)}</div></div></div>
+      ${(window.cpPlatformMarkup
+          ? window.cpPlatformMarkup(t, {
+              open: !!(S.platWhy && S.platWhy[t.id]),
+              platforms: S.user?.platforms,
+              primary: S.user?.primaryPlatform,
+              plats: PLATS,
+              emoji: PLAT_EMOJI,
+              pick: bp
+            })
+          : `<div class="best-plat"><span class="em">${PLAT_EMOJI[bp]||"◆"}</span><div style="flex:1"><div class="best-plat-lbl">Best platform</div><div class="best-plat-val">${esc(bpLabel)}</div></div></div>`)}
       ${(window.cpOpportunityMarkup
           ? window.cpOpportunityMarkup(t, { score: opp, open: !!(S.oppWhy && S.oppWhy[t.id]), bar: true })
           : `<div class="opp" aria-label="Heuristic opportunity estimate, not a forecast"><div class="opp-head"><span class="opp-lbl">Opportunity estimate</span><span class="opp-val">${opp}/100</span></div><div class="opp-bar"><div class="opp-fill" style="width:${opp}%"></div></div></div>`)}

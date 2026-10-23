@@ -561,6 +561,13 @@ body{padding-bottom:calc(var(--tab-h) + env(safe-area-inset-bottom));letter-spac
 .best-plat .em{font-size:16px}
 .best-plat-lbl{font-size:11px;font-weight:600;text-transform:none;letter-spacing:0;color:var(--mu)}
 .best-plat-val{font-size:12px;font-weight:600;color:var(--tx)}
+/* "Why this platform?" wraps the existing .best-plat row and reuses the
+   .oppw-toggle / .oppw controls the score explainer already established, so
+   both panels share one row shape and one collapsed control. The wrapper only
+   groups the row with its control; it adds no styling of its own beyond
+   closing the gap the row's own bottom margin used to leave. */
+.best-plat-wrap{margin-bottom:10px}
+.best-plat-wrap .best-plat{margin-bottom:0}
 
 .opp{margin-bottom:12px}
 .opp-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px}
@@ -2159,9 +2166,17 @@ body{padding-bottom:calc(var(--tab-h) + env(safe-area-inset-bottom));letter-spac
      markup that reads it. Both load BEFORE core.js, so core.js never has to
      worry about whether they exist - it still guards, because a missing
      script must degrade rather than freeze the screen. -->
-<script src="lib/opportunityScore.js?v=43"></script>
-<script src="lib/opportunityExplain.js?v=43"></script>
-<script src="core.js?v=43"></script>
+<!-- The ONE shared html escaper. Loads before every module that escapes. -->
+<script src="lib/htmlEsc.js?v=44"></script>
+<script src="lib/opportunityScore.js?v=44"></script>
+<script src="lib/opportunityExplain.js?v=44"></script>
+<!-- "Why this platform?" (spec 5.1 + 5.4). platformPick.js is the pure pick
+     (the single source of truth core.js now delegates to); platformExplain.js
+     renders the row + control + panel and reuses the row renderer exported by
+     opportunityExplain.js, which is why it must load AFTER it. -->
+<script src="lib/platformPick.js?v=44"></script>
+<script src="lib/platformExplain.js?v=44"></script>
+<script src="core.js?v=44"></script>
 <!-- Create flow (spec PART 6). Order matters: flow.js defines the rules,
      steps/review render from it, generate.js wires to the existing pipeline,
      and index.js exposes the handlers the markup calls. All of them load
