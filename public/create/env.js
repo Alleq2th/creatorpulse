@@ -1,4 +1,5 @@
-/* CreatorPulse · Create — one place that reads the app's shared globals.
+/* CreatorPulse · Create — one place that reads the app's shared globals,
+ * and the first script loaded after core.js.
  *
  * core.js declares its state and tables with top-level `const`. In a browser
  * those live in the global *lexical* scope: a later classic script CAN read
@@ -16,6 +17,16 @@
  *
  * Every Create file goes through this object rather than touching the globals
  * directly, so there is exactly one place to look when the contract changes.
+ *
+ * BOOTSTRAP (added with spec 8.3)
+ * -------------------------------
+ * This is the first script in the document that runs AFTER core.js, which makes
+ * it the only place a later module can be attached without editing index.html
+ * or core.js — both are far too large to rewrite through the file API, and
+ * editing them was the only alternative. The bootstrap below is three lines and
+ * adds one thing: the long-form document view (spec 8.3). If those files are
+ * missing the app behaves exactly as before, because the view attaches itself
+ * by wrapping renderOut and stands aside if it cannot.
  */
 (function () {
   'use strict';
@@ -38,4 +49,26 @@
       });
     }
   };
+
+  /* Load the long-form document view (spec 8.3).
+   *
+   * `async = false` keeps execution in insertion order, so the pure rules in
+   * longFormDoc.js are evaluated before the view that calls them. Any failure
+   * here is swallowed: a missing optional module must never stop Create from
+   * working, so the app simply keeps the old card for long scripts. */
+  (function loadLongFormView() {
+    if (typeof document === 'undefined') return;
+    var files = ['/lib/longFormDoc.js?v=46', '/lib/longFormView.js?v=46'];
+    files.forEach(function (src) {
+      if (document.querySelector('script[data-cp-lf="' + src + '"]')) return;
+      var s = document.createElement('script');
+      s.src = src;
+      s.async = false;
+      s.dataset.cpLf = src;
+      s.onerror = function () {
+        if (window.console && console.warn) console.warn('[longform] could not load ' + src);
+      };
+      document.head.appendChild(s);
+    });
+  })();
 })();
