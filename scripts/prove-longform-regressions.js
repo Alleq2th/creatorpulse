@@ -1,12 +1,18 @@
 #!/usr/bin/env node
 /* Deliberate-break harness: proves the spec 8.3 tests fail when the code
  * regresses. Each mutation is applied to the original file, tested, then the
- * original is restored from a saved copy and checksummed, so the working tree
- * is unchanged afterwards.
+ * original is restored from a saved in-memory copy and checksummed, so the
+ * working tree is unchanged afterwards.
  *
  * Matches on test names AND assertion messages: a test that fails with the
  * intended message is proof the RIGHT assertion fired, which is stronger than
  * "some test went red".
+ *
+ *   node scripts/prove-longform-regressions.js
+ *
+ * Exit code 0 means every break was caught. A SETUP-ERROR means an anchor no
+ * longer matches the code — the mutation never ran, so it proves nothing even
+ * though nothing went red. Keep the anchors honest.
  */
 const fs = require('fs');
 const path = require('path');
@@ -38,15 +44,17 @@ const mutations = [
   {
     name: 'the prompt patch stops removing the bracketed headings',
     file: VIEW,
-    from: '   "Keep the energy high, tease the next related video, and point "',
-    to: '   "[0:00 - 0:25 THE HOOK]: Keep the energy high, and point "',
+    // A bracketed heading spliced back into the replacement block: the patch
+    // then "fixes" the prompt while re-injecting the very tags SYS forbids.
+    from: "for watching'. Keep the energy high",
+    to: "for watching'. [0:00 - 0:25 THE HOOK]: Keep the energy high",
     expect: 'every bracketed heading must be removed'
   },
   {
     name: 'the prompt patch splices raw newlines straight into the JSON body',
     file: VIEW,
     from: '.replace(/\\n/g, "\\\\n")',
-    to: '.replace(/\\n/g, "\\n")',
+    to: '.replace(/\\n/g, "\n")',
     expect: 'the patched body must still be valid JSON'
   },
   {
@@ -61,20 +69,20 @@ const mutations = [
     file: VIEW,
     from: 'if (target && target.scrollIntoView)',
     to: 'if (false && target && target.scrollIntoView)',
-    expect: 'the id must be quoted'
+    expect: 'tapping a pill must scroll to that section'
   },
   {
     name: 'a long unlabelled script is silently downgraded to text length only',
     file: LIB,
-    from: 'return words >= LONG_FORM_WORDS;',
-    to: 'return false;',
+    from: "if (words(content).length >= MIN_DOC_WORDS) return 'long-form';",
+    to: "if (false && words(content).length >= MIN_DOC_WORDS) return 'long-form';",
     expect: '300 words is a document'
   },
   {
     name: 'the parser drops sections, so the jump list disappears',
     file: LIB,
-    from: 'if (LINE_TAG.test(line)) {',
-    to: 'if (false && LINE_TAG.test(line)) {',
+    from: 'var b = RE_BRACKET.exec(trimmed);',
+    to: 'var b = null;',
     expect: 'bracketed section tags are parsed into real sections'
   },
   {
