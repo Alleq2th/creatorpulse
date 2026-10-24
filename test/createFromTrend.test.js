@@ -184,9 +184,20 @@ test('the cached page is versioned forward so phones pick up the new button', ()
   // Without both of these the change is invisible on a phone that already has
   // the old shell cached, which is how "it works in the browser" becomes "it
   // still doesn\'t work for me".
-  assert.match(indexHtml, /lib\/storyToCreate\.js\?v=45/, 'the helper needs its own cache-busting version');
-  assert.match(indexHtml, /core\.js\?v=45/, 'core.js changed, so its version must change too');
-  assert.match(sw, /creatorpulse-v21/, 'the service worker cache name must move forward');
+  // Pinned FORWARD, not to a literal: the rule is "the version moved past the
+  // one this test was written for", so a later change may bump it again without
+  // having to edit this assertion. A hard-coded value would fail on every future
+  // bump for no reason, and would have to be "fixed" by loosening the test —
+  // which is how a real cache-busting regression slips through.
+  // Anchored on src="… so it cannot match the tail of
+  // "lib/opportunityScore.js?v=44" — which is exactly how the first version of
+  // this assertion read v44 instead of the real tag.
+  const helperV = Number(indexHtml.match(/src="lib\/storyToCreate\.js\?v=(\d+)"/)[1]);
+  const coreV = Number(indexHtml.match(/src="core\.js\?v=(\d+)"/)[1]);
+  const swV = Number(sw.match(/creatorpulse-v(\d+)/)[1]);
+  assert.ok(helperV >= 45, 'the helper version must not go backwards');
+  assert.ok(coreV >= 45, 'core.js version must not go backwards');
+  assert.ok(swV >= 21, 'the service worker cache name must move forward');
 });
 
 test('the new action is a practical touch target (spec 15.3)', () => {
