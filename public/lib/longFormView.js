@@ -25,7 +25,7 @@
  * "[0:00 - 0:25 THE HOOK & RETENTION STAKE]:". The model was told two opposite
  * things, and the output the user then had to edit arrived full of the very
  * tags the app forbids. That template lived in core.js and is fixed here by
- * rewriting the prompt at request time - see promptPatch below.
+ * rewriting the prompt at request time - see installPromptPatch below.
  *
  * HOW IT ATTACHES WITHOUT TOUCHING core.js
  * ----------------------------------------
@@ -45,18 +45,57 @@
   // Matched on the template's distinctive first sentence so a future reword of
   // the body does not silently disable the fix.
   var OLD_PROMPT = "Structure requirements:";
-  var NEW_PROMPT =
+  // Marks the END of the bracketed block, so the whole block can be replaced
+  // rather than only its first line. Replacing the marker alone would leave
+  // every "[0:00 - 0:25 THE HOOK...]:" line in the prompt, so the model would
+  // still be copying the very tags SYS bans.
+  var END_MARKER = "Return only the ready-to-record script";
+
+  /* IMPORTANT: the fetch body is ALREADY JSON-encoded when this patch runs, so
+   * everything spliced in must itself be JSON-escaped. Inserting raw newlines
+   * or quotes produces "Bad control character in string literal" and the API
+   * rejects the request - which would break long-form generation outright.
+   * longFormScript.test.js parses the patched body to prove it stays valid.
+   *
+   * The wording also avoids double quotes for the same reason (the example
+   * heading is written in single quotes). */
+  function jsonSafe(text) {
+    return String(text)
+      .replace(/\\/g, "\\\\")
+      .replace(/"/g, '\\"')
+      .replace(/\n/g, "\\n")
+      .replace(/\r/g, "\\r")
+      .replace(/\t/g, "\\t");
+  }
+
+  var NEW_BLOCK = jsonSafe(
     "The script is read as a document and edited section by section, so give it " +
     "real chapters. Put each chapter heading on its own line as a timestamp " +
-    "followed by a dash and a short title, for example \"0:00 - The Hook\". Never " +
+    "followed by a dash and a short title, for example '0:00 - The Hook'. Never " +
     "wrap a heading in square brackets or any other tag, and never write a bare " +
-    "label like \"HOOK:\" - a heading is the only line that starts with a " +
-    "timestamp; everything else is spoken words.";
+    "label such as HOOK alone on a line - a heading is the only line that starts " +
+    "with a timestamp; everything else is spoken words.\n\n" +
+    "Cover these chapters in this order, using your own timestamp headings:\n" +
+    "1. Open on the central question or revelation immediately, without introducing " +
+    "yourself, and make the stakes clear in the first twenty seconds.\n" +
+    "2. Preview the most unexpected thing coming later in the video, and include one " +
+    "brief subscribe call-to-action.\n" +
+    "3. The backstory: the origins, the key figures involved, and how the conflict " +
+    "escalated. Where a visual would help, describe it in plain prose inside the " +
+    "narration rather than as a bracketed cue.\n" +
+    "4. The turning point: the pivotal breakdown, specific statistics, and the " +
+    "strongest quotes.\n" +
+    "5. The untold truth and impact: deliver the payoff you teased earlier and say " +
+    "what mainstream coverage missed.\n" +
+    "6. Close with a retention call-to-action. Never say 'in conclusion' or 'thanks " +
+    "for watching'. Keep the energy high, tease the next related video, and point " +
+    "viewers to it on screen now.\n\n"
+  );
 
   /* The chat request builder lives in core.js and is not exported, so the
    * prompt is corrected at the transport instead: one fetch wrapper that
    * rewrites the long-form template on its way out. This is deliberately the
-   * narrowest possible touch - it changes one string in one request body and
+   * narrowest possible touch - it changes one block in one request body and
    * leaves every other request byte-identical. */
   function installPromptPatch() {
     if (typeof window === "undefined" || window.__cpPromptPatched) return;
@@ -68,9 +107,12 @@
         var body = init && init.body;
         if (typeof body === "string" && body.indexOf("Long-Form YouTube Video Script") > -1 &&
             body.indexOf(OLD_PROMPT) > -1) {
-          init = Object.assign({}, init, {
-            body: body.replace(OLD_PROMPT, NEW_PROMPT + "\n\nCover these chapters in this order:")
-          });
+          var start = body.indexOf(OLD_PROMPT);
+          var end = body.indexOf(END_MARKER);
+          body = end > start
+            ? body.slice(0, start) + NEW_BLOCK + body.slice(end)
+            : body.replace(OLD_PROMPT, NEW_BLOCK);
+          init = Object.assign({}, init, { body: body });
         }
       } catch (e) { /* never break a request because of this file */ }
       return nativeFetch.call(this, input, init);
@@ -94,12 +136,11 @@
 
   /* The document itself.
    *
-   * The sheet is one wide column at a comfortable reading measure, with real
-   * headings - so "move between sections" and "read the script" are both
-   * possible on a phone. The actions are split: Save stays primary at the
-   * bottom, everything else sits in a quiet toolbar - spec 8.3: "Keep secondary
-   * actions accessible without allowing them to overwhelm the writing
-   * experience."
+   * One wide column at a comfortable reading measure, with real headings - so
+   * "move between sections" and "read the script" are both possible on a
+   * phone. The actions are split: Save stays primary at the bottom, everything
+   * else sits in a quiet toolbar - spec 8.3: "Keep secondary actions accessible
+   * without allowing them to overwhelm the writing experience."
    */
   function renderDocScript(o, tid, idx, content) {
     var LF = window.CPLongForm;
