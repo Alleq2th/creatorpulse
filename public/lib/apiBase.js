@@ -121,7 +121,7 @@
 
   // Static-only hosts cannot answer /api/ no matter what.
   function isStaticHost() {
-    return /(^|\.)(github\.io|gitlab\.io|netlify\.app|vercel\.app|pages\.dev|surge\.sh|web\.app)$/i.test(location.hostname);
+    return /(^|\.)(github\.io|gitlab\.io|netlify\.app|pages\.dev|surge\.sh|web\.app)$/i.test(location.hostname);
   }
 
   // Pure rule table - kept free of I/O so it can be unit-tested directly.

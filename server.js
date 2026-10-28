@@ -123,11 +123,13 @@ if (compression) app.use(compression());
 const CORS_ALLOWLIST = [
   process.env.FRONTEND_URL,
   process.env.RENDER_EXTERNAL_URL,
+  process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null,
+  process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : null,
   "http://localhost:3000",
   "http://localhost:5173",
   "http://127.0.0.1:3000",
 ].filter(Boolean);
-const CORS_ORIGIN_RE = /^https?:\/\/([a-z0-9-]+\.)*(github\.io|onrender\.com)$/i;
+const CORS_ORIGIN_RE = /^https?:\/\/([a-z0-9-]+\.)*(github\.io|onrender\.com|vercel\.app)$/i;
 app.use(cors({
   origin: (origin, cb) => {
     // same-origin requests have no Origin header — allow
@@ -221,7 +223,7 @@ app.use(express.static(PUBLIC_DIR, { maxAge: "5m", etag: true, index: false }));
 let INDEX_HTML = null;
 let INDEX_HTML_SEEDED = null;
 function backendSeed() {
-  const raw = process.env.RENDER_EXTERNAL_URL || process.env.API_BASE_URL || "";
+  const raw = process.env.RENDER_EXTERNAL_URL || process.env.API_BASE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
   // Only an absolute https URL is usable as a cross-origin API base; anything
   // else (unset, a bare host, a local http:// dev address) is ignored so the
   // page keeps whatever seed it already had rather than gaining a broken one.
@@ -318,7 +320,7 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI;
-const FRONTEND_URL = process.env.FRONTEND_URL || "";
+const FRONTEND_URL = process.env.FRONTEND_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "");
 
 const oauth2Client = GOOGLE_CLIENT_ID
   ? new google.auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI)

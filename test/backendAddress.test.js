@@ -82,11 +82,12 @@ test("CORS allows the frontend's own origins, so a split deploy still works", ()
 
 test("the CORS pattern matches our hosts and nothing unrelated", () => {
   // Same regex as server.js, re-checked here so a careless edit is caught.
-  const RE = /^https?:\/\/([a-z0-9-]+\.)*(github\.io|onrender\.com)$/i;
+  const RE = /^https?:\/\/([a-z0-9-]+\.)*(github\.io|onrender\.com|vercel\.app)$/i;
   for (const ok of [
     "https://alleq2th.github.io",
     "https://creatorpulse-3khg.onrender.com",
     "https://my-thing.onrender.com",
+    "https://creatorpulse-tdur.vercel.app",
   ]) {
     assert.ok(RE.test(ok), `${ok} should be allowed`);
   }
