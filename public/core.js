@@ -2111,6 +2111,7 @@ function render(){
     if(ev){ window.__csKeep.edTime = ev.currentTime || window.__csKeep.edTime; window.__csKeep.edCid = ev.dataset.cid || window.__csKeep.edCid; }
   } catch(_){}
   if(S.mode === "boot"){ root.innerHTML = `<div class="auth-wrap"><div class="boot-brand"><img src="logo-64.png" class="brand-mark boot-pulse" alt="CreatorPulse"/><div class="brand-name" style="margin-top:14px">CreatorPulse</div></div><div class="boot-spinner-wrap"><span class="sp boot-sp"></span></div><div class="boot-status">Setting things up…</div></div>`; return; }
+  if(typeof window.dismissCpSplash === "function") window.dismissCpSplash();
   if(S.mode === "auth") { renderAuth(); return csAfterRender(); }
   if(S.mode === "onboard") { renderOnboard(); return csAfterRender(); }
   renderApp();
