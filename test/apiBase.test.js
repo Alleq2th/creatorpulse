@@ -74,12 +74,17 @@ test("on a static file host, /api calls go to the real backend", () => {
 test("every static host in the list resolves to the backend", () => {
   const hosts = [
     "alleq2th.github.io", "foo.gitlab.io", "thing.netlify.app",
-    "proj.vercel.app", "x.pages.dev", "app.surge.sh", "site.web.app",
+    "x.pages.dev", "app.surge.sh", "site.web.app",
   ];
   for (const hostname of hosts) {
     const w = runInBrowser({ hostname, origin: `https://${hostname}` });
     assert.equal(w.ariaApiBase(), BACKEND, `${hostname} should resolve to the backend`);
   }
+});
+
+test("when deployed on vercel.app, the API stays same-origin", () => {
+  const w = runInBrowser({ hostname: "creatorpulse-tdur.vercel.app", origin: "https://creatorpulse-tdur.vercel.app" });
+  assert.equal(w.ariaApiBase(), "https://creatorpulse-tdur.vercel.app");
 });
 
 test("when our own Express server serves the page, the API stays same-origin", () => {
