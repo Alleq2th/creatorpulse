@@ -3299,7 +3299,11 @@ app.use((err, _req, res, _next) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`CreatorPulse running on port ${PORT}`));
+if (require.main === module || !process.env.VERCEL) {
+  app.listen(PORT, () => console.log(`CreatorPulse running on port ${PORT}`));
+}
+
+module.exports = app;
 
 // SECURITY NOTE:
 // - Passwords are hashed by Supabase Auth (bcrypt/argon2). Never store plaintext.
