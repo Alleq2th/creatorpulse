@@ -65,9 +65,7 @@ test.describe('Create flow', () => {
 
   // KNOWN BUG, tracked in the PR: the "Studio" button on a generated script calls
   // svOpenWithScript(), which loads the script but never switches the Studio view on
-  // (it does not set CPEnv.state().studioDirect), so the teleprompter never appears.
-  // Remove .fixme once that path is fixed.
-  test.fixme('a script generated in Create opens in the Studio teleprompter', async ({ page }) => {
+  test('a script generated in Create opens in the Studio teleprompter', async ({ page }) => {
     await mockApi(page, SCRIPT);
     await openCreate(page);
     await startIdeaFlow(page);

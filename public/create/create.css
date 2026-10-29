@@ -627,3 +627,15 @@
 .cc-style-row input[type=color] { width:44px; height:30px; border:none; background:none; padding:0; cursor:pointer; }
 .cc-style-hint { font-size:11px; color:var(--mu); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:160px; }
 .cc-style-actions { display:flex; gap:8px; justify-content:flex-end; }
+
+/* ── Text layers in the card editor ─────────────────────────────────────── */
+.cc-style-row-wide { align-items:stretch; flex-direction:column; gap:4px; }
+.cc-style-panel input[type=text], .cc-layer textarea, .cc-layer input[type=text] { width:100%; box-sizing:border-box; font:inherit; font-size:13px; padding:7px 9px; border:1px solid var(--br); border-radius:8px; background:var(--sf); color:var(--tx); }
+.cc-style-panel input[type=range] { flex:1; min-width:120px; }
+.cc-layer { display:flex; flex-direction:column; gap:6px; padding:10px; border:1px solid var(--br); border-radius:10px; background:var(--sf); }
+.cc-layer-name { font-size:11px; font-weight:700; color:var(--mu); text-transform:uppercase; letter-spacing:.04em; }
+.cc-layer-tools { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.cc-layer-tools select { font-size:12px; padding:5px 6px; border-radius:8px; border:1px solid var(--br); background:transparent; color:var(--tx); }
+.cc-layer-tools input[type=color] { width:40px; height:28px; border:none; background:none; padding:0; cursor:pointer; }
+.cc-layer-size { display:flex; align-items:center; gap:6px; font-size:11px; color:var(--mu); flex:1; min-width:150px; }
+.cc-layer-size input[type=range] { flex:1; }

@@ -44,6 +44,12 @@ const CARD_THEMES = [
   { id: "editorial_warm", label: "Editorial Warm" }
 ];
 
+// Text layers on a single graphic. "field" is the slide property the text lives in.
+const CARD_LAYERS = [
+  { key: "headline", label: "Headline", field: "headline", multi: true },
+  { key: "supportingText", label: "Supporting text", field: "supportingText", multi: true },
+  { key: "ctaLine", label: "Call to action", field: "ctaLine", multi: false }
+];
 const CARD_TYPOGRAPHIES = [
   { id: "impact", label: "Impact Bold" },
   { id: "modern_sans", label: "Modern Sans" },
@@ -1305,9 +1311,9 @@ function renderPlatformMockup(o, tid, idx, curPlat) {
         </div>
         <div class="mock-tt-overlay">
           <div class="mock-tt-info">
-            <div class="mock-tt-user">@${esc(userHandle)}</div>
-            <div class="mock-tt-desc">${esc(textContent.slice(0, 95))} #fyp #viral</div>
-            <div class="mock-tt-sound">🎵 <span>Trending Sound · Original Audio</span></div>
+            <div class="mock-tt-user">@<span data-cp-mock="handle" data-cp-tid="${tid}" data-cp-default="${esc(userHandle)}">${esc((S.mockText && S.mockText[tid] && S.mockText[tid].handle) || userHandle)}</span></div>
+            <div class="mock-tt-desc"><span data-cp-mock="caption" data-cp-tid="${tid}" data-cp-default="${esc(textContent.slice(0, 95))}">${esc((S.mockText && S.mockText[tid] && S.mockText[tid].caption) || textContent.slice(0, 95))}</span> <span data-cp-mock="hashtags" data-cp-tid="${tid}" data-cp-default="#fyp #viral">${esc((S.mockText && S.mockText[tid] && S.mockText[tid].hashtags) || "#fyp #viral")}</span></div>
+            <div class="mock-tt-sound">🎵 <span data-cp-mock="sound" data-cp-tid="${tid}" data-cp-default="Trending Sound · Original Audio">${esc((S.mockText && S.mockText[tid] && S.mockText[tid].sound) || "Trending Sound · Original Audio")}</span></div>
           </div>
           <div class="mock-tt-side">
             <div class="mock-tt-side-item"><div class="mock-tt-side-btn">❤️</div><span>52.4K</span></div>
@@ -1396,12 +1402,44 @@ function renderCardCanvasEditor(o, tid, idx, slideIndex, slide, imageUrl, aspect
     const on = curTypo === x.id;
     return `<button type="button" class="cc-style-chip${on ? " active" : ""}" style="font-family:${fam}" aria-pressed="${on}" onclick="cpPickStyleFont(this,'${tid}',${idx},${slideIndex},'${x.id}')">${x.label}</button>`;
   }).join("");
+  const layerRows = CARD_LAYERS.map(L => {
+    const txt = (slide && slide[L.field]) || "";
+    const lf = (sty.layerFonts || {})[L.key] || "";
+    const lc = (sty.layerColors || {})[L.key] || "";
+    const sc = Math.round((((sty.layerScale || {})[L.key]) || 1) * 100);
+    const fontOpts = '<option value="">Card font</option>' + CARD_TYPOGRAPHIES.map(x => `<option value="${x.id}"${lf === x.id ? " selected" : ""}>${x.label}</option>`).join("");
+    const onText = `cpSetSlideText('${tid}',${idx},${slideIndex},'${L.field}',this.value)`;
+    const field = L.multi
+      ? `<textarea rows="2" aria-label="${L.label} text" oninput="${onText}">${esc(txt)}</textarea>`
+      : `<input type="text" value="${esc(txt)}" aria-label="${L.label} text" oninput="${onText}"/>`;
+    return `<div class="cc-layer" data-cp-layer="${L.key}">
+      <div class="cc-layer-name">${L.label}</div>
+      ${field}
+      <div class="cc-layer-tools">
+        <select aria-label="${L.label} font" onchange="cpSetLayerStyle('${tid}',${idx},${slideIndex},'layerFonts','${L.key}',this.value)">${fontOpts}</select>
+        <input type="color" value="${lc || curColor}" aria-label="${L.label} colour" oninput="cpSetLayerStyle('${tid}',${idx},${slideIndex},'layerColors','${L.key}',this.value)"/>
+        <label class="cc-layer-size">Size <input type="range" min="60" max="160" value="${sc}" aria-label="${L.label} size" oninput="cpSetLayerStyle('${tid}',${idx},${slideIndex},'layerScale','${L.key}',this.value/100)"/></label>
+      </div>
+    </div>`;
+  }).join("");
+  const mt = (S.mockText && S.mockText[tid]) || {};
+  const defHandle = S.user?.handle || S.user?.name?.toLowerCase().replace(/\s+/g, "") || "creatorpulse";
+  const mockRow = (k, label, val, def) => `<div class="cc-style-row cc-style-row-wide"><span class="cc-style-label">${label}</span><input type="text" value="${esc(val)}" placeholder="${esc(def)}" aria-label="Phone ${label.toLowerCase()}" oninput="cpSetMockText('${tid}','${k}',this.value)"/></div>`;
   const stylePanel = `<div class="cc-style-panel" data-cp-style="${key}">
     <div class="cc-style-title">Style this card</div>
-    <div class="cc-style-row"><span class="cc-style-label">Font</span><div class="cc-style-chips">${fontChips}</div></div>
-    <div class="cc-style-row"><span class="cc-style-label">Text colour</span><input type="color" value="${curColor}" aria-label="Text colour" oninput="cpSetCardStyle('${tid}',${idx},${slideIndex},'textColor',this.value)"/></div>
-    <div class="cc-style-row"><span class="cc-style-label">Background</span><label class="btn bo bxs">Change background image<input type="file" accept="image/*" hidden onchange="cpPickCardBackground(this,'${tid}',${idx},${slideIndex})"/></label><span class="cc-style-hint">${sty.bgName ? esc(sty.bgName) : "Article photo"}</span></div>
-    <div class="cc-style-actions"><button type="button" class="btn bo bxs" onclick="cpResetCardStyle('${tid}',${idx},${slideIndex})">Reset style</button><button type="button" class="btn bp bxs" onclick="cpApplyCardStyle('${tid}',${idx},${slideIndex})">Apply style</button></div>
+    <div class="cc-style-row"><span class="cc-style-label">All text font</span><div class="cc-style-chips">${fontChips}</div></div>
+    <div class="cc-style-row"><span class="cc-style-label">All text colour</span><input type="color" value="${curColor}" aria-label="All text colour" oninput="cpSetCardStyle('${tid}',${idx},${slideIndex},'textColor',this.value)"/></div>
+    <div class="cc-style-title">Text on the card</div>
+    ${layerRows}
+    <div class="cc-style-title">Background</div>
+    <div class="cc-style-row"><span class="cc-style-label">Photo</span><label class="btn bo bxs">Change background image<input type="file" accept="image/*" hidden onchange="cpPickCardBackground(this,'${tid}',${idx},${slideIndex})"/></label><span class="cc-style-hint">${sty.bgName ? esc(sty.bgName) : "Article photo"}</span></div>
+    <div class="cc-style-row"><span class="cc-style-label">Dim photo</span><input type="range" min="0" max="80" value="${Math.round((sty.dim || 0) * 100)}" aria-label="Dim background photo" oninput="cpSetCardStyle('${tid}',${idx},${slideIndex},'dim',this.value/100)"/></div>
+    <div class="cc-style-title">Phone overlay text</div>
+    ${mockRow("handle", "Name", mt.handle || "", defHandle)}
+    ${mockRow("caption", "Caption", mt.caption || "", "Caption from the card")}
+    ${mockRow("hashtags", "Hashtags", mt.hashtags || "", "#fyp #viral")}
+    ${mockRow("sound", "Sound", mt.sound || "", "Trending Sound · Original Audio")}
+    <div class="cc-style-actions"><button type="button" class="btn bo bxs" onclick="cpResetCardStyle('${tid}',${idx},${slideIndex})">Reset style</button><button type="button" class="btn bp bxs" onclick="cpApplyCardStyle('${tid}',${idx},${slideIndex})">Apply to card image</button></div>
   </div>`;
   return `<details class="cp-canvas-editor"><summary>Edit layout on canvas</summary><div class="cp-canvas-instructions">Drag a block to move it. Drag its lower-right handle to resize. Apply to update the card image.</div><div class="cp-canvas-stage" data-canvas-stage="${key}" style="aspect-ratio:${aspectRatio}"><img src="${imageUrl||slide?.img||o.img||''}" alt="Card canvas preview" draggable="false" onerror="cardImgFail(this, this.dataset.fb)" data-fb="${slide?.localImg||o.fallbackImg||''}"/><div class="cp-canvas-blocks" data-canvas-key="${key}" data-slide-index="${slideIndex}" data-card-key="${tid}-${idx}">${box('headline','Headline',headline)}${box('supportingText','Supporting text',support)}</div></div><div class="cp-canvas-actions"><button type="button" class="btn bo bxs" onclick="resetCardCanvas('${tid}',${idx},${slideIndex})">Reset layout</button><button type="button" class="btn bp bxs" onclick="applyCanvasLayout('${tid}',${idx},${slideIndex})">Apply layout</button></div>${stylePanel}</details>`;
 }
@@ -1687,6 +1725,24 @@ window.cpSetCardStyle = (tid, idx, slideIndex, key, value) => {
   slide._style = slide._style || {};
   slide._style[key] = value;
 };
+window.cpSetSlideText = (tid, idx, slideIndex, field, value) => {
+  const slide = cpCardSlide(tid, idx, slideIndex); if (!slide) return;
+  slide[field] = value;
+};
+window.cpSetLayerStyle = (tid, idx, slideIndex, group, layerKey, value) => {
+  const slide = cpCardSlide(tid, idx, slideIndex); if (!slide) return;
+  slide._style = slide._style || {};
+  slide._style[group] = { ...(slide._style[group] || {}), [layerKey]: value };
+};
+// Phone overlay text (name, caption, hashtags, sound) is plain HTML, so it
+// updates the mockup in place. Keeping the editor open while typing.
+window.cpSetMockText = (tid, key, value) => {
+  S.mockText = S.mockText || {};
+  S.mockText[tid] = { ...(S.mockText[tid] || {}), [key]: value };
+  document.querySelectorAll(`[data-cp-mock="${key}"][data-cp-tid="${tid}"]`).forEach(el => {
+    el.textContent = value || el.dataset.cpDefault || "";
+  });
+};
 window.cpPickStyleFont = (btn, tid, idx, slideIndex, typoId) => {
   window.cpSetCardStyle(tid, idx, slideIndex, "typography", typoId);
   // Move the highlight without repainting the whole screen, which would close the editor.
@@ -1714,7 +1770,13 @@ window.cpApplyCardStyle = async (tid, idx, slideIndex) => {
   const slide = cpCardSlide(tid, idx, slideIndex);
   if (!o || !ctx || !slide || o.type === "carousel") { toast("This card cannot be styled."); return; }
   const sty = slide._style || {};
-  const payloadSlide = { ...slide, img: undefined, localImg: undefined, customImage: sty.bgImage || slide.customImage || undefined, textColor: sty.textColor || undefined };
+  const payloadSlide = {
+    ...slide, img: undefined, localImg: undefined,
+    customImage: sty.bgImage || slide.customImage || undefined,
+    textColor: sty.textColor || undefined,
+    layerFonts: sty.layerFonts, layerColors: sty.layerColors, layerScale: sty.layerScale,
+    dim: sty.dim || undefined
+  };
   const payload = {
     ...ctx,
     typography: sty.typography || ctx.typography,
@@ -1722,7 +1784,7 @@ window.cpApplyCardStyle = async (tid, idx, slideIndex) => {
     focalPoint: S.focalPoint[tid] ? {x: S.focalPoint[tid].x/100, y: S.focalPoint[tid].y/100} : null,
     brand: BRAND_PRESETS[S.brandPreset[tid]||"creator"]
   };
-  toast("Applying style…");
+  toast("Applying to card image…");
   try {
     const cd = await generateCardsWithRetry(payload);
     const img = (cd.images || [])[0];
@@ -1730,7 +1792,7 @@ window.cpApplyCardStyle = async (tid, idx, slideIndex) => {
     slide.img = img;
     o.img = img;
     render();
-    toast("Style applied");
+    toast("Card image updated");
   } catch (e) {
     toast("Couldn't apply that style. Try again.");
   }
