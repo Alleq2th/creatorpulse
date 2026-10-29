@@ -49,8 +49,8 @@ test("services/statCard.js scales dimensions according to density", () => {
 });
 
 test("routes/cards.js forwards theme, typography, and density to renderCardSet", () => {
-  assert.match(cardsRoute, /const\s*\{\s*slides,\s*category,\s*palette,\s*format,\s*imageUrl,\s*theme,\s*typography,\s*density,\s*focalPoint,\s*brand\s*\}\s*=\s*req\.body/);
-  assert.match(cardsRoute, /renderCardSet\(\s*capped,\s*category,\s*palette,\s*format,\s*imageUrl,\s*\{\s*theme,\s*typography,\s*density,\s*focalPoint,\s*brand\s*\}\s*\)/);
+  assert.match(cardsRoute, /const\s*\{\s*slides,\s*category,\s*palette,\s*format,\s*imageUrl,\s*theme,\s*typography,\s*density,\s*focalPoint,\s*brand(?:,\s*plateOnly)?\s*\}\s*=\s*req\.body/);
+  assert.match(cardsRoute, /renderCardSet\(\s*capped,\s*category,\s*palette,\s*format,\s*imageUrl,\s*\{\s*theme,\s*typography,\s*density,\s*focalPoint,\s*brand(?:,\s*plateOnly(?::\s*plateOnly\s*===\s*true)?)?\s*\}\s*\)/);
 });
 
 test("core.js exposes theme, typography, and density controls in the generator", () => {
