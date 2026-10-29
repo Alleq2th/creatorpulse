@@ -1,4 +1,4 @@
-/* CreatorPulse · Create — the result screen (spec Step 6 Refine + Step 7 Save).
+/* CreatorPulse · Create: the result screen (spec Step 6 Refine + Step 7 Save).
  *
  * Spec 7.1 asks for "A. Content preview or working area ... B. Contextual
  * editing controls ... C. Primary actions". renderOut() in core.js already IS
@@ -41,14 +41,25 @@
       body = '<div class="cc-fail"><p class="cc-fail-t">' + E(st.error) + '</p>' +
         '<button class="btn bo bxs" type="button" onclick="cpCreateGenerate()">Try again</button></div>';
     } else if (isBusy) {
-      body = '<div class="cc-busy"><span class="sp"></span><p>Writing your ' +
-        E(String(st.format || '').toLowerCase()) + '…</p><p class=\"cc-busy-note\">Gathering the story · shaping the design · polishing your post</p></div>';
-    } else if (!outs.length) {
+    } else if (isBusy) {
+      body = '<div class="cc-busy">' +
+        '<div class="cc-busy-brand">' +
+        '<img src="/logo-64.png" class="cc-busy-logo" alt="Creator+"/>' +
+        '<div class="cc-busy-brand-title">Creator+</div>' +
+        '</div>' +
+        '<div class="cc-busy-bar-wrap" role="progressbar" aria-label="Generating content"><div class="cc-busy-bar"></div></div>' +
+        '<p class="cc-busy-format">Generating ' + E(String(st.format || '').toLowerCase()) + '</p>' +
+        '<div class="cc-busy-stepper">' +
+        '<span class="cc-busy-step-active">Generating story</span> &rarr; ' +
+        '<span>Sharpening design</span> &rarr; ' +
+        '<span>Publishing your post</span>' +
+        '</div>' +
+        '</div>';
       body = '<div class="cc-empty"><p>Nothing generated yet.</p>' +
         '<button class="btn bp bxs" type="button" onclick="cpCreateGenerate()">Generate</button></div>';
     } else {
       body = outs.map(function (o, i) {
-        // renderOut() is the app's own renderer — script reader, text reader,
+        // renderOut() is the app's own renderer: script reader, text reader,
         // carousel mockup, card editor and all. One call, no second copy.
         try {
           if (typeof renderOut === 'function') return '<div class="cc-out">' + renderOut(o, st.trendId, i) + '</div>';
@@ -67,7 +78,7 @@
         '<button class="cc-stale-b" type="button" onclick="cpCreateGenerate()">Regenerate</button></div>'
       : '';
 
-    // Spec 7.4: make the most relevant action prominent — after generating,
+    // Spec 7.4: make the most relevant action prominent: after generating,
     // that is saving, not generating again.
     var actions = outs.length ? primaryActions(st) : '';
 
@@ -90,7 +101,7 @@
 
   function stepRail(label, value, step) {
     return '<div class="cc-rail"><span class="cc-rail-l">' + E(label) + '</span>' +
-      '<span class="cc-rail-v">' + E(value || '—') + '</span>' +
+      '<span class="cc-rail-v">' + E(value || '-') + '</span>' +
       '<button class="cc-rail-c" type="button" onclick="cpCreateGo(\'' + step + '\')">Change</button></div>';
   }
 

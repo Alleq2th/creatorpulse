@@ -37,6 +37,7 @@
     ptypes: function () { return typeof PTYPES !== 'undefined' ? PTYPES : {}; },
     tones: function () { return typeof TONES !== 'undefined' ? TONES : []; },
     platEmoji: function () { return typeof PLAT_EMOJI !== 'undefined' ? PLAT_EMOJI : {}; },
+    platLogo: function () { return typeof PLAT_LOGO !== 'undefined' ? PLAT_LOGO : {}; },
 
     setTab: function (t) { if (typeof setTab === 'function') setTab(t); },
     render: function () { if (typeof render === 'function') render(); },

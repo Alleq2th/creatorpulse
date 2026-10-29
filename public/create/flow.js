@@ -1,4 +1,4 @@
-/* CreatorPulse · Create flow — pure step logic.
+/* CreatorPulse · Create flow: pure step logic.
  *
  * Spec PART 6.2 asks for a guided workflow: "Step 1: Choose the content source
  * ... Step 2: Choose the platform ... Step 3: Choose the format ... Step 4:
@@ -20,7 +20,7 @@
 
   /* The five screens of the flow. "Refine" and "Save" from the brief both
    * live inside the last screen, because after generating there is exactly one
-   * thing to look at — the output — with its actions attached. */
+   * thing to look at: the output: with its actions attached. */
   var STEPS = ['source', 'platform', 'format', 'tone', 'review'];
 
   var STEP_LABELS = {
@@ -35,7 +35,7 @@
    * event. A creator's own idea. An existing draft. Another supported source."
    *
    * The video recorder/uploader is kept as a source rather than as the whole
-   * tab (which is what it was before) so nothing is lost — spec 6.1 says "Do
+   * tab (which is what it was before) so nothing is lost: spec 6.1 says "Do
    * not design the entire Create experience around graphic generation alone",
    * and the same logic applies to video. */
   var SOURCES = [
@@ -67,7 +67,7 @@
   }
 
   /* Spec 6.2 Step 3: "Show only the formats relevant to the selected platform."
-   * ptypes is the app's existing PTYPES table — passed in, never redefined here,
+   * ptypes is the app's existing PTYPES table: passed in, never redefined here,
    * so there is exactly one place that decides what formats exist. */
   function formatsFor(platform, ptypes) {
     if (!platform || !ptypes) return [];
@@ -80,7 +80,7 @@
     switch (st.step) {
       case 'source':
         // The Studio path leaves the flow entirely, so it never needs to pass
-        // this check — it is intercepted by the caller.
+        // this check: it is intercepted by the caller.
         return !!st.source;
       case 'platform':
         return !!st.platform;
@@ -139,7 +139,7 @@
   /* Spec 8.5: "When a user changes platforms or formats, update the relevant
    * options appropriately. However, avoid silently destroying existing work."
    * So: keep the chosen format if the new platform still offers it; otherwise
-   * fall back to that platform's first format — and flag that the existing
+   * fall back to that platform's first format: and flag that the existing
    * output no longer matches, rather than pretending it does. */
   function setPlatform(st, platform, ptypes) {
     st.platform = platform;
@@ -163,7 +163,7 @@
     return st;
   }
 
-  /* Spec 7.2: "a compact row could show: Platform — TikTok — Change".
+  /* Spec 7.2: "a compact row could show: Platform: TikTok: Change".
    * summarize() produces the value half of those rows. */
   function summarize(st, plats, toneList) {
     var out = { source: '', platform: '', format: '', tone: '' };

@@ -1,4 +1,4 @@
-/* CreatorPulse · Create — entry point / wiring.
+/* CreatorPulse · Create: entry point / wiring.
  *
  * Owns exactly two things: where the flow state lives, and the handlers the
  * markup calls. All rendering lives in steps.js / review.js, all rules in
@@ -15,7 +15,7 @@
    * It used to ride on the app's shared state object (S.create). That looked
    * tidy but was a trap: the app re-renders from several async completions
    * (feeds, saved posts, notifications), and a click that landed while one was
-   * in flight could repaint from an object that no longer held the selection —
+   * in flight could repaint from an object that no longer held the selection -
    * the choice silently reverted to nothing. Keeping the state where it is
    * read means a repaint can never lose it, no matter who calls render(). */
   var state = null;
@@ -62,7 +62,7 @@
    * shortly instead of leaving the user on a dead-end message.
    *
    * Bounded on purpose: six attempts over ~3s. If the feeds really are empty
-   * (a brand-new account, or no network) the honest empty message stays — this
+   * (a brand-new account, or no network) the honest empty message stays: this
    * only covers the ordinary "stories are still loading" window. */
   function needsList(st) {
     if (!st || st.step !== 'source') return false;
@@ -145,7 +145,7 @@
    * the creation workflow."
    *
    * BEFORE: the story card's own controls generated in place, and the Create
-   * tab always opened on an empty "What are you creating from?" screen — so the
+   * tab always opened on an empty "What are you creating from?" screen: so the
    * opportunity score and "Why this platform?" explainers both dead-ended.
    *
    * NOW: this seeds the real flow with the story already chosen, the platform
@@ -170,13 +170,13 @@
     }
     if (!story || !story.id) return false;
 
-    /* The card's live selections, read from the app's own per-story maps — the
+    /* The card's live selections, read from the app's own per-story maps: the
      * same keys setPlat/setCT write. Never a second copy of the choice.
      *
      * `picked` matters: core.js's toggle() fills S.plat[tid] with the user's
      * primary platform the instant a card opens, purely so the rails show
      * something. That is not a decision. Only a real tap (S.hasSelected) makes
-     * it one — otherwise the flow would carry Instagram while the card read
+     * it one: otherwise the flow would carry Instagram while the card read
      * "Best platform: TikTok". */
     var picked = !!(S.hasSelected && S.hasSelected[story.id + '_platform']);
     var seed = (typeof window.cpCreateSeed === 'function')
@@ -201,7 +201,7 @@
       : null;
 
     /* Degraded path: no helper, but we still carry the story itself. The user
-     * lands on step 2 and picks the platform — strictly better than dropping
+     * lands on step 2 and picks the platform: strictly better than dropping
      * them on an empty step 1. */
     if (!seed) {
       seed = {
@@ -222,7 +222,7 @@
     st.tone = seed.tone;
     f.goto(st, seed.step);
 
-    /* Move to the Create tab and paint. setTab() is the app's own router call —
+    /* Move to the Create tab and paint. setTab() is the app's own router call -
      * using it (rather than assigning S.tab) keeps back-navigation and the
      * per-tab data loading working exactly as they do for a normal tap. */
     if (typeof window.setTab === 'function') window.setTab('create');
@@ -237,7 +237,7 @@
     if (id === 'event') { window.setTab('calendar'); return; }
     if (id === 'idea') { window.openPulseAi('I have my own content idea. Help me turn it into a compelling post, and ask me what the idea is.', 'create'); return; }
     if (id === 'story') { window.setTab('home'); return; }
-    // The Studio is a full-screen tool, not a step in this flow — hand straight
+    // The Studio is a full-screen tool, not a step in this flow: hand straight
     // over to the existing, unchanged code.
     if (id === 'studio') { window.cpCreateOpenStudio(); return; }
     repaint();
@@ -297,9 +297,15 @@
     repaint();
   };
 
+  window.cpCreateSetTemplate = function (id) {
+    var st = cs();
+    st.template = id;
+    repaint();
+  };
+
   /* ── the Studio hand-off ─────────────────────────────────────────────── */
   // This is the old Create tab, intact. Nothing about the camera, prompter or
-  // editor changes — it is simply reached as one source choice instead of
+  // editor changes: it is simply reached as one source choice instead of
   // being the whole tab.
   window.cpCreateOpenStudio = function () {
     var S = S_();
@@ -324,7 +330,7 @@
         st.error = '';
       })
       .catch(function (err) {
-        // Spec 18.4: never an indefinitely loading screen — a real message and
+        // Spec 18.4: never an indefinitely loading screen: a real message and
         // a retry action instead.
         st.error = (err && err.message) ? err.message : 'Generation failed.';
       })
