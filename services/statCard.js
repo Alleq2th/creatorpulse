@@ -604,7 +604,7 @@ function renderHookSVG(p, f, slide, category, scrimStrength, typo) {
     footerSVG = `
       <g opacity="0.95">
         ${srcText ? `<text x="${m}" y="${footerY - (ctaText ? 36 : 0)}" font-family="${fontBody}" font-size="20" font-weight="700" letter-spacing="1.5" fill="${p.secondaryText}">${escXml(srcText)}</text>` : ""}
-        ${ctaText ? `<text x="${m}" y="${footerY}" font-family="${layerFont(slide, "ctaLine", fontHead)}" font-size="32" font-weight="800" letter-spacing="2" fill="${layerColor(slide, "ctaLine") || p.accent}">${escXml(ctaText)}</text>` : ""}
+        ${ctaText ? `<g ${textLayoutTransform(slide, "ctaLine", f, { x: m, y: footerY - 34, width: f.w - 2*m, height: 40 })}><text x="${m}" y="${footerY}" font-family="${layerFont(slide, "ctaLine", fontHead)}" font-size="32" font-weight="800" letter-spacing="2" fill="${layerColor(slide, "ctaLine") || p.accent}">${escXml(ctaText)}</text></g>` : ""}
       </g>`;
   } else {
     footerSVG = swipeFooter(p, f, typo);
@@ -905,7 +905,7 @@ function renderBodySVG(p, f, slide, category, scrimStrength, typo) {
     ${slide.sectionLabel ? `<rect x="${m}" y="${sectionLabelY-20}" width="4" height="24" fill="${p.accent}"/><text x="${m+18}" y="${sectionLabelY}" font-family="${fontBody}" font-size="${f.sectionLabelSize}" font-weight="700" letter-spacing="1.5" fill="${p.accent}">${escXml((slide.sectionLabel||"").toUpperCase())}</text>` : ""}
     <g ${textLayoutTransform(slide, "headline", f, { x: m, y: headlineStartY - hSize, width: f.w - 2*m, height: Math.max(hLineH, hLines.length * hLineH) })}><text x="${m}" y="${headlineStartY}" font-family="${layerFont(slide, "headline", fontHead)}" font-size="${hSize}" font-weight="400" fill="${layerColor(slide, "headline") || p.primaryText}">${tspans(hLines, m, headlineStartY, hLineH)}</text></g>
     <g ${textLayoutTransform(slide, "supportingText", f, { x: m, y: afterHeadlineY - 40, width: f.w - 2*m, height: Math.max(180, middleBlockH) })}>${middleSVG}</g>
-    ${hasCtaLine ? `<text x="${m}" y="${footerDividerY - 32}" font-family="${layerFont(slide, "ctaLine", fontHead)}" font-size="34" fill="${layerColor(slide, "ctaLine") || p.accent}">${escXml((slide.ctaLine||"").toUpperCase())}</text>` : ""}
+    ${hasCtaLine ? `<g ${textLayoutTransform(slide, "ctaLine", f, { x: m, y: footerDividerY - 66, width: f.w - 2*m, height: 40 })}><text x="${m}" y="${footerDividerY - 32}" font-family="${layerFont(slide, "ctaLine", fontHead)}" font-size="34" fill="${layerColor(slide, "ctaLine") || p.accent}">${escXml((slide.ctaLine||"").toUpperCase())}</text></g>` : ""}
     <rect x="${m}" y="${footerDividerY}" width="${f.w-2*m}" height="1" fill="${p.muted}" opacity="0.4"/>
     ${slide.tag ? `<rect x="${m}" y="${footerY-32}" width="${40+slide.tag.length*15}" height="44" rx="22" fill="none" stroke="${p.muted}" stroke-width="1.5"/><text x="${m+20}" y="${footerY-4}" font-family="${fontBody}" font-size="22" font-weight="600" letter-spacing="1" fill="${p.secondaryText}">${escXml((slide.tag||"").toUpperCase())}</text>` : ""}
     ${(hasCtaLine || (slide.totalSlides || 1) <= 1) ? "" : swipeArrow(p, f, f.w - m, footerY - 4)}

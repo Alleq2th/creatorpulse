@@ -25,9 +25,10 @@ test.describe('Themes on a generated graphic', () => {
 
     const openThemes = async () => {
       const btn = page.locator('button.cc-th-open').first();
-      if (!(await btn.isVisible().catch(() => false))) {
-        await page.locator('details.cp-canvas-editor summary').first().click();
-      }
+      await expect(btn).toBeAttached({ timeout: 20000 });
+      // The editor opens by default; only open it if something closed it.
+      const editor = page.locator('details.cp-canvas-editor').first();
+      if ((await editor.getAttribute('open')) === null) await editor.locator('summary').click();
       await btn.click();
       await expect(page.locator('#cthOverlay')).toBeVisible();
     };

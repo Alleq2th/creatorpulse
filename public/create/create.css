@@ -666,3 +666,19 @@
 .cc-th-dots i + i { margin-left: -4px; }
 .cc-th-status { font-size: 12px; color: var(--mu2, #9a9a9a); min-height: 16px; }
 .cc-th-open-row { justify-content: flex-start; }
+
+/* Live card preview: text is drawn in the browser over the server's text-free plate. */
+.cc-live-stage{container-type:inline-size;background:#1b1b1f}
+.cc-live-plate{position:absolute;inset:0;background-size:cover;background-position:center;background-repeat:no-repeat}
+.cc-live-dim{position:absolute;inset:0;background:#000;opacity:0;pointer-events:none}
+.cc-live-status{position:absolute;left:8px;bottom:8px;z-index:2;font-size:11px;line-height:1.3;color:#fff;background:#000a;padding:3px 7px;border-radius:6px;pointer-events:none}
+.cc-live-status:empty{display:none}
+.cc-live-stage .cp-canvas-blocks{z-index:1}
+.cc-live-stage .cp-canvas-block{background:transparent;border:1px dashed rgba(255,255,255,.3)}
+.cc-live-stage .cp-canvas-block.is-selected{border:2px solid #44d7ff;background:rgba(68,215,255,.08);z-index:3}
+.cc-live-stage .cp-canvas-block:not(.is-selected) .cp-canvas-resize{display:none}
+.cc-live-stage .cp-canvas-label{display:none}
+.cc-live-stage .cp-canvas-block.is-selected .cp-canvas-label{display:block}
+.cc-live-text{position:absolute;inset:0;overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.05;text-shadow:0 2px 12px rgba(0,0,0,.45);pointer-events:none;color:#fff}
+.cc-live-text.is-empty{opacity:.45}
+.cc-layer.is-selected{outline:2px solid #44d7ff;outline-offset:3px;border-radius:6px}
