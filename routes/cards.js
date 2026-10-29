@@ -77,7 +77,7 @@ router.post("/generate-cards", async (req, res) => {
   }
   activeGenerations++;
   try {
-    const { slides, category, palette, format, imageUrl, theme, typography, density, focalPoint, brand } = req.body;
+    const { slides, category, palette, format, imageUrl, theme, typography, density, focalPoint, brand, plateOnly } = req.body;
     if (!Array.isArray(slides) || !slides.length) return res.status(400).json({ error: "slides required" });
     const capped = slides.slice(0, 10);
     let fallbackImageUrl = null;
@@ -93,7 +93,7 @@ router.post("/generate-cards", async (req, res) => {
     }
     {
       const imageUrl = fallbackImageUrl || req.body.imageUrl;
-      const images = await renderCardSet(capped, category, palette, format, imageUrl, { theme, typography, density, focalPoint, brand });
+      const images = await renderCardSet(capped, category, palette, format, imageUrl, { theme, typography, density, focalPoint, brand, plateOnly: plateOnly === true });
       res.json({ images });
     }
   } catch (e) {
