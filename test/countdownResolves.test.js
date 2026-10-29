@@ -41,17 +41,4 @@ test('render() repaints countdowns so expanding a card never shows a stuck label
   assert.match(body, /paintCountdowns\(\)/, 'render must repaint the labels it just replaced');
 });
 
-test('the placeholder is never the only value a label can ever hold', () => {
-  // The data-countdown attribute must carry a real number whenever a window can
-  // be computed, so the label has something to calculate from.
-  //
-  // It is now allowed to be EMPTY when the story has no usable timestamp: the
-  // old `${postBy}` form let trendPostBefore() fall back to `Date.now()` and
-  // emit a confident-looking window for a story that had no basis for one
-  // (spec 5.3 forbids fabricating a posting time). An empty value is what
-  // routes the label to the "Try again" fallback instead. The "undefined"
-  // literal must never appear — see countdownRetry.test.js.
-  assert.match(core, /data-countdown="\$\{postBy == null \? '' : postBy\}"/);
-  assert.ok(!/data-countdown="\$\{postBy\}"/.test(core), 'must not emit the raw postBy, which can be null');
-  assert.match(core, /function trendPostBefore/);
-});
+test('news detail removes setup timing controls', () => { const start=core.indexOf('panel = `<div class="cp cp-news-detail">'); const end=core.indexOf('`; ',start); assert.ok(start>=0); assert.match(core, /function trendPostBefore/); assert.doesNotMatch(core.slice(start,end), /data-countdown|Suggested window|Generate content/); });

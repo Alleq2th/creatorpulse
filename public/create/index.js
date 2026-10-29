@@ -234,6 +234,9 @@
   window.cpCreateSetSource = function (id) {
     var st = cs();
     F().setSource(st, id);
+    if (id === 'event') { window.setTab('calendar'); return; }
+    if (id === 'idea') { window.openPulseAi('I have my own content idea. Help me turn it into a compelling post, and ask me what the idea is.', 'create'); return; }
+    if (id === 'story') { window.setTab('home'); return; }
     // The Studio is a full-screen tool, not a step in this flow — hand straight
     // over to the existing, unchanged code.
     if (id === 'studio') { window.cpCreateOpenStudio(); return; }
@@ -299,9 +302,13 @@
   // editor changes — it is simply reached as one source choice instead of
   // being the whole tab.
   window.cpCreateOpenStudio = function () {
-    if (typeof window.svEnterStudio === 'function') { window.svEnterStudio(); return; }
-    // Fallback: Studio's own start view has the record / upload buttons.
-    if (typeof window.svAfterRender === 'function' && typeof render === 'function') render();
+    var S = S_();
+    if (!S) return;
+    S.studioDirect = true;
+    S.studio = S.studio || {};
+    S.studio.mode = 'idle';
+    if (typeof window.setTab === 'function') window.setTab('create');
+    else repaint();
   };
 
   /* ── generation ──────────────────────────────────────────────────────── */

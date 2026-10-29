@@ -51,28 +51,25 @@
   /* ── Step 1 · Source ───────────────────────────────────────────────────── */
   function sourceStep(st) {
     var f = F();
-    var cards = f.SOURCES.map(function (s) {
-      var on = st.source === s.id;
-      return '<button class="cc-choice ' + (on ? 'on' : '') + '" type="button" ' +
-        'onclick="cpCreateSetSource(\'' + s.id + '\')">' +
-        '<span class="cc-choice-main"><span class="cc-choice-t">' + E(s.label) + '</span>' +
-        '<span class="cc-choice-h">' + E(s.hint) + '</span></span>' +
-        '<span class="cc-choice-a" aria-hidden="true">' + (on ? '✓' : '→') + '</span></button>';
+    var savedDrafts = ((window.CPEnv.state() || {}).saved || []);
+    var sources = f.SOURCES.filter(function (x) { return x.id !== 'draft' || savedDrafts.length; });
+    var cards = sources.map(function (item) {
+      var meta = {
+        story: ['✦','story','Discover news','Turn a live story into a post.'],
+        event: ['◷','event','Upcoming event','Plan content around what’s next.'],
+        idea: ['✳','idea','My own idea','Shape a fresh idea with Plus AI.'],
+        draft: ['▤','draft','Existing draft',savedDrafts.length + (savedDrafts.length === 1 ? ' saved draft' : ' saved drafts')],
+        studio: ['▶','studio','Record or upload','Make a video in Studio.']
+      }[item.id];
+      return '<button class="cc-choice cc-choice-card cc-choice-' + meta[1] + '" type="button" onclick="cpCreateSetSource(\'' + item.id + '\')" aria-label="' + E(meta[2]) + '">' +
+        '<span class="cc-choice-art" aria-hidden="true"><span>' + meta[0] + '</span><i></i><i></i><i></i></span>' +
+        '<span class="cc-choice-main"><span class="cc-choice-t">' + E(meta[2]) + '</span><span class="cc-choice-h">' + E(meta[3]) + '</span></span><span class="cc-choice-a" aria-hidden="true">↗</span></button>';
     }).join('');
-
-    return bar('Create', 'Step 1 of 5') +
-      '<div class="cc-body">' +
-      progress(st) +
-      '<h1 class="cc-h1">What are you creating from?</h1>' +
-      '<p class="cc-lede">Pick a starting point. You can change platform and format next.</p>' +
+    return bar('Create', 'Step 1 of 5') + '<div class="cc-body">' + progress(st) +
+      '<h1 class="cc-h1">What are you creating from?</h1><p class="cc-lede">Choose a route and jump straight into the right workspace.</p>' +
       '<div class="cc-choices">' + cards + '</div>' +
-      (st.source === 'story' ? storyPicker(st) : '') +
-      (st.source === 'event' ? eventPicker(st) : '') +
-      (st.source === 'idea' ? ideaField(st) : '') +
-      (st.source === 'draft' ? draftPicker(st) : '') +
-      (st.source === 'studio' ? studioNote() : '') +
-      foot(st, { canNext: f.canAdvance(st, window.CPEnv.ptypes()), noNext: st.source === 'studio' }) +
-      '</div>';
+      (st.source === 'draft' && savedDrafts.length ? draftPicker(st) : '') + (st.source === 'story' ? storyPicker(st) : '') +
+      foot(st, { canNext: f.canAdvance(st, window.CPEnv.ptypes()) }) + '</div>';
   }
 
   function emptyNote(text, cta) {

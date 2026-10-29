@@ -25,7 +25,7 @@
 <link rel="stylesheet" href="studio.css?v=30">
 <!-- Create flow styles. Everything is scoped under .cc-* so it cannot collide
      with the Studio's .sv-* classes or the rest of the app. -->
-<link rel="stylesheet" href="create/create.css?v=42">
+<link rel="stylesheet" href="create/create.css?v=43">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -2351,19 +2351,19 @@ body{padding-bottom:calc(var(--tab-h) + env(safe-area-inset-bottom));letter-spac
 <!-- Carrying a story into Create (spec 3.2). Pure data, loaded before core.js
      so the card's "Create content" button always has its helper available. -->
 <script src="lib/storyToCreate.js?v=45"></script>
-<script src="core.js?v=46"></script>
+<script src="core.js?v=47"></script>
 <!-- Create flow (spec PART 6). Order matters: flow.js defines the rules,
      steps/review render from it, generate.js wires to the existing pipeline,
      and index.js exposes the handlers the markup calls. All of them load
      after core.js (they use its PLATS/PTYPES/esc/renderOut). -->
 <script src="create/env.js?v=45"></script>
 <script src="create/flow.js?v=45"></script>
-<script src="create/steps.js?v=45"></script>
+<script src="create/steps.js?v=46"></script>
 <script src="create/generate.js?v=45"></script>
-<script src="create/review.js?v=45"></script>
-<script src="create/index.js?v=45"></script>
+<script src="create/review.js?v=46"></script>
+<script src="create/index.js?v=46"></script>
 <script src="lib/studioPerf.js?v=30"></script>
-<script src="studio.js?v=30"></script>
+<script src="studio.js?v=31"></script>
 <!-- Route the Create tab to the spec PART 6 guided flow.
      `pageCreate` is a top-level function declaration in studio.js, so it is a
      real window property: the router's bare `pageCreate` lookup resolves to
@@ -2371,6 +2371,8 @@ body{padding-bottom:calc(var(--tab-h) + env(safe-area-inset-bottom));letter-spac
      no edit — the whole Studio stays intact and reachable as one source. -->
 <script>
   window.pageCreate = function () {
+    var state = window.CPEnv && window.CPEnv.state && window.CPEnv.state();
+    if (state && state.studioDirect && window.svDirectView) return window.svDirectView();
     return (window.CPCreate && window.CPCreate.view)
       ? window.CPCreate.view()
       : '<div class="cc-root"><div class="cc-wrap"><p class="cc-empty">Create is loading…</p></div></div>';

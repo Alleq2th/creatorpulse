@@ -107,27 +107,14 @@
 }
 
 /* ── choice rows (source + format) ─────────────────────────────────────── */
-.cc-choices { display: flex; flex-direction: column; gap: 8px; }
-.cc-choice {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  width: 100%;
-  text-align: left;
-  padding: 13px 14px;
-  min-height: 56px;
-  border-radius: 12px;
-  background: var(--sf);
-  border: 1px solid var(--br);
-  color: var(--tx);
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
-}
-.cc-choice:active { transform: scale(0.995); }
-.cc-choice.on {
-  border-color: var(--ac);
-  background: color-mix(in srgb, var(--ac) 10%, var(--sf));
-}
+ .cc-choices { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.cc-choice { position:relative; isolation:isolate; display:flex; flex-direction:column; align-items:flex-start; gap:12px; min-width:0; min-height:150px; width:100%; overflow:hidden; text-align:left; padding:13px; border-radius:16px; background:linear-gradient(145deg,color-mix(in srgb,var(--sf) 90%,var(--ac) 10%),var(--sf)); border:1px solid var(--br); color:var(--tx); cursor:pointer; transition:transform .16s,border-color .16s,box-shadow .16s; }
+.cc-choice::after { content:""; position:absolute; inset:0; z-index:-1; pointer-events:none; opacity:.2; background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.22'/%3E%3C/svg%3E"); mix-blend-mode:soft-light; }
+.cc-choice:active { transform:scale(.985); } .cc-choice:hover { transform:translateY(-2px); border-color:var(--ac); } .cc-choice.on { border-color:var(--ac); box-shadow:0 0 0 1px color-mix(in srgb,var(--ac) 25%,transparent); }
+.cc-choice-art { position:relative; display:grid; place-items:center; width:48px; height:48px; border-radius:14px; color:var(--cc-card-accent,var(--ac)); background:color-mix(in srgb,var(--cc-card-accent,var(--ac)) 14%,var(--sf)); }
+.cc-choice-art>span { font-size:25px; line-height:1; font-weight:800; } .cc-choice-art i { position:absolute; width:4px; height:4px; border-radius:50%; background:currentColor; opacity:.4; } .cc-choice-art i:nth-child(2){top:7px;right:8px}.cc-choice-art i:nth-child(3){bottom:8px;left:7px;width:7px;height:7px}.cc-choice-art i:nth-child(4){bottom:9px;right:10px;width:3px;height:3px}
+.cc-choice-story{--cc-card-accent:#ff8b4a}.cc-choice-event{--cc-card-accent:#42c9a5}.cc-choice-idea{--cc-card-accent:#aa8cff}.cc-choice-draft{--cc-card-accent:#62a8ff}.cc-choice-studio{--cc-card-accent:#ff6685}
+.cc-choice-main { display:block; flex:1; min-width:0; } .cc-choice-t { display:block; font-size:13px; font-weight:750; letter-spacing:-.02em; line-height:1.25; color:var(--tx); } .cc-choice-h { display:block; font-size:10.5px; line-height:1.4; color:var(--mu); margin-top:4px; } .cc-choice-a { position:absolute; top:13px; right:13px; font-size:14px; color:var(--cc-card-accent,var(--ac)); }
 .cc-choice:focus-visible {
   outline: 2px solid var(--ac);
   outline-offset: 2px;
@@ -346,6 +333,7 @@
 .cc-a { flex: 0 0 auto; min-height: 46px; }
 
 .cc-busy {
+  position:relative; overflow:hidden; border-radius:18px; background:radial-gradient(circle at 50% 38%,color-mix(in srgb,var(--ac) 17%,transparent),transparent 58%);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -353,7 +341,9 @@
   padding: 40px 16px;
   text-align: center;
 }
-.cc-busy p { margin: 0; font-size: 13px; color: var(--mu); }
+.cc-busy .sp { width:34px;height:34px;border:3px solid color-mix(in srgb,var(--ac) 24%,var(--br));border-top-color:var(--ac);box-shadow:0 0 28px color-mix(in srgb,var(--ac) 30%,transparent);animation:cc-spin .8s linear infinite,cc-pulse 1.8s ease-in-out infinite }
+.cc-busy p { margin:0;font-size:13px;color:var(--mu) }
+@keyframes cc-spin{to{transform:rotate(360deg)}} @keyframes cc-pulse{50%{box-shadow:0 0 36px color-mix(in srgb,var(--ac) 55%,transparent)}}
 
 .cc-fail {
   padding: 16px 14px;
@@ -409,3 +399,5 @@
   color: var(--tx);
   cursor: pointer;
 }
+
+@media(min-width:520px){.cc-choices{grid-template-columns:repeat(3,minmax(0,1fr))}}
