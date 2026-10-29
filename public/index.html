@@ -2322,6 +2322,46 @@ body{padding-bottom:calc(var(--tab-h) + env(safe-area-inset-bottom));letter-spac
   setTimeout(window.dismissCpSplash, 4500);
 })();
 </script>
+<script>
+/* Startup safety net: if one of CreatorPulse's own frontend scripts fails
+   before the app renders, show a readable message instead of a blank page. */
+(function(){
+  var OWN = /(^|\/)(studio|core|app)\.js(\?|$)|\/(lib|plus-ai|create)\//;
+  var shown = false;
+  function showFallback(detail){
+    if(shown) return;
+    var root = document.getElementById("root");
+    if(root && root.childNodes.length) return; /* app already rendered: leave it alone */
+    shown = true;
+    var s = document.getElementById("cp-app-splash");
+    if(s && s.parentNode) s.parentNode.removeChild(s);
+    var box = document.createElement("div");
+    box.setAttribute("role", "alert");
+    box.style.cssText = "max-width:460px;margin:12vh auto;padding:28px;font:15px/1.5 system-ui,sans-serif;color:#1f2937;text-align:center";
+    box.innerHTML = '<h1 style="font-size:20px;margin:0 0 10px">CreatorPulse couldn\'t start</h1>' +
+      '<p style="margin:0 0 16px">A script failed while loading, so the app stopped before it could show. Reloading usually fixes a stale cached file.</p>' +
+      '<button type="button" style="padding:10px 18px;border-radius:8px;border:0;background:#6d28d9;color:#fff;cursor:pointer" onclick="location.reload()">Reload</button>';
+    var p = document.createElement("p");
+    p.style.cssText = "margin:16px 0 0;font-size:12px;color:#6b7280";
+    p.textContent = detail || "";
+    box.appendChild(p);
+    (root || document.body).appendChild(box);
+  }
+  /* Runtime and syntax errors from our own scripts */
+  window.addEventListener("error", function(e){
+    var src = e && e.filename ? String(e.filename) : "";
+    if(!src || !OWN.test(src)) return;
+    var where = src.split("/").pop() + (e.lineno ? " line " + e.lineno : "");
+    showFallback("Details: " + where + (e.message ? " (" + e.message + ")" : ""));
+  });
+  /* Scripts that fail to load (404, network) do not fire window 'error' */
+  document.addEventListener("error", function(e){
+    var t = e && e.target;
+    if(!t || t.tagName !== "SCRIPT" || !t.src || !OWN.test(t.src)) return;
+    showFallback("Details: could not load " + t.getAttribute("src"));
+  }, true);
+})();
+</script>
 <div id="root"></div>
 
 <script src="lib/apiBase.js?v=46"></script>
