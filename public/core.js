@@ -1388,7 +1388,22 @@ function renderCardCanvasEditor(o, tid, idx, slideIndex, slide, imageUrl, aspect
   const headline = layout.headline || { x: 0.08, y: 0.25, width: 0.78, height: 0.2 };
   const support = layout.supportingText || { x: 0.08, y: 0.48, width: 0.78, height: 0.18 };
   const box = (name, label, pos) => `<div class="cp-canvas-block" data-canvas-key="${key}" data-canvas-block="${name}" tabindex="0" role="slider" aria-label="Drag or resize ${label}" style="left:${pos.x*100}%;top:${pos.y*100}%;width:${pos.width*100}%;height:${pos.height*100}%"><span class="cp-canvas-label">${label}</span><button type="button" class="cp-canvas-resize" data-canvas-resize="true" aria-label="Resize ${label}"></button></div>`;
-  return `<details class="cp-canvas-editor"><summary>Edit layout on canvas</summary><div class="cp-canvas-instructions">Drag a block to move it. Drag its lower-right handle to resize. Apply to update the card image.</div><div class="cp-canvas-stage" data-canvas-stage="${key}" style="aspect-ratio:${aspectRatio}"><img src="${imageUrl||slide?.img||o.img||''}" alt="Card canvas preview" draggable="false" onerror="cardImgFail(this, this.dataset.fb)" data-fb="${slide?.localImg||o.fallbackImg||''}"/><div class="cp-canvas-blocks" data-canvas-key="${key}" data-slide-index="${slideIndex}" data-card-key="${tid}-${idx}">${box('headline','Headline',headline)}${box('supportingText','Supporting text',support)}</div></div><div class="cp-canvas-actions"><button type="button" class="btn bo bxs" onclick="resetCardCanvas('${tid}',${idx},${slideIndex})">Reset layout</button><button type="button" class="btn bp bxs" onclick="applyCanvasLayout('${tid}',${idx},${slideIndex})">Apply layout</button></div></details>`;
+  const sty = (slide && slide._style) || {};
+  const curTypo = sty.typography || (o._renderCtx && o._renderCtx.typography) || "impact";
+  const curColor = sty.textColor || "#ffffff";
+  const fontChips = CARD_TYPOGRAPHIES.map(x => {
+    const fam = String((TYPO_VIS[x.id] || {}).f || "Inter, sans-serif").replace(/"/g, "'");
+    const on = curTypo === x.id;
+    return `<button type="button" class="cc-style-chip${on ? " active" : ""}" style="font-family:${fam}" aria-pressed="${on}" onclick="cpPickStyleFont(this,'${tid}',${idx},${slideIndex},'${x.id}')">${x.label}</button>`;
+  }).join("");
+  const stylePanel = `<div class="cc-style-panel" data-cp-style="${key}">
+    <div class="cc-style-title">Style this card</div>
+    <div class="cc-style-row"><span class="cc-style-label">Font</span><div class="cc-style-chips">${fontChips}</div></div>
+    <div class="cc-style-row"><span class="cc-style-label">Text colour</span><input type="color" value="${curColor}" aria-label="Text colour" oninput="cpSetCardStyle('${tid}',${idx},${slideIndex},'textColor',this.value)"/></div>
+    <div class="cc-style-row"><span class="cc-style-label">Background</span><label class="btn bo bxs">Change background image<input type="file" accept="image/*" hidden onchange="cpPickCardBackground(this,'${tid}',${idx},${slideIndex})"/></label><span class="cc-style-hint">${sty.bgName ? esc(sty.bgName) : "Article photo"}</span></div>
+    <div class="cc-style-actions"><button type="button" class="btn bo bxs" onclick="cpResetCardStyle('${tid}',${idx},${slideIndex})">Reset style</button><button type="button" class="btn bp bxs" onclick="cpApplyCardStyle('${tid}',${idx},${slideIndex})">Apply style</button></div>
+  </div>`;
+  return `<details class="cp-canvas-editor"><summary>Edit layout on canvas</summary><div class="cp-canvas-instructions">Drag a block to move it. Drag its lower-right handle to resize. Apply to update the card image.</div><div class="cp-canvas-stage" data-canvas-stage="${key}" style="aspect-ratio:${aspectRatio}"><img src="${imageUrl||slide?.img||o.img||''}" alt="Card canvas preview" draggable="false" onerror="cardImgFail(this, this.dataset.fb)" data-fb="${slide?.localImg||o.fallbackImg||''}"/><div class="cp-canvas-blocks" data-canvas-key="${key}" data-slide-index="${slideIndex}" data-card-key="${tid}-${idx}">${box('headline','Headline',headline)}${box('supportingText','Supporting text',support)}</div></div><div class="cp-canvas-actions"><button type="button" class="btn bo bxs" onclick="resetCardCanvas('${tid}',${idx},${slideIndex})">Reset layout</button><button type="button" class="btn bp bxs" onclick="applyCanvasLayout('${tid}',${idx},${slideIndex})">Apply layout</button></div>${stylePanel}</details>`;
 }
 
 function renderOut(o, tid, idx){
@@ -1507,6 +1522,11 @@ window.studioShootScript = (tid, idx) => {
   const text = o?.content || "";
   const title = t?.headline || o?.label || "Script";
   if (typeof window.svOpenWithScript === "function") {
+    // Create only shows the Studio when studioDirect is set. Set it first, or
+    // the script loads into a view nobody can see.
+    const cs = window.CPEnv && window.CPEnv.state ? window.CPEnv.state() : null;
+    if (cs) { cs.studioDirect = true; cs.studio = cs.studio || {}; cs.studio.mode = "idle"; }
+    if (typeof window.setTab === "function") window.setTab("create");
     window.svOpenWithScript(text, title);
     toast("Opening in Studio teleprompter…");
   } else {
@@ -1652,6 +1672,73 @@ window.applyCanvasLayout = async (tid,idx,slideIndex) => {
   slide.textLayout=layout;
   const ctx=o._renderCtx; if(!ctx)return;
   try { const cd=await generateCardsWithRetry({...ctx,slides:[slide],focalPoint:S.focalPoint[tid]?{x:S.focalPoint[tid].x/100,y:S.focalPoint[tid].y/100}:null,brand:BRAND_PRESETS[S.brandPreset[tid]||"creator"]}); if(cd.images?.[0]){if(o.type==="carousel")slide.img=cd.images[0];else o.img=cd.images[0]; render();toast("Card layout updated");} } catch(e){toast("Couldn't apply that layout. Try again.");}
+};
+
+// ── Card style: font, text colour and background for a generated graphic ──
+function cpCardSlide(tid, idx, slideIndex) {
+  const o = S.outs[tid]?.[idx];
+  if (!o) return null;
+  if (o.type === "carousel") return o.slides?.[slideIndex] || null;
+  if (!o.editSlide) o.editSlide = {type:"hook", headline:S.trends.find(t=>t.id===tid)?.headline||o.label, slideNumber:1, totalSlides:1, imageUrl:o._renderCtx?.imageUrl};
+  return o.editSlide;
+}
+window.cpSetCardStyle = (tid, idx, slideIndex, key, value) => {
+  const slide = cpCardSlide(tid, idx, slideIndex); if (!slide) return;
+  slide._style = slide._style || {};
+  slide._style[key] = value;
+};
+window.cpPickStyleFont = (btn, tid, idx, slideIndex, typoId) => {
+  window.cpSetCardStyle(tid, idx, slideIndex, "typography", typoId);
+  // Move the highlight without repainting the whole screen, which would close the editor.
+  btn.parentElement.querySelectorAll(".cc-style-chip").forEach(b => {
+    const on = b === btn;
+    b.classList.toggle("active", on);
+    b.setAttribute("aria-pressed", String(on));
+  });
+};
+window.cpPickCardBackground = async (input, tid, idx, slideIndex) => {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  let dataUrl;
+  try { dataUrl = await downscaleImageFile(file, 1600, 0.85); }
+  catch (e) { toast("Couldn't read that image. Try a different photo."); return; }
+  window.cpSetCardStyle(tid, idx, slideIndex, "bgImage", dataUrl);
+  window.cpSetCardStyle(tid, idx, slideIndex, "bgName", file.name.slice(0, 40));
+  const hint = input.closest(".cc-style-row")?.querySelector(".cc-style-hint");
+  if (hint) hint.textContent = file.name.slice(0, 40);
+  toast("Background ready. Tap Apply style.");
+};
+window.cpApplyCardStyle = async (tid, idx, slideIndex) => {
+  const o = S.outs[tid]?.[idx];
+  const ctx = o?._renderCtx;
+  const slide = cpCardSlide(tid, idx, slideIndex);
+  if (!o || !ctx || !slide || o.type === "carousel") { toast("This card cannot be styled."); return; }
+  const sty = slide._style || {};
+  const payloadSlide = { ...slide, img: undefined, localImg: undefined, customImage: sty.bgImage || slide.customImage || undefined, textColor: sty.textColor || undefined };
+  const payload = {
+    ...ctx,
+    typography: sty.typography || ctx.typography,
+    slides: [payloadSlide],
+    focalPoint: S.focalPoint[tid] ? {x: S.focalPoint[tid].x/100, y: S.focalPoint[tid].y/100} : null,
+    brand: BRAND_PRESETS[S.brandPreset[tid]||"creator"]
+  };
+  toast("Applying style…");
+  try {
+    const cd = await generateCardsWithRetry(payload);
+    const img = (cd.images || [])[0];
+    if (!img) throw new Error("no image");
+    slide.img = img;
+    o.img = img;
+    render();
+    toast("Style applied");
+  } catch (e) {
+    toast("Couldn't apply that style. Try again.");
+  }
+};
+window.cpResetCardStyle = (tid, idx, slideIndex) => {
+  const slide = cpCardSlide(tid, idx, slideIndex); if (!slide) return;
+  delete slide._style;
+  window.cpApplyCardStyle(tid, idx, slideIndex);
 };
 
 window.setCardText = (tid,idx,key,value) => { const o=S.outs[tid]?.[idx]; if(!o)return; o.editSlide=o.editSlide||{type:"hook",headline:S.trends.find(t=>t.id===tid)?.headline||o.label,slideNumber:1,totalSlides:1,imageUrl:o._renderCtx?.imageUrl}; o.editSlide[key]=key==="textOffset"||key==="textScale"?Number(value):value; };

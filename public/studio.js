@@ -3645,4 +3645,11 @@ async function svTranscribeAll(){
   }
   if (!ok) svToast('Could not transcribe \u2014 add caption lines by hand below');
 }
-window.svDirectView = function(){ return svStartView(svState()); };
+// Shown when Create opens the Studio directly. It must follow the same mode
+// rules as pageCreate, or a script loaded for the teleprompter is never seen.
+window.svDirectView = function(){
+  const st = svState();
+  if (st.mode === 'editor') return svEditorView(st);
+  if (st.mode === 'camera') return svCameraView(st);
+  return svStartView(st);
+};

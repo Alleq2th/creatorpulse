@@ -45,7 +45,37 @@ function installFonts() {
   }
 }
 
-module.exports = { installFonts };
+// Serverless runtimes (Vercel) run the app from a read-only bundle and do not
+// scan ~/.local/share/fonts, so the copy above never reaches the renderer and
+// every letter in the stat cards comes out as an empty box. This writes a
+// fontconfig file that points straight at the fonts shipped in assets/fonts
+// and makes it the one sharp/librsvg reads. Safe to call more than once.
+function configureFontconfig() {
+  const srcDir = path.join(__dirname, "..", "assets", "fonts");
+  if (!fs.existsSync(srcDir)) return null;
+  const tmp = os.tmpdir();
+  const confDir = path.join(tmp, "creatorpulse-fontconfig");
+  const confFile = path.join(confDir, "fonts.conf");
+  const cacheDir = path.join(tmp, "creatorpulse-fontcache");
+  const esc = (v) => String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const xml = `<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<fontconfig>
+  <dir>${esc(srcDir)}</dir>
+  <cachedir>${esc(cacheDir)}</cachedir>
+  <alias><family>sans-serif</family><prefer><family>Inter</family></prefer></alias>
+  <alias><family>Impact</family><prefer><family>Anton</family></prefer></alias>
+  <alias><family>Archivo Black</family><prefer><family>Anton</family></prefer></alias>
+</fontconfig>
+`;
+  fs.mkdirSync(confDir, { recursive: true });
+  fs.mkdirSync(cacheDir, { recursive: true });
+  fs.writeFileSync(confFile, xml);
+  process.env.FONTCONFIG_FILE = confFile;
+  return confFile;
+}
+
+module.exports = { installFonts, configureFontconfig };
 
 if (require.main === module) installFonts();
 

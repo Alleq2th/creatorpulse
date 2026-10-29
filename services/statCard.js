@@ -17,6 +17,8 @@
 // CATEGORY_ICON_OVERRIDES and they'll be used as-is.
 // ─────────────────────────────────────────────────────────────────────────
 const sharp = require("sharp");
+const { configureFontconfig } = require("../scripts/setupFonts");
+try { configureFontconfig(); } catch (e) { console.warn("[fonts] bundled font config skipped:", e.message); }
 const fetch = require("node-fetch");
 const fs = require("fs");
 const path = require("path");
@@ -225,6 +227,13 @@ function resolveTypography(key) {
 
 function resolveDensity(key) {
   return DENSITIES[key] || DENSITIES.balanced;
+}
+
+// A user-chosen text colour replaces the palette's text colours. Anything that
+// is not a 6-digit hex colour is ignored, so bad input can never break a render.
+function withTextColor(p, color) {
+  if (!color || !/^#[0-9a-f]{6}$/i.test(String(color))) return p;
+  return { ...p, primaryText: color, secondaryText: color };
 }
 
 function resolvePalette(key, themeKey) {
@@ -1042,7 +1051,7 @@ async function renderStatCard(slide, category, paletteKey, format, imageUrl, opt
   const typoKey = options.typography || slide.typography || "impact";
   const densityKey = options.density || slide.density || "balanced";
 
-  const p = resolvePalette(paletteKey, themeKey);
+  const p = withTextColor(resolvePalette(paletteKey, themeKey), slide.textColor);
   const f = resolveFormat(format, densityKey);
   const typo = resolveTypography(typoKey);
   const type = resolveType(slide, (slide.slideNumber || 1) - 1, slide.totalSlides || 1);

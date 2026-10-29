@@ -27,6 +27,31 @@
     return (S.outs && S.outs[st.trendId]) || [];
   }
 
+  // Status lines that rotate while the generator works. Each one fades in for
+  // a couple of seconds (CSS in create.css), so the wait never looks frozen.
+  var BUSY_LINES = [
+    'Reading your source',
+    'Writing the words',
+    'Designing the layout',
+    'Adding the finishing touches'
+  ];
+
+  function busyMarkup(st) {
+    var fmt = String(st.format || 'content').toLowerCase();
+    var lines = BUSY_LINES.map(function (text, i) {
+      return '<li class="cc-busy-line" style="animation-delay:' + (i * 2.2) + 's">' + E(text) + '</li>';
+    }).join('');
+    return '<div class="cc-busy" role="status" aria-live="polite">' +
+      '<div class="cc-busy-brand">' +
+      '<img src="/logo-64.png" class="cc-busy-logo" alt=""/>' +
+      '<div class="cc-busy-brand-title">Creator+</div>' +
+      '</div>' +
+      '<div class="cc-busy-bar-wrap" role="progressbar" aria-label="Generating content" aria-busy="true"><div class="cc-busy-bar"></div></div>' +
+      '<p class="cc-busy-format">Generating ' + E(fmt) + '</p>' +
+      '<ul class="cc-busy-lines">' + lines + '</ul>' +
+      '</div>';
+  }
+
   function reviewStep(st) {
     var f = F();
     var S = S_();
@@ -41,20 +66,8 @@
       body = '<div class="cc-fail"><p class="cc-fail-t">' + E(st.error) + '</p>' +
         '<button class="btn bo bxs" type="button" onclick="cpCreateGenerate()">Try again</button></div>';
     } else if (isBusy) {
-    } else if (isBusy) {
-      body = '<div class="cc-busy">' +
-        '<div class="cc-busy-brand">' +
-        '<img src="/logo-64.png" class="cc-busy-logo" alt="Creator+"/>' +
-        '<div class="cc-busy-brand-title">Creator+</div>' +
-        '</div>' +
-        '<div class="cc-busy-bar-wrap" role="progressbar" aria-label="Generating content"><div class="cc-busy-bar"></div></div>' +
-        '<p class="cc-busy-format">Generating ' + E(String(st.format || '').toLowerCase()) + '</p>' +
-        '<div class="cc-busy-stepper">' +
-        '<span class="cc-busy-step-active">Generating story</span> &rarr; ' +
-        '<span>Sharpening design</span> &rarr; ' +
-        '<span>Publishing your post</span>' +
-        '</div>' +
-        '</div>';
+      body = busyMarkup(st);
+    } else if (!outs.length) {
       body = '<div class="cc-empty"><p>Nothing generated yet.</p>' +
         '<button class="btn bp bxs" type="button" onclick="cpCreateGenerate()">Generate</button></div>';
     } else {
@@ -80,7 +93,7 @@
 
     // Spec 7.4: make the most relevant action prominent: after generating,
     // that is saving, not generating again.
-    var actions = outs.length ? primaryActions(st) : '';
+    var actions = outs.length ? primaryActions(st, outs) : '';
 
     return '<div class="cc-bar"><div class="cc-bar-l">' +
       '<div class="cc-bar-title">Your ' + E(sum.format || 'content') + '</div>' +
@@ -109,12 +122,17 @@
    * continue to another supported workflow." Save and Studio are the app's own
    * saveOut() / studioShootScript(), so a script saved here behaves exactly
    * like one saved from Home. */
-  function primaryActions(st) {
+  function primaryActions(st, outs) {
     var tid = JSON.stringify(st.trendId);
+    // Studio is the teleprompter, so it only makes sense for a spoken script.
+    var isScript = /script/i.test(String(st.format || '')) && !!(outs[0] && outs[0].content);
+    var studioBtn = isScript
+      ? '<button class="btn bo cc-a" type="button" onclick="studioShootScript(' + tid + ',0)">Studio</button>'
+      : '';
     return '<div class="cc-actions">' +
       '<button class="btn bp cc-a-main" type="button" onclick="saveOut(' + tid + ',0)">Save</button>' +
       '<button class="btn bo cc-a" type="button" onclick="cpCreateGenerate()">Regenerate</button>' +
-      '<button class="btn bo cc-a" type="button" onclick="studioShootScript(' + tid + ',0)">Studio</button>' +
+      studioBtn +
       '</div>';
   }
 
