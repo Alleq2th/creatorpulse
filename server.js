@@ -1366,6 +1366,12 @@ app.get("/api/news", async (req, res) => {
           if (!sourceImage && a.url) {
             try { sourceImage = await fetchOgImage(a.url); } catch (e) {}
           }
+          if (!sourceImage && a.title) {
+            try {
+              const liveImg = await findLiveImage(a.title, niche);
+              if (liveImg && liveImg.url) sourceImage = liveImg.url;
+            } catch (e) {}
+          }
           const score = computeContentScore(`${a.title} ${a.summary}`, { sourceCount: a.sourceCount, publishedAt: a.publishedAt, hasImage: !!sourceImage });
           const tierInfo = classifyViralTier(score);
           return {
@@ -1400,6 +1406,12 @@ app.get("/api/news", async (req, res) => {
       const item = k._raw;
       let sourceImage = extractFeedImage(item);
       if (!sourceImage && item.link) sourceImage = await fetchOgImage(item.link);
+      if (!sourceImage && item.title) {
+        try {
+          const liveImg = await findLiveImage(item.title, niche);
+          if (liveImg && liveImg.url) sourceImage = liveImg.url;
+        } catch (e) {}
+      }
       const score = computeContentScore(`${item.title} ${item.contentSnippet||""}`, { publishedAt: item.isoDate, hasImage: !!sourceImage });
       const tierInfo = classifyViralTier(score);
       return {
@@ -1443,6 +1455,12 @@ app.get("/api/blog-feed", async (req, res) => {
       const items = await Promise.all((feed.items || []).slice(0, 8).map(async (item, i) => {
         let imageUrl = extractFeedImage(item);
         if (!imageUrl && item.link) imageUrl = await fetchOgImage(item.link);
+        if (!imageUrl && item.title) {
+          try {
+            const liveImg = await findLiveImage(item.title, niche);
+            if (liveImg && liveImg.url) imageUrl = liveImg.url;
+          } catch (e) {}
+        }
         const score = computeContentScore(`${item.title} ${item.contentSnippet||""}`, { publishedAt: item.isoDate, hasImage: !!imageUrl });
         const tierInfo = classifyViralTier(score);
         return {
@@ -1735,9 +1753,32 @@ app.get("/api/notifications", async (req, res) => {
 });
 
 // ── SAVED POSTS + SCHEDULE ──────────────────────────────────────────────────
+function sanitizeSavedContent(content) {
+  if (!content || typeof content !== "object") return content;
+  const clean = Array.isArray(content) ? [...content] : { ...content };
+  if (Array.isArray(clean.slides)) {
+    clean.slides = clean.slides.map(s => {
+      if (!s || typeof s !== "object") return s;
+      const copy = { ...s };
+      if (typeof copy.img === "string" && copy.img.startsWith("data:")) delete copy.img;
+      if (typeof copy.localImg === "string" && copy.localImg.startsWith("data:")) delete copy.localImg;
+      return copy;
+    });
+  }
+  if (Array.isArray(clean.images)) {
+    clean.images = clean.images.filter(img => typeof img === "string" && !img.startsWith("data:"));
+    if (!clean.images.length) delete clean.images;
+  }
+  if (typeof clean.img === "string" && clean.img.startsWith("data:")) delete clean.img;
+  if (typeof clean.fallbackImg === "string" && clean.fallbackImg.startsWith("data:")) delete clean.fallbackImg;
+  return clean;
+}
 app.post("/api/save-post", async (req, res) => {
   if (!supabase) return res.status(503).json({ error: "Database not configured" });
-  const { token, headline, niche, platform, contentType, content, scheduledDate } = req.body;
+  let { token, headline, niche, platform, contentType, content, scheduledDate } = req.body;
+  if (content && typeof content === "object") {
+    content = sanitizeSavedContent(content);
+  }
   try {
     const { data: userData, error: userError } = await supabase.auth.getUser(token);
     if (userError) return res.status(401).json({ error: "Invalid token" });

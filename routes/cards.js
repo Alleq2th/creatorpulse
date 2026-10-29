@@ -80,8 +80,22 @@ router.post("/generate-cards", async (req, res) => {
     const { slides, category, palette, format, imageUrl, theme, typography, density, focalPoint, brand } = req.body;
     if (!Array.isArray(slides) || !slides.length) return res.status(400).json({ error: "slides required" });
     const capped = slides.slice(0, 10);
-    const images = await renderCardSet(capped, category, palette, format, imageUrl, { theme, typography, density, focalPoint, brand });
-    res.json({ images });
+    let fallbackImageUrl = null;
+    if (!imageUrl) {
+      const topic = slides[0]?.headline || (typeof category === "string" ? category : category?.name) || "trending news";
+      const niche = typeof category === "string" ? category : (category?.name || "");
+      try {
+        const imageInfo = await findLiveImage(topic, niche);
+        if (imageInfo?.url) fallbackImageUrl = imageInfo.url;
+      } catch (e) {
+        console.warn("[generate-cards] live image fallback failed:", e.message);
+      }
+    }
+    {
+      const imageUrl = fallbackImageUrl || req.body.imageUrl;
+      const images = await renderCardSet(capped, category, palette, format, imageUrl, { theme, typography, density, focalPoint, brand });
+      res.json({ images });
+    }
   } catch (e) {
     res.status(500).json({ error: e.message });
   } finally {

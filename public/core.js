@@ -530,7 +530,10 @@ async function api(path, opts, _isRetry){
     const text = await r.text();
     let data;
     try { data = text ? JSON.parse(text) : {}; }
-    catch(e){ throw new Error(`Server returned an unexpected response (status ${r.status}). This usually means the endpoint isn't available or the server is still starting up.`); }
+    catch(e){
+      if(r.status === 413) throw new Error("Request payload is too large for the server (status 413).");
+      throw new Error(`Server returned an unexpected response (status ${r.status}). This usually means the endpoint isn't available or the server is still starting up.`);
+    }
     if(!r.ok && !data.error) data.error = data.message || `Request failed (status ${r.status})`;
     // Access token expired mid-session — silently refresh once and retry the
     // same request, instead of surfacing "Invalid token" to the user.
@@ -1258,7 +1261,7 @@ function renderPlatformMockup(o, tid, idx, curPlat) {
   let inner = "";
 
   if (curPlat === "instagram") {
-    const slideImg = curSlide?.img || o.img || "";
+    const slideImg = curSlide?.img || o.img || o.imageUrl || "";
     const slideFb = curSlide?.localImg || o.fallbackImg || "";
     const imgEl = slideImg
       ? `<img src="${slideImg}" onerror="cardImgFail(this, this.dataset.fb)" data-fb="${slideFb}" style="width:100%;aspect-ratio:4/5;object-fit:cover;display:block"/>`
@@ -1312,7 +1315,7 @@ function renderPlatformMockup(o, tid, idx, curPlat) {
     const silentText = curSlide ? [curSlide.headline,curSlide.supportingText,curSlide.body].filter(Boolean).join(" ") : textContent;
     const safeZones = silent ? `<div style="position:absolute;inset:10% 8% 24%;border:1px dashed rgba(255,255,255,.76);z-index:2;pointer-events:none;border-radius:8px"><span style="position:absolute;top:5px;left:7px;background:rgba(0,0,0,.62);color:#fff;padding:3px 6px;font-size:9px;border-radius:4px">TEXT SAFE ZONE</span></div>` : "";
     const silentWarning = silent && silentText.length > 90 ? `<div style="position:absolute;top:42px;left:8px;right:8px;background:rgba(160,35,22,.94);color:white;padding:6px 8px;font-size:10px;z-index:4;border-radius:5px">Text is ${silentText.length} characters. Keep Silent Camera overlay under 90 for readability.</div>` : "";
-    const slideImg = curSlide?.img || o.img || "";
+    const slideImg = curSlide?.img || o.img || o.imageUrl || "";
     const slideFb = curSlide?.localImg || o.fallbackImg || "";
     const mediaEl = slideImg
       ? `<img src="${slideImg}" onerror="cardImgFail(this, this.dataset.fb)" data-fb="${slideFb}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"/>`
@@ -1342,7 +1345,7 @@ function renderPlatformMockup(o, tid, idx, curPlat) {
         </div>
       </div>`;
   } else if (curPlat === "youtube") {
-    const slideImg = curSlide?.img || o.img || "";
+    const slideImg = curSlide?.img || o.img || o.imageUrl || "";
     const slideFb = curSlide?.localImg || o.fallbackImg || "";
     const mediaEl = slideImg
       ? `<img src="${slideImg}" onerror="cardImgFail(this, this.dataset.fb)" data-fb="${slideFb}" style="width:100%;height:100%;object-fit:cover"/>`
@@ -1965,7 +1968,7 @@ Return only the ready-to-post spoken text — no labels, no headers, no meta-com
           userPrompt = `Write a "${c}" for a ${t.niche} creator on ${P?.label||plat}. Story: "${t.headline}". ${t.summary||""}. Return only the ready-to-post text.`;
         }
         const s = await generateText(SYS, userPrompt, tone);
-        out.push({type:"text", label:`${P?.label||plat} · ${c}`, content:s});
+        out.push({type:"text", label:`${P?.label||plat} · ${c}`, content:s, imageUrl:articleImage||t.image||null});
       }
     }
     S.outs[tid] = out;
@@ -1974,12 +1977,38 @@ Return only the ready-to-post spoken text — no labels, no headers, no meta-com
       const sd = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
       const first = out[0];
       const kind = first.type==="carousel"?"Carousel":first.type==="image"?"Image":"Script";
-      await api("/api/save-post",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:S.token,headline:t.headline,niche:t.niche,platform:plat,contentType:kind,content:first,scheduledDate:sd})});
-      loadSchedule(); loadSaved();
+      try {
+        await api("/api/save-post",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:S.token,headline:t.headline,niche:t.niche,platform:plat,contentType:kind,content:sanitizeContentForSave(first),scheduledDate:sd})});
+        loadSchedule(); loadSaved();
+      } catch(saveErr){
+        console.warn("Auto-save post to calendar failed:", saveErr);
+      }
     }
   } catch(e){ S.outs[tid] = [{type:"text", label:"Error", content:"Generation failed. "+e.message}]; }
   S.loading[tid] = false; render();
 };
+
+function sanitizeContentForSave(content){
+  if(!content || typeof content !== "object") return content;
+  const clean = Array.isArray(content) ? [...content] : { ...content };
+  if(clean.slides && Array.isArray(clean.slides)){
+    clean.slides = clean.slides.map(s => {
+      if(!s || typeof s !== "object") return s;
+      const copy = { ...s };
+      if(typeof copy.img === "string" && copy.img.startsWith("data:")) delete copy.img;
+      if(typeof copy.localImg === "string" && copy.localImg.startsWith("data:")) delete copy.localImg;
+      return copy;
+    });
+  }
+  if(clean.images && Array.isArray(clean.images)){
+    clean.images = clean.images.filter(img => typeof img === "string" && !img.startsWith("data:"));
+    if(!clean.images.length) delete clean.images;
+  }
+  if(typeof clean.img === "string" && clean.img.startsWith("data:")) delete clean.img;
+  if(typeof clean.fallbackImg === "string" && clean.fallbackImg.startsWith("data:")) delete clean.fallbackImg;
+  return clean;
+}
+window.sanitizeContentForSave = sanitizeContentForSave;
 
 window.saveOut = async (tid, idx) => {
   const t = S.trends.find(x=>x.id===tid); const o = S.outs[tid]?.[idx]; if(!t||!o) return;
@@ -1994,7 +2023,7 @@ window.saveOut = async (tid, idx) => {
   delete S.errors.saveOut;
   render();
   try {
-    const r = await api("/api/save-post",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:S.token,headline:t.headline,niche:t.niche,platform:plat,contentType:kind,content:o,scheduledDate:sd})});
+    const r = await api("/api/save-post",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:S.token,headline:t.headline,niche:t.niche,platform:plat,contentType:kind,content:sanitizeContentForSave(o),scheduledDate:sd})});
     if(!r || !r.success) throw new Error(r?.error || "save failed");
     toast("Saved"); loadSchedule(); loadSaved();
   } catch(e){
