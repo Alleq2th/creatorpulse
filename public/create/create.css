@@ -600,3 +600,30 @@
   margin-top: 4px;
 }
 .cc-busy-step-active { color: var(--ac); font-weight: 700; }
+
+/* ── Generation loader: bouncing logo, sliding bar, rotating status lines ── */
+.cc-busy { align-items:center; text-align:center; gap:14px; padding:28px 16px; }
+.cc-busy-logo { animation: cc-busy-bounce 0.9s ease-in-out infinite; }
+.cc-busy-bar-wrap { position:relative; width:min(220px,70%); height:6px; border-radius:999px; overflow:hidden; background:color-mix(in srgb, var(--ac) 14%, var(--br)); }
+.cc-busy-bar { position:absolute; top:0; left:0; height:100%; width:40%; border-radius:999px; background:var(--ac); animation: cc-busy-slide 1.4s ease-in-out infinite; }
+.cc-busy-lines { position:relative; list-style:none; margin:0; padding:0; height:22px; width:100%; }
+.cc-busy-line { position:absolute; inset:0; margin:0; font-size:13px; color:var(--mu); opacity:0; animation: cc-busy-line 8.8s ease-in-out infinite; }
+@keyframes cc-busy-bounce { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+@keyframes cc-busy-slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(260%); } }
+@keyframes cc-busy-line { 0% { opacity:0; transform: translateY(6px); } 4% { opacity:1; transform:none; } 22% { opacity:1; } 27%,100% { opacity:0; } }
+@media (prefers-reduced-motion: reduce) {
+  .cc-busy-logo, .cc-busy-bar, .cc-busy-line { animation: none; }
+  .cc-busy-line:first-child { opacity: 1; }
+}
+
+/* ── Style panel under a generated graphic ── */
+.cc-style-panel { margin:10px 0 0; padding:12px; border:1px solid var(--br); border-radius:10px; background:var(--sf); display:flex; flex-direction:column; gap:10px; }
+.cc-style-title { font-size:12px; font-weight:700; color:var(--tx); }
+.cc-style-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.cc-style-label { font-size:11px; font-weight:600; color:var(--mu); min-width:86px; }
+.cc-style-chips { display:flex; gap:6px; flex-wrap:wrap; }
+.cc-style-chip { border:1px solid var(--br); background:transparent; color:var(--tx); border-radius:999px; padding:5px 10px; font-size:12px; cursor:pointer; }
+.cc-style-chip.active { border-color:var(--ac); background:color-mix(in srgb, var(--ac) 14%, transparent); font-weight:700; }
+.cc-style-row input[type=color] { width:44px; height:30px; border:none; background:none; padding:0; cursor:pointer; }
+.cc-style-hint { font-size:11px; color:var(--mu); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:160px; }
+.cc-style-actions { display:flex; gap:8px; justify-content:flex-end; }
