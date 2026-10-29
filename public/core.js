@@ -1445,8 +1445,10 @@ function renderCardCanvasEditor(o, tid, idx, slideIndex, slide, imageUrl, aspect
     <div class="cc-style-actions"><button type="button" class="btn bo bxs" onclick="cpResetCardStyle('${tid}',${idx},${slideIndex})">Reset style</button><button type="button" class="btn bp bxs" onclick="cpApplyCardStyle('${tid}',${idx},${slideIndex})">Apply to card image</button></div>
   </div>`;
   const stage = `<div class="cp-canvas-stage cc-live-stage" data-canvas-stage="${key}" data-tid="${tid}" data-idx="${idx}" data-slide-index="${slideIndex}" style="aspect-ratio:${aspectRatio}"><div class="cc-live-plate"></div><div class="cc-live-dim"></div><div class="cc-live-status" role="status"></div><div class="cp-canvas-blocks" data-canvas-key="${key}" data-slide-index="${slideIndex}" data-card-key="${tid}-${idx}">${CARD_LAYERS.map(L => box(L.key, L.label, live[L.field])).join("")}</div></div>`;
+  const ctxBar = `<div class="cc-ctx" data-cp-ctx="${key}" data-tid="${tid}" data-idx="${idx}" data-slide-index="${slideIndex}" hidden><div class="cc-ctx-bar" role="toolbar" aria-label="Text tools"><span class="cc-ctx-name"></span><button type="button" class="cc-ctx-btn" data-cp-ctx-kind="font" aria-pressed="false" onclick="cpToggleCtxPanel('font')">Font</button><button type="button" class="cc-ctx-btn" data-cp-ctx-kind="color" aria-pressed="false" onclick="cpToggleCtxPanel('color')">Color</button></div><div class="cc-ctx-panel" hidden></div></div>`;
   setTimeout(cpSyncLiveStages, 0);
-  return `<details class="cp-canvas-editor" open><summary>Edit layout on canvas</summary><div class="cp-canvas-instructions">Tap a text block to select it. Drag to move it, or drag its corner to resize. Apply saves these changes to the card image.</div>${stage}<div class="cp-canvas-actions"><button type="button" class="btn bo bxs" onclick="resetCardCanvas('${tid}',${idx},${slideIndex})">Reset layout</button><button type="button" class="btn bp bxs" onclick="applyCanvasLayout('${tid}',${idx},${slideIndex})">Apply layout</button></div>${stylePanel}</details>`;
+  setTimeout(cpRefreshCtx, 0);
+  return `<details class="cp-canvas-editor" open><summary>Edit layout on canvas</summary><div class="cp-canvas-instructions">Tap a text block to select it, then pick its Font or Color. Double-tap to edit the words. Drag to move it, or drag its corner to resize. Apply saves these changes to the card image.</div>${stage}${ctxBar}<div class="cp-canvas-actions"><button type="button" class="btn bo bxs" onclick="resetCardCanvas('${tid}',${idx},${slideIndex})">Reset layout</button><button type="button" class="btn bp bxs" onclick="applyCanvasLayout('${tid}',${idx},${slideIndex})">Apply layout</button></div>${stylePanel}</details>`;
 }
 
 function renderOut(o, tid, idx){
@@ -1686,6 +1688,8 @@ const CP_LIVE_DEFAULT_BOX = {
 const CP_LIVE_BASE_SIZE = { headline: 9, supportingText: 4.6, ctaLine: 4 };
 let cpCanvasSel = null;      // { key, name } of the selected text block
 let cpCanvasActive = null;   // drag or resize in progress
+let cpCtxPanel = null;       // "font" | "color" | null: the panel open in the text toolbar
+const CP_CTX_COLORS = ["#ffffff", "#000000", "#ffd60a", "#44d7ff", "#ff3b30", "#34c759", "#a855f7", "#ff7a00"];
 const cpPlateCache = new Map(); // plate key -> { src, failed, pending }
 
 function cpCanvasDragging(block) { return !!cpCanvasActive && cpCanvasActive.block === block; }
@@ -1709,6 +1713,87 @@ function cpSelectCanvasBlock(key, name) {
     const panel = el.closest(".cc-style-panel");
     el.classList.toggle("is-selected", !!cpCanvasSel && panel?.dataset.cpStyle === cpCanvasSel.key && el.dataset.cpLayer === cpCanvasSel.name);
   });
+  cpRefreshCtx();
+}
+
+// Shows the Font and Color toolbar under the selected text block and fills its open panel.
+function cpRefreshCtx() {
+  document.querySelectorAll("[data-cp-ctx]").forEach(bar => {
+    const on = !!cpCanvasSel && bar.dataset.cpCtx === cpCanvasSel.key;
+    bar.hidden = !on;
+    if (!on) return;
+    const layer = CARD_LAYERS.find(L => L.key === cpCanvasSel.name);
+    bar.querySelector(".cc-ctx-name").textContent = layer ? layer.label : "Text";
+    bar.querySelectorAll(".cc-ctx-btn").forEach(b => {
+      const act = cpCtxPanel === b.dataset.cpCtxKind;
+      b.classList.toggle("active", act);
+      b.setAttribute("aria-pressed", String(act));
+    });
+    const panel = bar.querySelector(".cc-ctx-panel");
+    panel.hidden = !cpCtxPanel;
+    if (cpCtxPanel) panel.innerHTML = cpCtxPanelHTML(bar.dataset.tid, Number(bar.dataset.idx), Number(bar.dataset.slideIndex), cpCanvasSel.name, cpCtxPanel);
+  });
+}
+
+// The vertical font list (each name in its own face) or the colour swatches for one text layer.
+function cpCtxPanelHTML(tid, idx, slideIndex, name, kind) {
+  const slide = cpCardSlide(tid, idx, slideIndex) || {};
+  const sty = slide._style || {};
+  const o = S.outs[tid]?.[idx];
+  if (kind === "font") {
+    const cur = (sty.layerFonts || {})[name] || sty.typography || (o && o._renderCtx && o._renderCtx.typography) || "impact";
+    const items = CARD_TYPOGRAPHIES.map(x => {
+      const vis = TYPO_VIS[x.id] || {};
+      const on = cur === x.id;
+      const fam = String(vis.f || "Inter, sans-serif").replace(/"/g, "'");
+      return `<button type="button" role="option" class="cc-ctx-font${on ? " active" : ""}" aria-selected="${on}" style="font-family:${fam};font-weight:${vis.w || 700}" onclick="cpPickLayerFont('${tid}',${idx},${slideIndex},'${name}','${x.id}')">${x.label}</button>`;
+    }).join("");
+    return `<div class="cc-ctx-list" role="listbox" aria-label="Font">${items}</div>`;
+  }
+  const cur = ((sty.layerColors || {})[name] || sty.textColor || "#ffffff").toLowerCase();
+  const isPreset = CP_CTX_COLORS.includes(cur);
+  const swatches = CP_CTX_COLORS.map(c => {
+    const on = cur === c;
+    return `<button type="button" class="cc-ctx-swatch${on ? " active" : ""}" style="background:${c}" aria-label="Color ${c}" aria-pressed="${on}" onclick="cpPickLayerColor('${tid}',${idx},${slideIndex},'${name}','${c}')"></button>`;
+  }).join("");
+  const customStyle = isPreset ? "" : `background:${cur}`;
+  return `<div class="cc-ctx-swatches">${swatches}<label class="cc-ctx-swatch cc-ctx-custom${isPreset ? "" : " active"}" style="${customStyle}" title="Custom color"><input type="color" value="${cur}" aria-label="Custom color" oninput="cpPickLayerColor('${tid}',${idx},${slideIndex},'${name}',this.value,false)"/></label></div>`;
+}
+
+window.cpToggleCtxPanel = (kind) => {
+  cpCtxPanel = cpCtxPanel === kind ? null : kind;
+  cpRefreshCtx();
+};
+window.cpPickLayerFont = (tid, idx, slideIndex, name, typoId) => {
+  cpSetLayerStyle(tid, idx, slideIndex, "layerFonts", name, typoId);
+  cpRefreshCtx();
+};
+window.cpPickLayerColor = (tid, idx, slideIndex, name, color, refresh = true) => {
+  cpSetLayerStyle(tid, idx, slideIndex, "layerColors", name, color);
+  if (refresh) cpRefreshCtx();
+};
+
+// Double-tap opens the words for typing. The element keeps its font, size, colour and place.
+function cpStartTextEdit(block) {
+  const txt = block.querySelector(".cc-live-text");
+  if (!txt) return;
+  txt.setAttribute("contenteditable", "true");
+  txt.setAttribute("spellcheck", "true");
+  if (txt.classList.contains("is-empty")) { txt.textContent = ""; txt.classList.remove("is-empty"); }
+  txt.focus({ preventScroll: true });
+  const range = document.createRange();
+  range.selectNodeContents(txt);
+  range.collapse(false);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+function cpEditedValue(txt) { return (txt.innerText || "").replace(/\n+$/, ""); }
+function cpTextTarget(txt) {
+  const block = txt.closest(".cp-canvas-block"), stage = txt.closest(".cc-live-stage");
+  const layer = block && CARD_LAYERS.find(L => L.key === block.dataset.canvasBlock);
+  if (!stage || !layer) return null;
+  return { tid: stage.dataset.tid, idx: Number(stage.dataset.idx), slideIndex: Number(stage.dataset.slideIndex), field: layer.field };
 }
 
 function cpPlateKey(tid, idx, slideIndex) {
@@ -1778,8 +1863,9 @@ function cpUpdateLiveStage(tid, idx, slideIndex) {
     const txt = block.querySelector(".cc-live-text");
     const val = slide[L.field] || "";
     if (txt) {
-      txt.textContent = val || L.label;
-      txt.classList.toggle("is-empty", !val);
+      const typing = txt === document.activeElement;
+      if (!typing) txt.textContent = val || L.label;
+      txt.classList.toggle("is-empty", !val && !typing);
       txt.style.cssText = cpLiveTextStyle(slide, L.key, o, tid);
     }
     if (cpCanvasDragging(block)) return; // the pointer owns the box while dragging
@@ -1788,6 +1874,26 @@ function cpUpdateLiveStage(tid, idx, slideIndex) {
     block.style.top = `${pos.y * 100}%`;
     block.style.width = `${pos.width * 100}%`;
     block.style.height = `${pos.height * 100}%`;
+  });
+  cpSyncStylePanel(tid, idx, slideIndex, slide);
+}
+
+// Keeps the "Text on the card" fields in step with the preview, leaving any field the user is typing in alone.
+function cpSyncStylePanel(tid, idx, slideIndex, slide) {
+  const panel = document.querySelector(`[data-cp-style="${tid}-${idx}-${slideIndex}"]`);
+  if (!panel) return;
+  const sty = slide._style || {};
+  CARD_LAYERS.forEach(L => {
+    const row = panel.querySelector(`[data-cp-layer="${L.key}"]`);
+    if (!row) return;
+    const field = row.querySelector("textarea, input[type=text]");
+    if (field && field !== document.activeElement) field.value = slide[L.field] || "";
+    const sel = row.querySelector("select");
+    if (sel) sel.value = (sty.layerFonts || {})[L.key] || "";
+    const col = row.querySelector("input[type=color]");
+    if (col && col !== document.activeElement) col.value = (sty.layerColors || {})[L.key] || sty.textColor || "#ffffff";
+    const range = row.querySelector("input[type=range]");
+    if (range && range !== document.activeElement) range.value = Math.round((((sty.layerScale || {})[L.key]) || 1) * 100);
   });
 }
 
@@ -1817,16 +1923,25 @@ function cpCommitBlockLayout(block) {
 }
 
 const cardCanvasPointer = (() => {
+  let lastTap = null; // the last text block tapped, to tell a double tap from two single taps
   document.addEventListener("pointerdown", (event) => {
+    const active = document.querySelector('.cc-live-text[contenteditable="true"]');
+    if (active && active.contains(event.target)) return; // native caret and selection while typing
+    if (active) active.blur(); // tapping anywhere else finishes the edit
     const stage = event.target.closest(".cc-live-stage");
-    if (!stage) return;
+    if (!stage) { if (!event.target.closest(".cp-canvas-editor")) cpSelectCanvasBlock(null, null); return; }
     const block = event.target.closest(".cp-canvas-block");
     if (!block) { cpSelectCanvasBlock(null, null); return; }
+    const key = stage.dataset.canvasStage, name = block.dataset.canvasBlock;
+    const now = Date.now();
+    const doubleTap = !!lastTap && lastTap.key === key && lastTap.name === name && now - lastTap.time < 350 && !event.target.closest("[data-canvas-resize]");
+    lastTap = doubleTap ? null : { key, name, time: now };
+    if (doubleTap) cpSelectCanvasBlock(key, name);
     const rect = stage.getBoundingClientRect();
     const resizing = !!event.target.closest("[data-canvas-resize]");
     const boxRect = block.getBoundingClientRect();
     cpSelectCanvasBlock(stage.dataset.canvasStage, block.dataset.canvasBlock);
-    cpCanvasActive = { block, rect, startX: event.clientX, startY: event.clientY, left: boxRect.left - rect.left, top: boxRect.top - rect.top, width: boxRect.width, height: boxRect.height, resizing, moved: false };
+    cpCanvasActive = { block, rect, startX: event.clientX, startY: event.clientY, left: boxRect.left - rect.left, top: boxRect.top - rect.top, width: boxRect.width, height: boxRect.height, resizing, moved: false, editOnRelease: doubleTap };
     block.setPointerCapture?.(event.pointerId);
     block.classList.add("is-active");
     event.preventDefault();
@@ -1849,10 +1964,40 @@ const cardCanvasPointer = (() => {
     if (!a) return;
     a.block.classList.remove("is-active");
     if (a.moved) cpCommitBlockLayout(a.block);
+    else if (a.editOnRelease) cpStartTextEdit(a.block); // a double tap that did not move opens the words
     cpCanvasActive = null;
   };
   document.addEventListener("pointerup", finish);
   document.addEventListener("pointercancel", finish);
+
+  // While a block is being typed in: typing updates the card state live, Escape or
+  // (on the single-line call to action) Enter finishes, and paste keeps plain text only.
+  document.addEventListener("input", (event) => {
+    const txt = event.target.closest?.('.cc-live-text[contenteditable="true"]');
+    const t = txt && cpTextTarget(txt);
+    if (t) cpSetSlideText(t.tid, t.idx, t.slideIndex, t.field, cpEditedValue(txt));
+  });
+  document.addEventListener("focusout", (event) => {
+    const txt = event.target.closest?.('.cc-live-text[contenteditable="true"]');
+    if (!txt) return;
+    txt.removeAttribute("contenteditable");
+    const t = cpTextTarget(txt);
+    if (t) cpSetSlideText(t.tid, t.idx, t.slideIndex, t.field, cpEditedValue(txt));
+  });
+  document.addEventListener("keydown", (event) => {
+    const txt = event.target.closest?.('.cc-live-text[contenteditable="true"]');
+    if (!txt) return;
+    const single = txt.closest(".cp-canvas-block")?.dataset.canvasBlock === "ctaLine";
+    if (event.key === "Escape" || (event.key === "Enter" && single)) { event.preventDefault(); txt.blur(); }
+  });
+  document.addEventListener("paste", (event) => {
+    const txt = event.target.closest?.('.cc-live-text[contenteditable="true"]');
+    if (!txt) return;
+    event.preventDefault();
+    const single = txt.closest(".cp-canvas-block")?.dataset.canvasBlock === "ctaLine";
+    const plain = (event.clipboardData || window.clipboardData).getData("text/plain").replace(/\r?\n/g, single ? " " : "\n");
+    document.execCommand("insertText", false, plain);
+  });
   return true;
 })();
 window.resetCardCanvas = (tid,idx,slideIndex) => { const slide=S.outs[tid]?.[idx]?.type==="carousel"?S.outs[tid][idx].slides[slideIndex]:S.outs[tid]?.[idx]?.editSlide; if(slide)delete slide.textLayout; render(); };
