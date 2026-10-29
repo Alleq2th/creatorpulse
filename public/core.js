@@ -1390,11 +1390,14 @@ function renderPlatformMockup(o, tid, idx, curPlat) {
 
 function renderCardCanvasEditor(o, tid, idx, slideIndex, slide, imageUrl, aspectRatio) {
   const key = `${tid}-${idx}-${slideIndex}`;
-  const layout = slide?.textLayout || {};
-  const headline = layout.headline || { x: 0.08, y: 0.25, width: 0.78, height: 0.2 };
-  const support = layout.supportingText || { x: 0.08, y: 0.48, width: 0.78, height: 0.18 };
-  const box = (name, label, pos) => `<div class="cp-canvas-block" data-canvas-key="${key}" data-canvas-block="${name}" tabindex="0" role="slider" aria-label="Drag or resize ${label}" style="left:${pos.x*100}%;top:${pos.y*100}%;width:${pos.width*100}%;height:${pos.height*100}%"><span class="cp-canvas-label">${label}</span><button type="button" class="cp-canvas-resize" data-canvas-resize="true" aria-label="Resize ${label}"></button></div>`;
-  const sty = (slide && slide._style) || {};
+  const live = cpCardSlide(tid, idx, slideIndex) || slide || {};
+  const layout = live.textLayout || {};
+  const box = (name, label, text) => {
+    const pos = layout[name] || CP_LIVE_DEFAULT_BOX[name];
+    const sel = !!cpCanvasSel && cpCanvasSel.key === key && cpCanvasSel.name === name;
+    return `<div class="cp-canvas-block${sel ? " is-selected" : ""}" data-canvas-key="${key}" data-canvas-block="${name}" tabindex="0" role="slider" aria-label="Drag or resize ${label}" style="left:${pos.x*100}%;top:${pos.y*100}%;width:${pos.width*100}%;height:${pos.height*100}%"><div class="cc-live-text${text ? "" : " is-empty"}" data-cp-live="${name}" style="${cpLiveTextStyle(live, name, o, tid)}">${esc(text || label)}</div><span class="cp-canvas-label">${label}</span><button type="button" class="cp-canvas-resize" data-canvas-resize="true" aria-label="Resize ${label}"></button></div>`;
+  };
+  const sty = live._style || {};
   const curTypo = sty.typography || (o._renderCtx && o._renderCtx.typography) || "impact";
   const curColor = sty.textColor || "#ffffff";
   const fontChips = CARD_TYPOGRAPHIES.map(x => {
@@ -1403,15 +1406,15 @@ function renderCardCanvasEditor(o, tid, idx, slideIndex, slide, imageUrl, aspect
     return `<button type="button" class="cc-style-chip${on ? " active" : ""}" style="font-family:${fam}" aria-pressed="${on}" onclick="cpPickStyleFont(this,'${tid}',${idx},${slideIndex},'${x.id}')">${x.label}</button>`;
   }).join("");
   const layerRows = CARD_LAYERS.map(L => {
-    const txt = (slide && slide[L.field]) || "";
+    const txt = live[L.field] || "";
     const lf = (sty.layerFonts || {})[L.key] || "";
     const lc = (sty.layerColors || {})[L.key] || "";
     const sc = Math.round((((sty.layerScale || {})[L.key]) || 1) * 100);
     const fontOpts = '<option value="">Card font</option>' + CARD_TYPOGRAPHIES.map(x => `<option value="${x.id}"${lf === x.id ? " selected" : ""}>${x.label}</option>`).join("");
     const onText = `cpSetSlideText('${tid}',${idx},${slideIndex},'${L.field}',this.value)`;
     const field = L.multi
-      ? `<textarea rows="2" aria-label="${L.label} text" oninput="${onText}">${esc(txt)}</textarea>`
-      : `<input type="text" value="${esc(txt)}" aria-label="${L.label} text" oninput="${onText}"/>`;
+      ? `<textarea rows="2" aria-label="${L.label} text" oninput="${onText}" onfocus="cpSelectCanvasBlock('${key}','${L.key}')">${esc(txt)}</textarea>`
+      : `<input type="text" value="${esc(txt)}" aria-label="${L.label} text" oninput="${onText}" onfocus="cpSelectCanvasBlock('${key}','${L.key}')"/>`;
     return `<div class="cc-layer" data-cp-layer="${L.key}">
       <div class="cc-layer-name">${L.label}</div>
       ${field}
@@ -1441,7 +1444,9 @@ function renderCardCanvasEditor(o, tid, idx, slideIndex, slide, imageUrl, aspect
     ${mockRow("sound", "Sound", mt.sound || "", "Trending Sound · Original Audio")}
     <div class="cc-style-actions"><button type="button" class="btn bo bxs" onclick="cpResetCardStyle('${tid}',${idx},${slideIndex})">Reset style</button><button type="button" class="btn bp bxs" onclick="cpApplyCardStyle('${tid}',${idx},${slideIndex})">Apply to card image</button></div>
   </div>`;
-  return `<details class="cp-canvas-editor"><summary>Edit layout on canvas</summary><div class="cp-canvas-instructions">Drag a block to move it. Drag its lower-right handle to resize. Apply to update the card image.</div><div class="cp-canvas-stage" data-canvas-stage="${key}" style="aspect-ratio:${aspectRatio}"><img src="${imageUrl||slide?.img||o.img||''}" alt="Card canvas preview" draggable="false" onerror="cardImgFail(this, this.dataset.fb)" data-fb="${slide?.localImg||o.fallbackImg||''}"/><div class="cp-canvas-blocks" data-canvas-key="${key}" data-slide-index="${slideIndex}" data-card-key="${tid}-${idx}">${box('headline','Headline',headline)}${box('supportingText','Supporting text',support)}</div></div><div class="cp-canvas-actions"><button type="button" class="btn bo bxs" onclick="resetCardCanvas('${tid}',${idx},${slideIndex})">Reset layout</button><button type="button" class="btn bp bxs" onclick="applyCanvasLayout('${tid}',${idx},${slideIndex})">Apply layout</button></div>${stylePanel}</details>`;
+  const stage = `<div class="cp-canvas-stage cc-live-stage" data-canvas-stage="${key}" data-tid="${tid}" data-idx="${idx}" data-slide-index="${slideIndex}" style="aspect-ratio:${aspectRatio}"><div class="cc-live-plate"></div><div class="cc-live-dim"></div><div class="cc-live-status" role="status"></div><div class="cp-canvas-blocks" data-canvas-key="${key}" data-slide-index="${slideIndex}" data-card-key="${tid}-${idx}">${CARD_LAYERS.map(L => box(L.key, L.label, live[L.field])).join("")}</div></div>`;
+  setTimeout(cpSyncLiveStages, 0);
+  return `<details class="cp-canvas-editor" open><summary>Edit layout on canvas</summary><div class="cp-canvas-instructions">Tap a text block to select it. Drag to move it, or drag its corner to resize. Apply saves these changes to the card image.</div>${stage}<div class="cp-canvas-actions"><button type="button" class="btn bo bxs" onclick="resetCardCanvas('${tid}',${idx},${slideIndex})">Reset layout</button><button type="button" class="btn bp bxs" onclick="applyCanvasLayout('${tid}',${idx},${slideIndex})">Apply layout</button></div>${stylePanel}</details>`;
 }
 
 function renderOut(o, tid, idx){
@@ -1669,34 +1674,185 @@ window.setCardDensity = (tid,v) => { S.cardDensity=S.cardDensity||{}; S.railExp=
 window.setBrandPreset = (tid,id) => { const b=BRAND_PRESETS[id]; if(!b)return; S.brandPreset[tid]=id; S.palette[tid]=b.palette; S.cardTheme[tid]=b.theme; S.cardTypography[tid]=b.typography; render(); };
 window.setFocalPoint = (tid,axis,value) => { S.focalPoint=S.focalPoint||{}; const p=S.focalPoint[tid]||{x:50,y:50}; p[axis]=Number(value); S.focalPoint[tid]=p; const el=document.querySelector(`[data-focal-label="${tid}"]`); if(el)el.textContent=`${p.x}% · ${p.y}%`; };
 window.applyFocalPoint = async (tid,idx) => { const o=S.outs[tid]?.[idx]; if(!o)return; const p=S.focalPoint[tid]||{x:50,y:50}; const ctx=o._renderCtx||{category:nicheToCategory(S.trends.find(t=>t.id===tid)?.niche),palette:S.palette[tid]||"noir_orange",format:o.aspect||"instagram",imageUrl:S.trends.find(t=>t.id===tid)?.image,theme:S.cardTheme[tid],typography:S.cardTypography[tid],density:S.cardDensity[tid]}; o._imgLoading=0; render(); try { const slides=o.type==="carousel"?o.slides:[{headline:S.trends.find(t=>t.id===tid)?.headline||o.label, type:"hook", slideNumber:1,totalSlides:1,imageUrl:ctx.imageUrl}]; const cd=await generateCardsWithRetry({...ctx,slides,focalPoint:{x:p.x/100,y:p.y/100},brand:BRAND_PRESETS[S.brandPreset[tid]||"creator"]}); (cd.images||[]).forEach((img,i)=>{if(o.type==="carousel"&&o.slides[i])o.slides[i].img=img; else if(i===0)o.img=img;}); } catch(e){toast("Couldn't reframe the source image. Try again.");} o._imgLoading=null; render(); };
-const cardCanvasPointer = (() => {
-  let active = null;
-  document.addEventListener("pointerdown", (event) => {
-    const block = event.target.closest(".cp-canvas-block");
+// ── Live card preview ──────────────────────────────────────────────────────
+// The preview is the server's text-free plate with the text drawn in the
+// browser on top. Moving, resizing or restyling text only changes the shared
+// card state and this preview. Nothing goes to the server until Apply saves it.
+const CP_LIVE_DEFAULT_BOX = {
+  headline: { x: 0.08, y: 0.25, width: 0.78, height: 0.2 },
+  supportingText: { x: 0.08, y: 0.48, width: 0.78, height: 0.18 },
+  ctaLine: { x: 0.08, y: 0.88, width: 0.78, height: 0.06 }
+};
+const CP_LIVE_BASE_SIZE = { headline: 9, supportingText: 4.6, ctaLine: 4 };
+let cpCanvasSel = null;      // { key, name } of the selected text block
+let cpCanvasActive = null;   // drag or resize in progress
+const cpPlateCache = new Map(); // plate key -> { src, failed, pending }
+
+function cpCanvasDragging(block) { return !!cpCanvasActive && cpCanvasActive.block === block; }
+
+function cpLiveTextStyle(slide, name, o, tid) {
+  const sty = slide._style || {};
+  const typo = (sty.layerFonts || {})[name] || sty.typography || (o && o._renderCtx && o._renderCtx.typography) || "impact";
+  const vis = TYPO_VIS[typo] || {};
+  const color = (sty.layerColors || {})[name] || sty.textColor || "#ffffff";
+  const k = Math.max(0.5, Math.min(1.6, Number((sty.layerScale || {})[name]) || 1));
+  const upper = name === "ctaLine" ? "uppercase" : "none";
+  return `font-family:${vis.f || "Inter, sans-serif"};font-weight:${vis.w || 700};font-size:${(CP_LIVE_BASE_SIZE[name] * k).toFixed(2)}cqw;color:${color};text-transform:${upper}`;
+}
+
+function cpSelectCanvasBlock(key, name) {
+  cpCanvasSel = key && name ? { key, name } : null;
+  document.querySelectorAll(".cp-canvas-block").forEach(el => {
+    el.classList.toggle("is-selected", !!cpCanvasSel && el.dataset.canvasKey === cpCanvasSel.key && el.dataset.canvasBlock === cpCanvasSel.name);
+  });
+  document.querySelectorAll(".cc-layer[data-cp-layer]").forEach(el => {
+    const panel = el.closest(".cc-style-panel");
+    el.classList.toggle("is-selected", !!cpCanvasSel && panel?.dataset.cpStyle === cpCanvasSel.key && el.dataset.cpLayer === cpCanvasSel.name);
+  });
+}
+
+function cpPlateKey(tid, idx, slideIndex) {
+  const o = S.outs[tid]?.[idx];
+  const ctx = o?._renderCtx || {};
+  const slide = cpCardSlide(tid, idx, slideIndex) || {};
+  const sty = slide._style || {};
+  const bg = sty.bgImage ? `up:${sty.bgImage.length}:${sty.bgImage.slice(-48)}:${sty.bgName || ""}` : "";
+  const focal = S.focalPoint?.[tid] ? `${S.focalPoint[tid].x}/${S.focalPoint[tid].y}` : "";
+  return [tid, idx, slideIndex, ctx.palette || "", ctx.category || "", ctx.format || o?.aspect || "", bg, ctx.imageUrl || "", slide.customImage || "", focal].join("|");
+}
+
+function cpEnsurePlate(tid, idx, slideIndex) {
+  const plateKey = cpPlateKey(tid, idx, slideIndex);
+  let entry = cpPlateCache.get(plateKey);
+  if (entry) return entry;
+  entry = { src: null, failed: false, pending: true };
+  cpPlateCache.set(plateKey, entry);
+  const o = S.outs[tid]?.[idx];
+  const ctx = o?._renderCtx;
+  const slide = cpCardSlide(tid, idx, slideIndex);
+  if (!ctx || !slide) { entry.pending = false; entry.failed = true; return entry; }
+  const sty = slide._style || {};
+  // Dim 0: the dim is drawn live in the browser, so the plate is the bare photo.
+  const payload = {
+    ...ctx,
+    slides: [{ ...slide, img: undefined, localImg: undefined, customImage: sty.bgImage || slide.customImage || undefined, dim: 0, plateOnly: true }],
+    plateOnly: true,
+    focalPoint: S.focalPoint?.[tid] ? { x: S.focalPoint[tid].x / 100, y: S.focalPoint[tid].y / 100 } : null,
+    brand: BRAND_PRESETS[S.brandPreset?.[tid] || "creator"]
+  };
+  generateCardsWithRetry(payload)
+    .then(cd => { entry.src = (cd.images || [])[0] || null; entry.failed = !entry.src; })
+    .catch(() => { entry.failed = true; })
+    .finally(() => { entry.pending = false; cpPaintPlate(plateKey); });
+  return entry;
+}
+
+function cpPaintPlate(plateKey) {
+  const entry = cpPlateCache.get(plateKey);
+  document.querySelectorAll(".cc-live-plate").forEach(el => {
+    if (el.dataset.cpPlate !== plateKey) return;
+    el.style.backgroundImage = entry && entry.src ? `url("${entry.src}")` : "";
+    const status = el.parentElement.querySelector(".cc-live-status");
+    if (status) status.textContent = entry && entry.failed ? "Preview couldn't load. Text still updates." : (entry && entry.src ? "" : "Loading preview…");
+  });
+}
+
+// Writes the shared card state into one live stage: photo, dim, text, fonts, colours and boxes.
+function cpUpdateLiveStage(tid, idx, slideIndex) {
+  const stage = document.querySelector(`[data-canvas-stage="${tid}-${idx}-${slideIndex}"]`);
+  if (!stage) return;
+  const slide = cpCardSlide(tid, idx, slideIndex);
+  if (!slide) return;
+  const o = S.outs[tid]?.[idx];
+  const sty = slide._style || {};
+  const plateKey = cpPlateKey(tid, idx, slideIndex);
+  const plateEl = stage.querySelector(".cc-live-plate");
+  if (plateEl) plateEl.dataset.cpPlate = plateKey;
+  const dimEl = stage.querySelector(".cc-live-dim");
+  if (dimEl) dimEl.style.opacity = String(Math.max(0, Math.min(0.8, Number(sty.dim) || 0)));
+  cpEnsurePlate(tid, idx, slideIndex);
+  cpPaintPlate(plateKey);
+  CARD_LAYERS.forEach(L => {
+    const block = stage.querySelector(`[data-canvas-block="${L.key}"]`);
     if (!block) return;
-    const stage = block.closest(".cp-canvas-stage");
+    const txt = block.querySelector(".cc-live-text");
+    const val = slide[L.field] || "";
+    if (txt) {
+      txt.textContent = val || L.label;
+      txt.classList.toggle("is-empty", !val);
+      txt.style.cssText = cpLiveTextStyle(slide, L.key, o, tid);
+    }
+    if (cpCanvasDragging(block)) return; // the pointer owns the box while dragging
+    const pos = (slide.textLayout || {})[L.key] || CP_LIVE_DEFAULT_BOX[L.key];
+    block.style.left = `${pos.x * 100}%`;
+    block.style.top = `${pos.y * 100}%`;
+    block.style.width = `${pos.width * 100}%`;
+    block.style.height = `${pos.height * 100}%`;
+  });
+}
+
+function cpSyncLiveStages() {
+  document.querySelectorAll(".cc-live-stage[data-tid]").forEach(st => {
+    cpUpdateLiveStage(st.dataset.tid, Number(st.dataset.idx), Number(st.dataset.slideIndex));
+  });
+}
+
+// Saves a finished move or resize into the shared card state, as fractions of the stage.
+function cpCommitBlockLayout(block) {
+  const stage = block.closest(".cc-live-stage");
+  if (!stage) return;
+  const rect = stage.getBoundingClientRect();
+  const b = block.getBoundingClientRect();
+  const slide = cpCardSlide(stage.dataset.tid, Number(stage.dataset.idx), Number(stage.dataset.slideIndex));
+  if (!slide || !rect.width || !rect.height) return;
+  slide.textLayout = {
+    ...(slide.textLayout || {}),
+    [block.dataset.canvasBlock]: {
+      x: (b.left - rect.left) / rect.width,
+      y: (b.top - rect.top) / rect.height,
+      width: b.width / rect.width,
+      height: b.height / rect.height
+    }
+  };
+}
+
+const cardCanvasPointer = (() => {
+  document.addEventListener("pointerdown", (event) => {
+    const stage = event.target.closest(".cc-live-stage");
     if (!stage) return;
+    const block = event.target.closest(".cp-canvas-block");
+    if (!block) { cpSelectCanvasBlock(null, null); return; }
     const rect = stage.getBoundingClientRect();
     const resizing = !!event.target.closest("[data-canvas-resize]");
     const boxRect = block.getBoundingClientRect();
-    active = { block, rect, startX:event.clientX, startY:event.clientY, left:boxRect.left-rect.left, top:boxRect.top-rect.top, width:boxRect.width, height:boxRect.height, resizing };
+    cpSelectCanvasBlock(stage.dataset.canvasStage, block.dataset.canvasBlock);
+    cpCanvasActive = { block, rect, startX: event.clientX, startY: event.clientY, left: boxRect.left - rect.left, top: boxRect.top - rect.top, width: boxRect.width, height: boxRect.height, resizing, moved: false };
     block.setPointerCapture?.(event.pointerId);
     block.classList.add("is-active");
     event.preventDefault();
   });
   document.addEventListener("pointermove", (event) => {
-    if (!active) return;
-    const {block,rect,startX,startY,left,top,width,height,resizing}=active;
-    const dx=event.clientX-startX, dy=event.clientY-startY;
-    const w=resizing?Math.max(44,Math.min(rect.width-left,width+dx)):width;
-    const h=resizing?Math.max(36,Math.min(rect.height-top,height+dy)):height;
-    const x=resizing?left:Math.max(0,Math.min(rect.width-width,left+dx));
-    const y=resizing?top:Math.max(0,Math.min(rect.height-height,top+dy));
-    block.style.left=`${x/rect.width*100}%`; block.style.top=`${y/rect.height*100}%`;
-    block.style.width=`${w/rect.width*100}%`; block.style.height=`${h/rect.height*100}%`;
+    const a = cpCanvasActive;
+    if (!a) return;
+    const dx = event.clientX - a.startX, dy = event.clientY - a.startY;
+    if (!a.moved) { if (Math.hypot(dx, dy) < 4) return; a.moved = true; }
+    const { block, rect, left, top, width, height, resizing } = a;
+    const w = resizing ? Math.max(44, Math.min(rect.width - left, width + dx)) : width;
+    const h = resizing ? Math.max(36, Math.min(rect.height - top, height + dy)) : height;
+    const x = resizing ? left : Math.max(0, Math.min(rect.width - width, left + dx));
+    const y = resizing ? top : Math.max(0, Math.min(rect.height - height, top + dy));
+    block.style.left = `${x / rect.width * 100}%`; block.style.top = `${y / rect.height * 100}%`;
+    block.style.width = `${w / rect.width * 100}%`; block.style.height = `${h / rect.height * 100}%`;
   });
-  const finish=()=>{ if(!active)return; active.block.classList.remove("is-active"); active=null; };
-  document.addEventListener("pointerup",finish); document.addEventListener("pointercancel",finish);
+  const finish = () => {
+    const a = cpCanvasActive;
+    if (!a) return;
+    a.block.classList.remove("is-active");
+    if (a.moved) cpCommitBlockLayout(a.block);
+    cpCanvasActive = null;
+  };
+  document.addEventListener("pointerup", finish);
+  document.addEventListener("pointercancel", finish);
   return true;
 })();
 window.resetCardCanvas = (tid,idx,slideIndex) => { const slide=S.outs[tid]?.[idx]?.type==="carousel"?S.outs[tid][idx].slides[slideIndex]:S.outs[tid]?.[idx]?.editSlide; if(slide)delete slide.textLayout; render(); };
@@ -1724,15 +1880,18 @@ window.cpSetCardStyle = (tid, idx, slideIndex, key, value) => {
   const slide = cpCardSlide(tid, idx, slideIndex); if (!slide) return;
   slide._style = slide._style || {};
   slide._style[key] = value;
+  cpUpdateLiveStage(tid, idx, slideIndex);
 };
 window.cpSetSlideText = (tid, idx, slideIndex, field, value) => {
   const slide = cpCardSlide(tid, idx, slideIndex); if (!slide) return;
   slide[field] = value;
+  cpUpdateLiveStage(tid, idx, slideIndex);
 };
 window.cpSetLayerStyle = (tid, idx, slideIndex, group, layerKey, value) => {
   const slide = cpCardSlide(tid, idx, slideIndex); if (!slide) return;
   slide._style = slide._style || {};
   slide._style[group] = { ...(slide._style[group] || {}), [layerKey]: value };
+  cpUpdateLiveStage(tid, idx, slideIndex);
 };
 // Phone overlay text (name, caption, hashtags, sound) is plain HTML, so it
 // updates the mockup in place. Keeping the editor open while typing.
