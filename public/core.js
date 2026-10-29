@@ -1426,7 +1426,7 @@ function renderCardCanvasEditor(o, tid, idx, slideIndex, slide, imageUrl, aspect
   const defHandle = S.user?.handle || S.user?.name?.toLowerCase().replace(/\s+/g, "") || "creatorpulse";
   const mockRow = (k, label, val, def) => `<div class="cc-style-row cc-style-row-wide"><span class="cc-style-label">${label}</span><input type="text" value="${esc(val)}" placeholder="${esc(def)}" aria-label="Phone ${label.toLowerCase()}" oninput="cpSetMockText('${tid}','${k}',this.value)"/></div>`;
   const stylePanel = `<div class="cc-style-panel" data-cp-style="${key}">
-    <div class="cc-style-title">Style this card</div>
+    <div class="cc-style-title">Style this card</div><div class="cc-style-row cc-th-open-row"><button type="button" class="btn bp bxs cc-th-open" onclick="cpOpenThemes('${tid}',${idx},${slideIndex})">Themes</button><span class="cc-style-hint">${esc(window.CardThemes?.themeName(sty.themeId) || window.CardThemes?.colourName(sty.colourThemeId) || "Original look")}</span></div>
     <div class="cc-style-row"><span class="cc-style-label">All text font</span><div class="cc-style-chips">${fontChips}</div></div>
     <div class="cc-style-row"><span class="cc-style-label">All text colour</span><input type="color" value="${curColor}" aria-label="All text colour" oninput="cpSetCardStyle('${tid}',${idx},${slideIndex},'textColor',this.value)"/></div>
     <div class="cc-style-title">Text on the card</div>
@@ -1803,6 +1803,122 @@ window.cpResetCardStyle = (tid, idx, slideIndex) => {
   window.cpApplyCardStyle(tid, idx, slideIndex);
 };
 
+// ── Themes gallery ──────────────────────────────────────────────
+// Opens over the editor. Each tile shows this graphic's own photo (a text-free
+// plate from the server) with the real headline, supporting text and CTA drawn
+// in the theme's type and colours. Picking a tile applies it to the card.
+let cpThemeGallery = null;
+function cpThemeTileHTML(gal, kind, t, sty, slide, plateCss) {
+  const CT = window.CardThemes;
+  const v = CT.preview(kind, t.id, sty);
+  const active = kind === "style" ? sty.themeId === t.id : sty.colourThemeId === t.id;
+  const fam = TYPO_VIS[v.typography] || TYPO_VIS.impact;
+  const pick = kind === "style" ? "cpPickTheme" : "cpPickColourTheme";
+  if (kind === "colour") {
+    return `<button type="button" class="cc-th-swatch${active ? " active" : ""}" aria-pressed="${active}" onclick="${pick}('${gal.tid}',${gal.idx},${gal.slideIndex},'${t.id}')">
+      <span class="cc-th-dots"><i style="background:${v.textColor}"></i><i style="background:${v.accent}"></i></span><span>${esc(t.name)}</span></button>`;
+  }
+  return `<button type="button" class="cc-th-tile${active ? " active" : ""}" aria-pressed="${active}" onclick="${pick}('${gal.tid}',${gal.idx},${gal.slideIndex},'${t.id}')">
+    <span class="cc-th-frame" style="${plateCss}">
+      <span class="cc-th-dim" style="background:rgba(0,0,0,${v.dim})"></span>
+      <span class="cc-th-copy" style="font-family:${fam.f};font-weight:${fam.w};text-transform:${fam.up ? "uppercase" : "none"};color:${v.textColor}">
+        <span class="cc-th-headline">${esc(slide.headline || "")}</span>
+        ${slide.supportingText || slide.body ? `<span class="cc-th-sub">${esc(slide.supportingText || slide.body)}</span>` : ""}
+        ${slide.ctaLine ? `<span class="cc-th-cta" style="color:${v.accent}">${esc(slide.ctaLine)}</span>` : ""}
+      </span>
+    </span>
+    <span class="cc-th-name">${esc(t.name)}</span>
+  </button>`;
+}
+function cpRenderThemeGallery() {
+  const gal = cpThemeGallery;
+  const body = document.getElementById("cthBody");
+  if (!gal || !body) return;
+  const slide = cpCardSlide(gal.tid, gal.idx, gal.slideIndex);
+  if (!slide) return;
+  const sty = slide._style || {};
+  const CT = window.CardThemes;
+  const plateCss = gal.plate ? `background-image:url("${gal.plate}")` : "background:#1b1b1f";
+  const status = gal.failed ? "Previews couldn't load, but themes still apply to the card." : (gal.plate ? "" : "Loading previews…");
+  body.innerHTML = `
+    <div class="cc-th-section">Looks</div>
+    <div class="cc-th-list">${CT.STYLE_THEMES.map(t => cpThemeTileHTML(gal, "style", t, sty, slide, plateCss)).join("")}</div>
+    <div class="cc-th-section">Colour themes</div>
+    <div class="cc-th-swatches">${CT.COLOUR_THEMES.map(t => cpThemeTileHTML(gal, "colour", t, sty, slide, plateCss)).join("")}</div>
+    <div class="cc-th-status" role="status">${status}</div>`;
+}
+async function cpLoadThemePlate(gal) {
+  const o = S.outs[gal.tid]?.[gal.idx];
+  const ctx = o?._renderCtx;
+  const slide = cpCardSlide(gal.tid, gal.idx, gal.slideIndex);
+  if (!ctx || !slide) return;
+  const sty = slide._style || {};
+  // Dim 0 here: each tile dims its own preview, so the plate is the bare photo.
+  const payload = {
+    ...ctx,
+    slides: [{ ...slide, img: undefined, localImg: undefined, customImage: sty.bgImage || slide.customImage || undefined, dim: 0, plateOnly: true }],
+    plateOnly: true,
+    focalPoint: S.focalPoint[gal.tid] ? { x: S.focalPoint[gal.tid].x / 100, y: S.focalPoint[gal.tid].y / 100 } : null,
+    brand: BRAND_PRESETS[S.brandPreset[gal.tid] || "creator"]
+  };
+  try {
+    const cd = await generateCardsWithRetry(payload);
+    gal.plate = (cd.images || [])[0] || null;
+    if (!gal.plate) gal.failed = true;
+  } catch (e) {
+    gal.failed = true;
+  }
+  if (cpThemeGallery === gal) cpRenderThemeGallery();
+}
+window.cpOpenThemes = (tid, idx, slideIndex) => {
+  const o = S.outs[tid]?.[idx];
+  const slide = cpCardSlide(tid, idx, slideIndex);
+  if (!o || !o._renderCtx || !slide || o.type === "carousel") { toast("Themes work on a single graphic for now."); return; }
+  window.cpCloseThemes();
+  const gal = { tid, idx, slideIndex, plate: null, failed: false };
+  cpThemeGallery = gal;
+  const overlay = document.createElement("div");
+  overlay.className = "cc-th-overlay";
+  overlay.id = "cthOverlay";
+  overlay.innerHTML = `<div class="cc-th-sheet" role="dialog" aria-modal="true" aria-labelledby="cthTitle">
+    <div class="cc-th-head"><h2 id="cthTitle">Themes</h2><button type="button" class="btn bo bxs" onclick="cpCloseThemes()" aria-label="Close themes">Close</button></div>
+    <div class="cc-th-body" id="cthBody"></div>
+    <div class="cc-th-foot"><button type="button" class="btn bo bxs" onclick="cpRestoreTheme('${tid}',${idx},${slideIndex})">Restore original look</button></div>
+  </div>`;
+  document.body.appendChild(overlay);
+  cpRenderThemeGallery();
+  cpLoadThemePlate(gal);
+};
+window.cpCloseThemes = () => {
+  document.getElementById("cthOverlay")?.remove();
+  cpThemeGallery = null;
+};
+function cpApplyThemeResult(tid, idx, slideIndex, next) {
+  const slide = cpCardSlide(tid, idx, slideIndex);
+  if (!slide || !next) { toast("That theme isn't available."); return; }
+  slide._style = next;
+  window.cpCloseThemes();
+  window.cpApplyCardStyle(tid, idx, slideIndex);
+}
+window.cpPickTheme = (tid, idx, slideIndex, themeId) => {
+  const slide = cpCardSlide(tid, idx, slideIndex);
+  if (!slide) return;
+  cpApplyThemeResult(tid, idx, slideIndex, window.CardThemes.applyTheme(slide._style || {}, themeId));
+};
+window.cpPickColourTheme = (tid, idx, slideIndex, colourId) => {
+  const slide = cpCardSlide(tid, idx, slideIndex);
+  if (!slide) return;
+  cpApplyThemeResult(tid, idx, slideIndex, window.CardThemes.applyColourTheme(slide._style || {}, colourId));
+};
+window.cpRestoreTheme = (tid, idx, slideIndex) => {
+  const slide = cpCardSlide(tid, idx, slideIndex);
+  if (!slide) return;
+  const res = window.CardThemes.restore(slide._style || {});
+  if (!res.restored) { toast("This graphic is already in its original look."); return; }
+  slide._style = res.style;
+  window.cpCloseThemes();
+  window.cpApplyCardStyle(tid, idx, slideIndex);
+};
 window.setCardText = (tid,idx,key,value) => { const o=S.outs[tid]?.[idx]; if(!o)return; o.editSlide=o.editSlide||{type:"hook",headline:S.trends.find(t=>t.id===tid)?.headline||o.label,slideNumber:1,totalSlides:1,imageUrl:o._renderCtx?.imageUrl}; o.editSlide[key]=key==="textOffset"||key==="textScale"?Number(value):value; };
 window.setSlideText = (tid,idx,slideIndex,key,value) => { const slide=S.outs[tid]?.[idx]?.slides?.[slideIndex]; if(!slide)return; slide._edit=slide._edit||{}; slide._edit[key]=key==="textOffset"||key==="textScale"?Number(value):value; };
 window.applyCardText = async (tid,idx,slideIndex=null) => { const o=S.outs[tid]?.[idx]; if(!o)return; const ctx=o._renderCtx; if(!ctx){toast("This image cannot be edited as a card.");return;} const carouselSlide=o.type==="carousel"?o.slides[slideIndex??0]:null; const base=carouselSlide||o.editSlide||{type:"hook",headline:S.trends.find(t=>t.id===tid)?.headline||o.label,slideNumber:1,totalSlides:1,imageUrl:ctx.imageUrl}; const edited={...base,...(carouselSlide?carouselSlide._edit||{}:o.editSlide||{})}; try { const cd=await generateCardsWithRetry({...ctx,slides:[edited],focalPoint:S.focalPoint[tid]?{x:S.focalPoint[tid].x/100,y:S.focalPoint[tid].y/100}:null,brand:BRAND_PRESETS[S.brandPreset[tid]||"creator"]}); if(cd.images?.[0]) { if(carouselSlide){carouselSlide.img=cd.images[0];carouselSlide._edit=edited;} else {o.img=cd.images[0];o.editSlide=edited;} render(); toast("Card text updated"); } } catch(e){toast("Couldn't update the card text.");} };
