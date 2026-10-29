@@ -1,10 +1,10 @@
-/* CreatorPulse · Create — step markup.
+/* CreatorPulse · Create: step markup.
  *
  * Renders the four "choose" screens from spec PART 6.2. Deliberately contains
  * no business rules: what counts as a valid choice lives in flow.js, and what
  * generation does lives in generate.js.
  *
- * PLATS / PTYPES / TONES / esc are the app's existing globals from core.js —
+ * PLATS / PTYPES / TONES / esc are the app's existing globals from core.js -
  * read, never redefined, so there is one source of truth for what exists.
  */
 (function () {
@@ -27,13 +27,24 @@
    * what makes it read as one journey instead of five cards. */
   function progress(st) {
     var f = F();
+    var isImage = (st.platform === 'instagram' && st.format === 'IG Carousel') || (st.platform === 'tiktok' && /graphic|camera/i.test(st.format || ''));
+    var stepIcons = {
+      source: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5z"/><path d="M8 7h8M8 11h6"/></svg>',
+      platform: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
+      format: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>',
+      tone: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>',
+      review: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="20 6 9 17 4 12"/></svg>'
+    };
+
     return '<div class="cc-progress" role="list" aria-label="Create progress">' +
       f.STEPS.map(function (s, i) {
         var cur = i === f.STEPS.indexOf(st.step);
         var done = i < f.STEPS.indexOf(st.step);
+        var label = (s === 'tone' && isImage) ? 'Template' : f.STEP_LABELS[s];
+        var iconHtml = done ? '<span class="cc-dot-check">✓</span>' : (stepIcons[s] || String(i + 1));
         return '<div class="cc-dot ' + (cur ? 'on' : '') + ' ' + (done ? 'done' : '') + '" role="listitem">' +
-          '<span class="cc-dot-i">' + (done ? '✓' : String(i + 1)) + '</span>' +
-          '<span class="cc-dot-l">' + E(f.STEP_LABELS[s]) + '</span></div>';
+          '<span class="cc-dot-i">' + iconHtml + '</span>' +
+          '<span class="cc-dot-l">' + E(label) + '</span></div>';
       }).join('') + '</div>';
   }
 
@@ -130,32 +141,33 @@
 
   function studioNote() {
     return '<div class="cc-picker"><div class="cc-picker-hd">Video Studio</div>' +
-      '<p class="cc-note">The Studio opens with your camera, prompter and editor — the existing tools, unchanged.</p>' +
+      '<p class="cc-note">The Studio opens with your camera, prompter and editor with the existing tools ready.</p>' +
       '<button class="btn bp bxs" type="button" onclick="cpCreateOpenStudio()">Open the Studio</button></div>';
   }
 
   /* ── Step 2 · Platform ─────────────────────────────────────────────────── */
   function platformStep(st) {
     var f = F();
-    // Spec 6.2: "Do not display unnecessarily large platform cards if smaller
-    // controls can communicate the same information." Compact chips here.
-    var chips = window.CPEnv.plats().map(function (p) {
+    var logos = (window.CPEnv && window.CPEnv.platLogo) ? window.CPEnv.platLogo() : {};
+    var cards = window.CPEnv.plats().map(function (p) {
       var on = st.platform === p.id;
-      return '<button class="cc-chip ' + (on ? 'on' : '') + '" type="button" ' +
-        'onclick="cpCreateSetPlatform(\'' + p.id + '\')" aria-pressed="' + (on ? 'true' : 'false') + '">' +
-        '<span class="cc-chip-e" aria-hidden="true">' + E(window.CPEnv.platEmoji()[p.id] || '◆') + '</span>' +
-        '<span class="cc-chip-t">' + E(p.label) + '</span></button>';
+      var logoSvg = logos[p.id] || ('<span class="cc-plat-fb">' + E(window.CPEnv.platEmoji()[p.id] || '◆') + '</span>');
+      return '<button class="cc-plat-card ' + (on ? 'on' : '') + '" type="button" ' +
+        'onclick="cpCreateSetPlatform('' + p.id + '')" aria-pressed="' + (on ? 'true' : 'false') + '">' +
+        '<div class="cc-plat-icon">' + logoSvg + '</div>' +
+        '<span class="cc-plat-title">' + E(p.label) + '</span>' +
+        '<span class="cc-plat-pill">' + (on ? 'Selected' : 'Select') + '</span>' +
+        '</button>';
     }).join('');
 
     return bar('Create', 'Step 2 of 5') +
       '<div class="cc-body">' + progress(st) +
       '<h1 class="cc-h1">Where is this going?</h1>' +
-      '<p class="cc-lede">The formats offered next depend on this choice.</p>' +
-      '<div class="cc-chips">' + chips + '</div>' +
+      '<p class="cc-lede">Slide sideways and tap the app you are creating for.</p>' +
+      '<div class="cc-plat-rail" role="region" aria-label="Platform selection">' + cards + '</div>' +
       foot(st, { canNext: f.canAdvance(st, window.CPEnv.ptypes()) }) +
       '</div>';
   }
-
   /* ── Step 3 · Format ───────────────────────────────────────────────────── */
   function formatStep(st) {
     var f = F();
@@ -206,28 +218,79 @@
   }
 
   /* ── Step 4 · Tone ─────────────────────────────────────────────────────── */
+  var TEMPLATES_IG = [
+    { id: 'impact', label: 'Bold Impact', sub: 'High contrast text with hero focal point', preview: 'background:#18181b;color:#f43f5e;font-weight:900;' },
+    { id: 'editorial', label: 'Editorial Clean', sub: 'Refined serif typography with generous spacing', preview: 'background:#09090b;color:#fafafa;font-family:serif;' },
+    { id: 'stat_split', label: 'Data & Stat Split', sub: 'Accent highlight for key numbers and facts', preview: 'background:#1c1917;color:#38bdf8;font-weight:800;' },
+    { id: 'dark_gradient', label: 'Dark Ambient Glow', sub: 'Soft radial backdrop with glowing accents', preview: 'background:radial-gradient(circle,#312e81,#09090b);color:#e0e7ff;' },
+    { id: 'neon_noir', label: 'Neon Cyber', sub: 'Electric lime & cyan punchy layout', preview: 'background:#022c22;color:#4ade80;font-weight:800;' }
+  ];
+
+  var TEMPLATES_TT = [
+    { id: 'viral_hook', label: '9:16 Viral Hook', sub: 'Centrally anchored headline above creator safe zones', preview: 'background:#000;color:#22d3ee;font-weight:900;' },
+    { id: 'silent_camera', label: 'Silent Camera', sub: 'Clean top overlay tuned for silent phone scrolling', preview: 'background:#18181b;color:#fff;border-top:3px solid #f43f5e;' },
+    { id: 'quote_punch', label: 'Bold Statement', sub: 'Tight contrast for quotes and breaking news', preview: 'background:#111;color:#fbbf24;font-weight:800;' },
+    { id: 'minimal_noir', label: 'Dark Minimalist', sub: 'Clean distraction-free dark typography', preview: 'background:#050505;color:#e4e4e7;' },
+    { id: 'high_retention', label: 'High-Retention Alert', sub: 'Attention-grabbing badge and stacked punchlines', preview: 'background:#1e1b4b;color:#a855f7;font-weight:800;' }
+  ];
+
   function toneStep(st) {
     var f = F();
-    var chips = window.CPEnv.tones().map(function (t) {
-      var on = st.tone === t.id;
-      return '<button class="cc-chip ' + (on ? 'on' : '') + '" type="button" ' +
-        'onclick="cpCreateSetTone(\'' + t.id + '\')" aria-pressed="' + (on ? 'true' : 'false') + '">' +
-        '<span class="cc-chip-t">' + E(t.label) + '</span></button>';
-    }).join('');
+    var isImage = (st.platform === 'instagram' && st.format === 'IG Carousel') || (st.platform === 'tiktok' && /graphic|camera/i.test(st.format || ''));
+    var title = isImage ? 'Template' : 'Tone';
+    var lede = isImage
+      ? 'Choose the template style for your ' + (st.platform === 'tiktok' ? 'TikTok post' : 'Instagram carousel') + '.'
+      : 'Optional: a sensible voice is already selected for your script or draft.';
+
+    var content = '';
+    if (isImage) {
+      var tmpls = st.platform === 'tiktok' ? TEMPLATES_TT : TEMPLATES_IG;
+      content = '<div class="cc-templates-grid">' + tmpls.map(function (tmpl) {
+        var on = (st.template || tmpls[0].id) === tmpl.id;
+        return '<button class="cc-template-card ' + (on ? 'on' : '') + '" type="button" ' +
+          'onclick="cpCreateSetTemplate('' + tmpl.id + '')" aria-pressed="' + (on ? 'true' : 'false') + '">' +
+          '<div class="cc-template-thumb" style="' + tmpl.preview + '">' +
+          '<span>' + E(tmpl.label) + '</span>' +
+          '</div>' +
+          '<div class="cc-template-meta">' +
+          '<span class="cc-template-title">' + E(tmpl.label) + '</span>' +
+          '<span class="cc-template-sub">' + E(tmpl.sub) + '</span>' +
+          '</div>' +
+          '<span class="cc-template-badge">' + (on ? '✓ Selected' : 'Use style') + '</span>' +
+          '</button>';
+      }).join('') + '</div>';
+    } else {
+      var chips = window.CPEnv.tones().map(function (t) {
+        var on = st.tone === t.id;
+        return '<button class="cc-chip ' + (on ? 'on' : '') + '" type="button" ' +
+          'onclick="cpCreateSetTone('' + t.id + '')" aria-pressed="' + (on ? 'true' : 'false') + '">' +
+          '<span class="cc-chip-t">' + E(t.label) + '</span></button>';
+      }).join('');
+      content = '<div class="cc-chips">' + chips + '</div>';
+    }
+
+    var logos = (window.CPEnv && window.CPEnv.platLogo) ? window.CPEnv.platLogo() : {};
+    var platMiniSwitcher = '<div class="cc-switch-plat-bar"><span class="cc-switch-lbl">Change Platform directly:</span><div class="cc-switch-plats">' +
+      window.CPEnv.plats().map(function (p) {
+        var on = st.platform === p.id;
+        return '<button class="cc-switch-plat ' + (on ? 'on' : '') + '" type="button" onclick="cpCreateSetPlatform('' + p.id + '')" title="' + E(p.label) + '">' +
+          (logos[p.id] || ('<span>' + E(p.label.slice(0, 2)) + '</span>')) +
+          '<span>' + E(p.label) + '</span></button>';
+      }).join('') + '</div></div>';
+
     var sum = f.summarize(st, window.CPEnv.plats(), window.CPEnv.tones());
-    // Spec 7.2's compact "value — Change" rows, read-only here so the user can
-    // confirm the whole setup on one line before spending a generation.
     var rails =
       '<div class="cc-rails">' +
-      rail('Platform', sum.platform, 'cpCreateGo(\'platform\')') +
-      rail('Format', sum.format, 'cpCreateGo(\'format\')') +
+      rail('Platform', sum.platform, 'cpCreateGo('platform')') +
+      rail('Format', sum.format, 'cpCreateGo('format')') +
       '</div>';
 
     return bar('Create', 'Step 4 of 5') +
       '<div class="cc-body">' + progress(st) +
-      '<h1 class="cc-h1">Tone</h1>' +
-      '<p class="cc-lede">Optional — a sensible default is already chosen.</p>' +
-      '<div class="cc-chips">' + chips + '</div>' +
+      '<h1 class="cc-h1">' + E(title) + '</h1>' +
+      '<p class="cc-lede">' + E(lede) + '</p>' +
+      platMiniSwitcher +
+      content +
       rails +
       foot(st, { canNext: true, nextLabel: 'Generate' }) +
       '</div>';
@@ -235,7 +298,7 @@
 
   function rail(label, value, onclick) {
     return '<div class="cc-rail"><span class="cc-rail-l">' + E(label) + '</span>' +
-      '<span class="cc-rail-v">' + E(value || '—') + '</span>' +
+      '<span class="cc-rail-v">' + E(value || '-') + '</span>' +
       '<button class="cc-rail-c" type="button" onclick="' + onclick + '">Change</button></div>';
   }
 

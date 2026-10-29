@@ -398,7 +398,7 @@ async function ariaAnnounceBackend(){
       if(h && h.ok){
         S.backend.state = "ok"; S.backend.base = h.base;
         ariaPaintBootNotice();
-        toast("Server is awake — photos and captions will load now.");
+        toast("Server is awake: photos and captions will load now.");
         return;
       }
       if(h && h.status === 503){ S.backend.state = "suspended"; S.backend.base = h.base || ""; ariaPaintBootNotice(); return; }
@@ -499,7 +499,7 @@ function skDraftBlock(){ return `<div aria-busy="true">${skLine("w35")}<div clas
 
 // Inline error card — replaces alert()/toast for failed section actions
 function errCard(msg, retryFn, key){
-  return `<div class="err-card" role="alert"><span>${esc(msg || "Something went wrong — try again.")}</span>${
+  return `<div class="err-card" role="alert"><span>${esc(msg || "Something went wrong. Please try again.")}</span>${
     retryFn ? `<button class="err-retry" onclick="${esc(retryFn)}">Try again</button>` : ""
   }${key ? `<button class="err-retry" onclick="clearErr('${esc(key)}')">Dismiss</button>` : ""}</div>`;
 }
@@ -507,7 +507,7 @@ function sectionErr(key, retryFn){
   const msg = S.errors && S.errors[key];
   return msg ? errCard(msg, retryFn, key) : "";
 }
-window.setErr = (key, msg) => { S.errors[key] = msg || "Something went wrong — try again."; render(); };
+window.setErr = (key, msg) => { S.errors[key] = msg || "Something went wrong. Please try again."; render(); };
 window.clearErr = (key) => { delete S.errors[key]; render(); };
 
 function extractJSON(txt){ const m = String(txt).match(/\{[\s\S]*\}|\[[\s\S]*\]/); if(!m) return null; try{ return JSON.parse(m[0]); }catch(e){ return null; } }
@@ -562,7 +562,7 @@ async function api(path, opts, _isRetry){
     }
     return data;
   } catch(e){
-    if(e.name === "AbortError") throw new Error("Request timed out — the server may be waking up from sleep. Try again in a moment.");
+    if(e.name === "AbortError") throw new Error("Request timed out: the server may be waking up from sleep. Try again in a moment.");
     throw e;
   } finally { clearTimeout(timer); }
 }
@@ -778,7 +778,7 @@ window.dismissDigest = async () => {
   } catch(e){
     S.digestDismissed = prev;         // revert
     localStorage.removeItem(key);
-    S.errors.digest = "Couldn't dismiss the digest — try again.";
+    S.errors.digest = "Couldn't dismiss the digest. Please try again.";
     render();
   }
 };
@@ -1469,6 +1469,11 @@ function renderOut(o, tid, idx){
       ${isEditing
         ? `<textarea class="cp-output-editor" aria-label="Edit ${esc(o.label||'script')}" oninput="setOutputContent('${tid}',${idx},this.value)">${esc(content)}</textarea>`
         : `<div class="script-reader-body">${esc(content)}</div>`}
+      ${o.attachedCaption ? `<div class="cp-attached-caption" style="margin:10px 14px;padding:10px 12px;background:var(--sf);border-radius:8px;border:1px solid var(--br)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-size:10.5px;font-weight:700;color:var(--mu2)">Generated Caption &amp; Hashtags</span><button class="btn bo bxs" onclick="copyTxt(\`${String(o.attachedCaption).replace(/`/g,'\\`')}\`)" style="padding:2px 6px;font-size:10px">Copy</button></div><div style="font-size:12px;line-height:1.5;white-space:pre-wrap">${esc(o.attachedCaption)}</div></div>` : ''}
+      <div style="margin:0 14px 10px;padding:8px 12px;background:color-mix(in srgb,var(--ac) 10%,var(--sf));border-radius:8px;border:1px dashed var(--ac);display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <span style="font-size:11px;font-weight:600;color:var(--tx)">Generate Caption + Hashtags</span>
+        <button class="btn bo bxs" type="button" onclick="cpGenerateCaptionForOutput('${tid}',${idx})">Generate + #</button>
+      </div>
       <div class="ofoot">
         <button class="btn bo bxs tipbtn" data-tip="Copy full script" title="Copy script" aria-label="Copy script" onclick="copyTxt(\`${content.replace(/`/g,"\\`")}\`)">${I.copy} Copy</button>
         <button class="btn bp bxs tipbtn" data-tip="Save to library" title="Save to library" aria-label="Save to library" onclick="saveOut('${tid}',${idx})">${I.save} Save</button>
@@ -1525,7 +1530,7 @@ window.setSlideBackgroundImage = async (tid, idx, slideIdx, file) => {
   try {
     dataUrl = await downscaleImageFile(file, 1600, 0.85);
   } catch (e) {
-    toast("Couldn't read that image — try a different photo.");
+    toast("Couldn't read that image. Try a different photo.");
     return;
   }
   o.slides[slideIdx].customImage = dataUrl;
@@ -1536,7 +1541,7 @@ window.setSlideBackgroundImage = async (tid, idx, slideIdx, file) => {
     const newImgs = cd.images || [];
     o.slides.forEach((s,i)=>{ if(newImgs[i]) s.img = newImgs[i]; });
     o.images = newImgs;
-  } catch(e) { toast("Couldn't apply that image — try again."); }
+  } catch(e) { toast("Couldn't apply that image. Try again."); }
   o._imgLoading = null; render();
 };
 function downscaleImageFile(file, maxDim, quality) {
@@ -2003,7 +2008,7 @@ window.saveOut = async (tid, idx) => {
     toast("Saved"); loadSchedule(); loadSaved();
   } catch(e){
     S.saved = prevSaved;              // revert
-    S.errors.saveOut = "Couldn't save that draft — try again.";
+    S.errors.saveOut = "Couldn't save that draft. Try again.";
     toast("Error saving");
     render();
   }
@@ -2475,7 +2480,7 @@ window.openVideoBlueprint = async (tid) => {
     );
     const parsed = extractJSON(raw) || { beats: [] };
     S.sheet.data = parsed;
-  } catch(e){ S.sheet.data = { beats: [] }; S.sheet.error = "Something went wrong — try again."; }
+  } catch(e){ S.sheet.data = { beats: [] }; S.sheet.error = "Something went wrong. Please try again."; }
   S.sheet.loading = false; render();
 };
 window.getChatGPTPrompt = async (tid) => {
@@ -2503,7 +2508,7 @@ window.getChatGPTPrompt = async (tid) => {
       `Platform: ${platLabel}. Story: "${t.headline}". Niche: ${t.niche}. ${t.summary?('Context: '+t.summary):''}\n\n${compositionGuidance}\n\nWrite the image prompt for this exact story.`
     );
     S.sheet.data = raw.trim();
-  } catch(e){ S.sheet.error = "Something went wrong — try again."; }
+  } catch(e){ S.sheet.error = "Something went wrong. Please try again."; }
   S.sheet.loading = false; render();
 };
 window.openBlueprint = async (hookText, niche) => {
@@ -2516,7 +2521,7 @@ window.openBlueprint = async (hookText, niche) => {
     );
     const parsed = extractJSON(raw) || { beats: [] };
     S.sheet.data = parsed;
-  } catch(e){ S.sheet.data = { beats: [] }; S.sheet.error = "Something went wrong — try again."; }
+  } catch(e){ S.sheet.data = { beats: [] }; S.sheet.error = "Something went wrong. Please try again."; }
   S.sheet.loading = false; render();
 };
 window.checkUniqueness = async (niche) => {
@@ -2527,7 +2532,7 @@ window.checkUniqueness = async (niche) => {
     const r = await api("/api/check-uniqueness", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:S.token, niche, text})});
     if(r.error){ S.uqCheck.error = r.error; }
     else { S.uqCheck.result = r; }
-  } catch(e){ S.uqCheck.error = "Couldn't check right now — try again."; }
+  } catch(e){ S.uqCheck.error = "Couldn't check right now. Try again."; }
   S.uqCheck.loading = false; render();
 };
 window.setHooksNiche = async (n) => {
@@ -2536,7 +2541,7 @@ window.setHooksNiche = async (n) => {
     try { const d = await api(`/api/hooks?niche=${encodeURIComponent(n)}`); cacheSet("hooksCache", n, d.hooks||[]); render(); } catch(e){ S.errors.hooks = "Couldn't load hooks."; render(); }
   }
 };
-window.prefillHook = (txt) => { S.tab='home'; toast("Hook copied — pick a story to remix"); navigator.clipboard.writeText(txt); render(); };
+window.prefillHook = (txt) => { S.tab='home'; toast("Hook copied: pick a story to remix"); navigator.clipboard.writeText(txt); render(); };
 
 // ─── REMIX / TITLE PACK BOTTOM SHEETS ───────────────────────────────────────
 window.openRemix = async (tid) => {
@@ -2549,7 +2554,7 @@ window.openRemix = async (tid) => {
     const parsed = extractJSON(raw) || [];
     S.sheet.data = Array.isArray(parsed) ? parsed : [];
     if(S.sheet.data.length) cacheSet("remixCache", t.headline, S.sheet.data);
-  } catch(e){ S.sheet.data = []; S.sheet.error = "Something went wrong — try again."; }
+  } catch(e){ S.sheet.data = []; S.sheet.error = "Something went wrong. Please try again."; }
   S.sheet.loading = false; render();
 };
 window.openTitles = async (tid) => {
@@ -2562,7 +2567,7 @@ window.openTitles = async (tid) => {
     const parsed = extractJSON(raw) || { titles:[], hashtags:[] };
     S.sheet.data = parsed;
     if((parsed.titles||[]).length) cacheSet("titleCache", t.headline, parsed);
-  } catch(e){ S.sheet.data = {titles:[], hashtags:[]}; S.sheet.error = "Something went wrong — try again."; }
+  } catch(e){ S.sheet.data = {titles:[], hashtags:[]}; S.sheet.error = "Something went wrong. Please try again."; }
   S.sheet.loading = false; render();
 };
 window.closeSheet = () => { S.sheet = null; render(); };
@@ -2900,3 +2905,28 @@ async function loadCalendarEvents(){
   render();
 }
 
+
+window.cpGenerateCaptionForOutput = async (tid, idx) => {
+  const o = S.outs[tid]?.[idx];
+  const t = S.trends.find(x => x.id === tid);
+  if (!o || !t) return;
+  const plat = S.plat[tid] || 'tiktok';
+  const P = PLATS.find(x => x.id === plat);
+  const platLabel = P?.label || plat;
+  toast('Generating caption + hashtags for ' + platLabel + '…');
+  try {
+    const userPrompt = plat === 'tiktok'
+      ? 'Write a witty, viral TikTok caption and 5-6 niche-specific hashtags (including #fyp and #foryou) based on this story: "' + t.headline + '". Return only the ready-to-copy caption.'
+      : 'Write an engaging social caption with a strong hook, 3 short emoji takeaways, and 10 targeted hashtags for ' + platLabel + ' based on: "' + t.headline + '". Return only the caption.';
+    const captionText = await generateText(SYS, userPrompt, S.tone[tid] || 'normal');
+    if (!o.attachedCaption) o.attachedCaption = captionText;
+    else o.attachedCaption += '
+
+' + captionText;
+    render();
+    toast('Caption + hashtags ready below script!');
+  } catch (err) {
+    console.error('Caption generation failed', err);
+    toast('Could not generate caption right now.');
+  }
+};

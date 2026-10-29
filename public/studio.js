@@ -3536,7 +3536,7 @@ window.svOpenWithScript = function (text, projectName){
   S.tab = 'create';
   render();
   setTimeout(() => svOpenCamera(), 80);
-  svToast('Script loaded — the teleprompter is ready');
+  svToast('Script loaded: the teleprompter is ready');
 };
 
 /* ── FIRST-RUN / IDLE SCREEN ────────────────────────────────────────────── */

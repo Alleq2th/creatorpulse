@@ -1,11 +1,11 @@
-/* CreatorPulse · Create — generation wiring.
+/* CreatorPulse · Create: generation wiring.
  *
  * Spec 6.2 Step 5: "The user generates the selected output."
  * Spec 7.4: "Preserve their actual behaviour. Do not turn these into decorative
  * buttons or change their semantics."
  *
  * So this file contains NO generation logic of its own. It prepares the inputs
- * that the app's single existing pipeline expects — window.gen() in core.js —
+ * that the app's single existing pipeline expects: window.gen() in core.js -
  * and hands over. Everything that already works (the prompt library for every
  * format, carousel rendering, slide images, saving) keeps working because it is
  * the same code path Home uses.
@@ -17,7 +17,7 @@
   function F() { return window.CPCreateFlow; }
 
   /* Turn any Create source into the trend-shaped object the pipeline consumes.
-   * Spec 6.2 Step 1 lists stories, events, own ideas and drafts — all four end
+   * Spec 6.2 Step 1 lists stories, events, own ideas and drafts: all four end
    * up as a {id, headline, summary, niche, image} record here, which is exactly
    * what a discovered story already is. */
   function toTrend(st) {
@@ -63,7 +63,7 @@
         score: 70
       };
     }
-    // A live story — already the right shape, just re-use it by reference.
+    // A live story: already the right shape, just re-use it by reference.
     return {
       id: ref.id,
       headline: ref.headline,
@@ -99,6 +99,16 @@
     S.plat[trend.id] = st.platform;
     S.ctype[trend.id] = st.format;
     S.tone[trend.id] = st.tone || 'normal';
+    if (st.template) {
+      if (st.template === 'editorial' || st.template === 'minimal_noir') S.cardTypography[trend.id] = 'editorial_serif';
+      else if (st.template === 'stat_split' || st.template === 'viral_hook') S.cardTypography[trend.id] = 'condensed_sans';
+      else if (st.template === 'neon_noir') S.cardTypography[trend.id] = 'code_mono';
+      else S.cardTypography[trend.id] = 'impact';
+
+      if (st.template === 'dark_gradient' || st.template === 'high_retention') S.cardTheme[trend.id] = 'gradient';
+      else if (st.template === 'neon_noir') S.cardTheme[trend.id] = 'bold_accent';
+      else S.cardTheme[trend.id] = 'modern_dark';
+    }
     st.trendId = trend.id;
     return trend.id;
   }

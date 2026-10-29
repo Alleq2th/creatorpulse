@@ -126,7 +126,7 @@ body{padding-bottom:calc(var(--tab-h) + env(safe-area-inset-bottom));letter-spac
 /* cross  Calendar, Discover */
 .app[data-tex="cross"]::before{background-image:radial-gradient(var(--tex) 1px,transparent 1px),radial-gradient(var(--tex) 1px,transparent 1px);background-size:26px 26px,26px 26px;background-position:0 0,13px 13px}
 /* diagonal  Create */
-.app[data-tex="diag"]::before{background-image:repeating-linear-gradient(45deg,var(--tex) 0 1px,transparent 1px 14px)}
+.app[data-tex="diag"]::before{background-image:radial-gradient(circle at 50% -10%, color-mix(in srgb, var(--ac) 18%, transparent) 0%, transparent 68%), radial-gradient(color-mix(in srgb, var(--tex) 65%, transparent) 1px, transparent 1px); background-size:100% 100%, 26px 26px;}
 @media(min-width:900px){
   body{background:var(--bg)}
   .app{max-width:560px;box-shadow:0 0 0 1px var(--br),0 40px 80px rgba(0,0,0,0.4)}
