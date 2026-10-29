@@ -1067,6 +1067,19 @@ async function renderYouTubeThumbnail(slide, imageUrl, options = {}) {
   return sharp(cover.buffer).composite([{ input: layer }]).png().toBuffer();
 }
 
+// Background only: the cover photo with the requested dim, or a plain palette
+// gradient when there is no photo. Matches the dim used by the full render.
+async function renderPlate(p, f, cover, slide) {
+  const dim = Number(slide.dim);
+  const a = Number.isFinite(dim) && dim > 0 ? Math.min(0.8, dim).toFixed(2) : "0";
+  if (cover) {
+    const dimSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${f.w}" height="${f.h}"><rect width="${f.w}" height="${f.h}" fill="#000" fill-opacity="${a}"/></svg>`;
+    return sharp(cover.buffer).composite([{ input: await sharp(Buffer.from(dimSvg)).png().toBuffer() }]).png().toBuffer();
+  }
+  const bg = `<svg xmlns="http://www.w3.org/2000/svg" width="${f.w}" height="${f.h}"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${p.backgroundStart}"/><stop offset="1" stop-color="${p.backgroundEnd}"/></linearGradient></defs><rect width="${f.w}" height="${f.h}" fill="url(#g)"/></svg>`;
+  return sharp(Buffer.from(bg)).png().toBuffer();
+}
+
 async function renderStatCard(slide, category, paletteKey, format, imageUrl, options = {}) {
   if (String(format || "").toLowerCase().includes("thumbnail")) {
     return renderYouTubeThumbnail(slide, imageUrl, { ...options, palette: paletteKey });
@@ -1108,6 +1121,12 @@ async function renderStatCard(slide, category, paletteKey, format, imageUrl, opt
   if (!cover && !slide.customImage) {
     const missingText = hasRequestedArticleImage ? "SOURCE PHOTO UNAVAILABLE" : "NO ARTICLE PHOTO PROVIDED";
     labels.push(`<g><rect x="${f.margin}" y="${f.h-198}" width="390" height="42" rx="21" fill="${p.backgroundEnd}" fill-opacity="0.92" stroke="${p.accent}" stroke-opacity="0.9" stroke-width="2"/><text x="${f.margin+20}" y="${f.h-170}" font-family="${typo.body}" font-size="17" font-weight="700" letter-spacing="1.2" fill="${p.primaryText}">${missingText}</text></g>`);
+  }
+  // Plate mode: the photo (dimmed) or the palette background, with no text or
+  // chrome. The browser draws live text on top of this, so text edits never
+  // need a server round trip.
+  if (options.plateOnly || slide.plateOnly) {
+    return renderPlate(p, f, cover, slide);
   }
   const labeledSvg = labels.length ? svg.replace("</svg>", `${labels.join("")}</svg>`) : svg;
   const textLayer = await sharp(Buffer.from(labeledSvg)).png().toBuffer();
