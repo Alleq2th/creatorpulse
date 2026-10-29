@@ -7,17 +7,14 @@ const CORE_JS = fs.readFileSync(path.join(__dirname, "..", "public", "core.js"),
 const INDEX_HTML = fs.readFileSync(path.join(__dirname, "..", "public", "index.html"), "utf8");
 const STAT_CARD_JS = fs.readFileSync(path.join(__dirname, "..", "services", "statCard.js"), "utf8");
 
-test("core.js renders minimal horizontal swipe rails for generator controls", () => {
-  assert.match(CORE_JS, /const hRail = \(label, value, body\) => `<div class="h-step">/);
-  assert.match(CORE_JS, /class="h-rail"/);
-  assert.match(CORE_JS, /hRail\('Platform', platLabel, platChips\)/);
-  assert.match(CORE_JS, /hRail\('Format', ct, ctChips\)/);
-  assert.match(CORE_JS, /hRail\('Tone', toneLabel, toneChips\)/);
-  assert.match(CORE_JS, /hRail\('Card Color', paletteLabel, paletteChips\)/);
-  assert.match(CORE_JS, /hRail\('Visual Theme', themeLabel, themeChips\)/);
-  assert.match(CORE_JS, /hRail\('Typography', typoLabel, typoChips\)/);
-  assert.match(CORE_JS, /hRail\('Text Density', densityLabel, densityChips\)/);
-  assert.match(CORE_JS, /hRail\('Number of Slides', `\$\{slideCount\} slides`, slideCountChips\)/);
+test("news detail keeps Create setup out of the story panel", () => {
+  const start = CORE_JS.indexOf('panel = `<div class="cp cp-news-detail">');
+  const end = CORE_JS.indexOf('`;', start);
+  assert.ok(start >= 0);
+  const panel = CORE_JS.slice(start, end);
+  assert.match(panel, /Why this matters/);
+  assert.match(panel, /Create content/);
+  assert.doesNotMatch(panel, /hRail/);
 });
 
 test("core.js always mounts responsive platform mockup into renderOut", () => {

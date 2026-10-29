@@ -94,6 +94,20 @@ function wrapLines(text, maxChars, maxLines){
 // Renders a real, legible slide card in the browser. Used whenever the
 // card server is asleep/busy/fails, so a generated post never shows up
 // as an empty black box in the Instagram/TikTok/YouTube/X previews.
+async function localCardPhotoData(url, maxDim=1500){
+  if(!url) return null;
+  try {
+    const img=new Image(); img.crossOrigin='anonymous';
+    const loaded=new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=reject;});
+    img.src=`${API}/api/image-proxy?url=${encodeURIComponent(url)}`; await loaded;
+    const scale=Math.min(1,maxDim/Math.max(img.naturalWidth||img.width,img.naturalHeight||img.height));
+    const canvas=document.createElement('canvas');
+    canvas.width=Math.max(1,Math.round((img.naturalWidth||img.width)*scale));
+    canvas.height=Math.max(1,Math.round((img.naturalHeight||img.height)*scale));
+    canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+    return canvas.toDataURL('image/jpeg',.86);
+  } catch(e){ console.warn('Could not prepare local story photo fallback',e); return null; }
+}
 function localCardImage(slide, opts){
   opts = opts||{};
   const pal = PALETTE_VIS[opts.palette] || PALETTE_VIS.noir_orange;
@@ -120,7 +134,9 @@ function localCardImage(slide, opts){
   const tag = (slide.tag||slide.sectionLabel) ? `<rect x="90" y="150" rx="22" width="${Math.min(800,(String(slide.tag||slide.sectionLabel).length*20)+60)}" height="54" fill="${acc}"/><text x="120" y="187" font-family="Inter,sans-serif" font-weight="800" font-size="28" fill="${light?'#fff':'#000'}">${svgEsc(String(slide.tag||slide.sectionLabel).toUpperCase())}</text>` : "";
   const cta = slide.ctaLine ? `<text x="90" y="${H-110}" font-family="Inter,sans-serif" font-weight="800" font-size="40" fill="${acc}">${svgEsc(slide.ctaLine)}</text>` : "";
   const num = slide.slideNumber ? `<text x="${W-90}" y="${H-110}" text-anchor="end" font-family="Inter,sans-serif" font-weight="700" font-size="32" fill="${mu}">${slide.slideNumber}${opts.total?' / '+opts.total:''}</text>` : "";
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><rect width="100%" height="100%" fill="${bg}"/><rect x="0" y="0" width="${W}" height="14" fill="${acc}"/><circle cx="${W-60}" cy="${H*0.2}" r="380" fill="${acc}" opacity=".08"/>${tag}${hl}${stat}${bl}${cta}${num}</svg>`;
+  const photo=opts.imageDataUrl||slide.customImage||slide.imageDataUrl||"";
+  const photoLayer=photo?`<image href="${svgEsc(photo)}" x="0" y="0" width="${W}" height="${H}" preserveAspectRatio="xMidYMid slice"/><rect width="100%" height="100%" fill="url(#shade)"/>`:`<rect width="100%" height="100%" fill="${bg}"/><circle cx="${W-60}" cy="${H*0.2}" r="380" fill="${acc}" opacity=".08"/>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><defs><linearGradient id="shade" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".82"/><stop offset=".7" stop-color="#000" stop-opacity=".36"/><stop offset="1" stop-color="#000" stop-opacity=".14"/></linearGradient></defs>${photoLayer}<rect x="0" y="0" width="${W}" height="14" fill="${acc}"/>${tag}${hl}${stat}${bl}${cta}${num}</svg>`;
   return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
 }
 // Maps a niche to one of the original icon glyphs in services/statCard.js.
@@ -1163,52 +1179,10 @@ function renderTrend(t){
       <div class="h-rail" ${railOpen(label) ? "" : "hidden"}>${body}</div>
     </div>`;
 
-    panel = `<div class="cp">
-      <div class="countdown">
-        <span class="countdown-label">Suggested window</span>
-        <span class="countdown-time" data-countdown="${postBy == null ? '' : postBy}" data-tid="${esc(t.id)}">calculating…</span>
-        <span class="timing-note">Estimated from story freshness</span>
-      </div>
+    panel = `<div class="cp cp-news-detail">
       <div class="why"><div class="why-label">Why this matters</div><div class="why-body">${esc(rec||t.summary||"No additional context is available for this story yet.")}</div></div>
-      ${(window.cpPlatformMarkup
-          ? window.cpPlatformMarkup(t, {
-              open: !!(S.platWhy && S.platWhy[t.id]),
-              platforms: S.user?.platforms,
-              primary: S.user?.primaryPlatform,
-              plats: PLATS,
-              emoji: PLAT_EMOJI,
-              pick: bp
-            })
-          : `<div class="best-plat"><span class="em">${PLAT_EMOJI[bp]||"◆"}</span><div style="flex:1"><div class="best-plat-lbl">Best platform</div><div class="best-plat-val">${esc(bpLabel)}</div></div></div>`)}
-      ${(window.cpOpportunityMarkup
-          ? window.cpOpportunityMarkup(t, { score: opp, open: !!(S.oppWhy && S.oppWhy[t.id]), bar: true })
-          : `<div class="opp" aria-label="Heuristic opportunity estimate, not a forecast"><div class="opp-head"><span class="opp-lbl">Opportunity estimate</span><span class="opp-val">${opp}/100</span></div><div class="opp-bar"><div class="opp-fill" style="width:${opp}%"></div></div></div>`)}
-      ${""/* Spec 3.2: a story detail view offers a prominent "Create content" action that carries this story's context into the creation workflow. Placed under the score and platform rows, where the user has just decided the story is worth it. The handler reads the card's own platform/format selections, so what they see here is what arrives in Create. */}
-      <button class="btn bp cp-create-cta" type="button" onclick="cpCreateStartFromTrend('${esc(t.id)}')">
-        ${I.bolt}<span>Create content</span>
-      </button>
-      <div class="flow">
-        ${hRail('Platform', platLabel, platChips)}
-        ${hRail('Format', ct, ctChips)}
-        ${hRail('Tone', toneLabel, toneChips)}
-        ${showPalette ? hRail('Card Color', paletteLabel, paletteChips) : ""}
-        ${showPalette ? hRail('Visual Theme', themeLabel, themeChips) : ""}
-        ${showPalette ? hRail('Typography', typoLabel, typoChips) : ""}
-        ${showPalette ? hRail('Text Density', densityLabel, densityChips) : ""}
-        ${showPalette ? hRail('Brand Preset', BRAND_PRESETS[brandPreset].label, brandChips) : ""}
-        ${showPalette ? `<div class="h-step"><div class="h-step-hd"><span class="h-step-l">Photo focal point</span><span class="h-step-v" data-focal-label="${t.id}">${focal.x}% · ${focal.y}%</span></div><div style="display:grid;grid-template-columns:70px 1fr;gap:4px 10px;padding:8px 10px"><label style="font-size:11px">Horizontal</label><input type="range" min="0" max="100" value="${focal.x}" oninput="setFocalPoint('${t.id}','x',this.value)"/><label style="font-size:11px">Vertical</label><input type="range" min="0" max="100" value="${focal.y}" oninput="setFocalPoint('${t.id}','y',this.value)"/><span></span><button class="btn bo bxs" onclick="applyFocalPoint('${t.id}',0)">Apply framing</button></div></div>` : ""}
-        ${showSlideCount ? hRail('Number of Slides', `${slideCount} slides`, slideCountChips) : ""}
-      </div>
-      <div class="action-row">
-        <button class="action-btn primary" ${load?'disabled':''} onclick="gen('${t.id}',false)">${load?'<span class="sp"></span>':I.bolt}<span>${load?'…':'Generate content'}</span></button>
-        <button class="action-btn" onclick="openRemix('${t.id}')">${I.remix}<span>Remix</span></button>
-        <button class="action-btn" onclick="openTitles('${t.id}')">${I.title}<span>Titles</span></button>
-        ${plat!=='twitter' ? `<button class="action-btn" onclick="openVideoBlueprint('${t.id}')">${I.bolt}<span>Blueprint</span></button>` : ''}
-        <button class="action-btn" onclick="quickSaveTrend('${t.id}')">${I.save}<span>Save</span></button>
-      </div>
-      ${load?skDraftBlock():""}
-      ${sectionErr("saveOut")}
-      <div class="oa">${outsHTML}</div>
+      ${(window.cpPlatformMarkup ? window.cpPlatformMarkup(t, { open:false, platforms:S.user?.platforms, primary:S.user?.primaryPlatform, plats:PLATS, emoji:PLAT_EMOJI, pick:bp }) : `<div class="best-plat"><span class="em">${PLAT_EMOJI[bp]||"◆"}</span><div style="flex:1"><div class="best-plat-lbl">Best platform</div><div class="best-plat-val">${esc(bpLabel)}</div></div></div>`)}
+      <button class="btn bp cp-create-cta" type="button" onclick="cpCreateStartFromTrend('${esc(t.id)}')">${I.bolt}<span>Create content</span></button>
     </div>`;
   }
   const tier = t.viralTier || (t.score >= 80 ? 'trending' : t.score >= 65 ? 'mid' : 'low');
@@ -1449,7 +1423,7 @@ function renderOut(o, tid, idx){
   }
   if(o.type === "carousel"){
     const slideText = s => [s.headline, s.stat && s.statLabel ? `${s.stat} — ${s.statLabel}` : s.stat, s.sectionLabel, s.body, s.supportingText].filter(Boolean).join("\n");
-    const slides = (o.slides||[]).map((s,si)=>`<div style="padding:8px 0;border-bottom:1px solid var(--br)"><div style="display:flex;align-items:center;justify-content:space-between"><div style="font-size:10px;color:var(--mu);font-weight:600">Slide ${s.slideNumber} · ${esc(s.type||"")}</div><div style="display:flex;gap:4px;align-items:center">${o._imgLoading===si?`<span style="font-size:10px;color:var(--mu)">Applying…</span>`:`${s.img?`<button class="btn bo bxs tipbtn" data-tip="Download this slide" title="Download this slide" aria-label="Download slide ${s.slideNumber}" onclick="dl('${s.img}','slide-${s.slideNumber}.png')" style="padding:3px 8px">${I.dl}</button>`:""}<input type="file" accept="image/*" id="slideimg-${tid}-${idx}-${si}" style="display:none" onchange="setSlideBackgroundImage('${tid}',${idx},${si},this.files[0])"/><button class="btn bo bxs tipbtn" data-tip="Use your own photo as this slide's background" title="Add background image" aria-label="Add background image for slide ${s.slideNumber}" onclick="document.getElementById('slideimg-${tid}-${idx}-${si}').click()" style="padding:3px 8px">${I.image}</button>`}</div></div>${s.img?`<img loading="lazy" decoding="async" src="${s.img}" data-fb="${s.localImg||""}" onerror="cardImgFail(this, this.dataset.fb)" style="width:100%;border-radius:6px;margin-top:6px;aspect-ratio:4/5;object-fit:cover"/>`:""}${renderCardCanvasEditor(o,tid,idx,si,s,s.img,"4/5")}<details style="margin-top:7px"><summary style="cursor:pointer;font-size:10px;color:var(--mu2)">Edit this slide</summary><div style="display:grid;gap:6px;padding:7px 0"><label style="font-size:10px;color:var(--mu2)">Headline<textarea oninput="setSlideText('${tid}',${idx},${si},'headline',this.value)" style="width:100%;min-height:42px">${esc(s._edit?.headline??s.headline??'')}</textarea></label><label style="font-size:10px;color:var(--mu2)">Supporting text<textarea oninput="setSlideText('${tid}',${idx},${si},'supportingText',this.value)" style="width:100%;min-height:42px">${esc(s._edit?.supportingText??s.supportingText??s.body??'')}</textarea></label><label style="font-size:10px;color:var(--mu2)">Move headline vertically<input type="range" min="-240" max="240" step="8" value="${Number(s._edit?.textOffset??s.textOffset??0)}" oninput="setSlideText('${tid}',${idx},${si},'textOffset',this.value)" style="width:100%"/></label><button class="btn bo bxs" onclick="applyCardText('${tid}',${idx},${si})">Update slide</button></div></details></div>`).join("");
+    const slides = (o.slides||[]).map((s,si)=>`<div style="padding:8px 0;border-bottom:1px solid var(--br)"><div style="display:flex;align-items:center;justify-content:space-between"><div style="font-size:10px;color:var(--mu);font-weight:600">Slide ${s.slideNumber} · ${esc(s.type||"")}</div><div style="display:flex;gap:4px;align-items:center">${o._imgLoading===si?`<span style="font-size:10px;color:var(--mu)">Applying…</span>`:`${s.img?`<button class="btn bo bxs tipbtn" data-tip="Download this slide" title="Download this slide" aria-label="Download slide ${s.slideNumber}" onclick="dl('${s.img}','slide-${s.slideNumber}.png')" style="padding:3px 8px">${I.dl}</button>`:""}<input type="file" accept="image/*" id="slideimg-${tid}-${idx}-${si}" style="display:none" onchange="setSlideBackgroundImage('${tid}',${idx},${si},this.files[0])"/><button class="btn bo bxs tipbtn" data-tip="Use your own photo as this slide's background" title="Add background image" aria-label="Add background image for slide ${s.slideNumber}" onclick="document.getElementById('slideimg-${tid}-${idx}-${si}').click()" style="padding:3px 8px">${I.image}</button>`}</div></div>${s.img?`<img loading="lazy" decoding="async" src="${s.img}" data-fb="${s.localImg||""}" onerror="cardImgFail(this, this.dataset.fb)" style="width:100%;border-radius:6px;margin-top:6px;aspect-ratio:4/5;object-fit:cover"/>`:""}${renderCardCanvasEditor(o,tid,idx,si,s,s.img,"4/5")}<details style="margin-top:7px"><summary style="cursor:pointer;font-size:10px;color:var(--mu2)">Edit this slide</summary><div style="display:grid;gap:6px;padding:7px 0"><label style="font-size:10px;color:var(--mu2)">Headline<textarea oninput="setSlideText('${tid}',${idx},${si},'headline',this.value)" style="width:100%;min-height:42px">${esc(s._edit?.headline??s.headline??'')}</textarea></label><label style="font-size:10px;color:var(--mu2)">Supporting text<textarea oninput="setSlideText('${tid}',${idx},${si},'supportingText',this.value)" style="width:100%;min-height:42px">${esc(s._edit?.supportingText??s.supportingText??s.body??'')}</textarea></label><label style="font-size:10px;color:var(--mu2)">Text size<input type="range" min="80" max="130" step="5" value="${Number(s._edit?.textScale??100)}" oninput="setSlideText('${tid}',${idx},${si},'textScale',this.value)" style="width:100%"/></label><label style="font-size:10px;color:var(--mu2)">Font<select onchange="setSlideText('${tid}',${idx},${si},'typography',this.value)" style="width:100%"><option value="impact">Impact Bold</option><option value="modern_sans">Modern Sans</option><option value="editorial_serif">Editorial Serif</option><option value="code_mono">Modern Mono</option><option value="condensed_sans">Condensed Display</option><option value="classic_serif">Classic Editorial</option></select></label><button class="btn bo bxs" onclick="applyCardText('${tid}',${idx},${si})">Update slide</button></div></details></div>`).join("");
     const cp = (o.slides||[]).map(s=>`SLIDE ${s.slideNumber}: ${slideText(s)}`).join("\n\n");
     const imgs = (o.slides||[]).map(s=>s.img).filter(Boolean);
     const dlAllBtn = imgs.length ? `<button class="btn bo bxs tipbtn" data-tip="Download all slide images" title="Download all slides" aria-label="Download all slides" onclick='dlAll(${JSON.stringify(imgs)})'>${I.dl} All</button>` : "";
@@ -1675,8 +1649,8 @@ window.applyCanvasLayout = async (tid,idx,slideIndex) => {
   try { const cd=await generateCardsWithRetry({...ctx,slides:[slide],focalPoint:S.focalPoint[tid]?{x:S.focalPoint[tid].x/100,y:S.focalPoint[tid].y/100}:null,brand:BRAND_PRESETS[S.brandPreset[tid]||"creator"]}); if(cd.images?.[0]){if(o.type==="carousel")slide.img=cd.images[0];else o.img=cd.images[0]; render();toast("Card layout updated");} } catch(e){toast("Couldn't apply that layout. Try again.");}
 };
 
-window.setCardText = (tid,idx,key,value) => { const o=S.outs[tid]?.[idx]; if(!o)return; o.editSlide=o.editSlide||{type:"hook",headline:S.trends.find(t=>t.id===tid)?.headline||o.label,slideNumber:1,totalSlides:1,imageUrl:o._renderCtx?.imageUrl}; o.editSlide[key]=key==="textOffset"?Number(value):value; };
-window.setSlideText = (tid,idx,slideIndex,key,value) => { const slide=S.outs[tid]?.[idx]?.slides?.[slideIndex]; if(!slide)return; slide._edit=slide._edit||{}; slide._edit[key]=key==="textOffset"?Number(value):value; };
+window.setCardText = (tid,idx,key,value) => { const o=S.outs[tid]?.[idx]; if(!o)return; o.editSlide=o.editSlide||{type:"hook",headline:S.trends.find(t=>t.id===tid)?.headline||o.label,slideNumber:1,totalSlides:1,imageUrl:o._renderCtx?.imageUrl}; o.editSlide[key]=key==="textOffset"||key==="textScale"?Number(value):value; };
+window.setSlideText = (tid,idx,slideIndex,key,value) => { const slide=S.outs[tid]?.[idx]?.slides?.[slideIndex]; if(!slide)return; slide._edit=slide._edit||{}; slide._edit[key]=key==="textOffset"||key==="textScale"?Number(value):value; };
 window.applyCardText = async (tid,idx,slideIndex=null) => { const o=S.outs[tid]?.[idx]; if(!o)return; const ctx=o._renderCtx; if(!ctx){toast("This image cannot be edited as a card.");return;} const carouselSlide=o.type==="carousel"?o.slides[slideIndex??0]:null; const base=carouselSlide||o.editSlide||{type:"hook",headline:S.trends.find(t=>t.id===tid)?.headline||o.label,slideNumber:1,totalSlides:1,imageUrl:ctx.imageUrl}; const edited={...base,...(carouselSlide?carouselSlide._edit||{}:o.editSlide||{})}; try { const cd=await generateCardsWithRetry({...ctx,slides:[edited],focalPoint:S.focalPoint[tid]?{x:S.focalPoint[tid].x/100,y:S.focalPoint[tid].y/100}:null,brand:BRAND_PRESETS[S.brandPreset[tid]||"creator"]}); if(cd.images?.[0]) { if(carouselSlide){carouselSlide.img=cd.images[0];carouselSlide._edit=edited;} else {o.img=cd.images[0];o.editSlide=edited;} render(); toast("Card text updated"); } } catch(e){toast("Couldn't update the card text.");} };
 window.copyOutput = (tid, idx) => { const output=S.outs[tid]?.[idx]; if(output) copyTxt(output.content||""); };
 window.toggleOutputEdit = (tid, idx) => {
@@ -1803,8 +1777,9 @@ window.gen = async (tid, all) => {
           const cd = await generateCardsWithRetry({slides: slideArr, category, palette: S.palette[tid] || "noir_orange", format: cardFormat, imageUrl: articleImage, theme: S.cardTheme[tid] || "modern_dark", typography: S.cardTypography[tid] || "impact", density: S.cardDensity[tid] || "balanced", focalPoint: S.focalPoint[tid] ? {x:S.focalPoint[tid].x/100,y:S.focalPoint[tid].y/100} : null, brand: BRAND_PRESETS[S.brandPreset[tid] || "creator"]});
           cardImgs = (cd.images || []).map(u => (u && !/^(https?:|data:|blob:)/.test(u)) ? API + (u.startsWith('/')?'':'/') + u : u);
         } catch(e){ console.warn("generate-cards failed, using local cards", e); }
-        const localOpts = { palette: S.palette[tid] || "noir_orange", theme: S.cardTheme[tid] || "modern_dark", typography: S.cardTypography[tid] || "impact", density: S.cardDensity[tid] || "balanced", format: cardFormat, total: slideArr.length };
-        slideArr.forEach((s,i)=>{ s.slideNumber = i+1; if (articleImage && !s.customImage) s.imageUrl = articleImage; s.localImg = localCardImage(s, localOpts); s.img = cardImgs[i] || s.localImg; });
+        const imageDataUrl = articleImage ? await localCardPhotoData(articleImage) : null;
+        const localOpts = { palette: S.palette[tid] || "noir_orange", theme: S.cardTheme[tid] || "modern_dark", typography: S.cardTypography[tid] || "impact", density: S.cardDensity[tid] || "balanced", format: cardFormat, total: slideArr.length, imageDataUrl };
+        slideArr.forEach((s,i)=>{ s.slideNumber = i+1; if (articleImage && !s.customImage) s.imageUrl = articleImage; s.localImg = localCardImage({...s,imageDataUrl:s.customImage||imageDataUrl}, localOpts); s.img = cardImgs[i] || s.localImg; });
         const imgsFinal = slideArr.map(s=>s.img);
         out.push(isSingle ? {type:"image", img: imgsFinal[0], fallbackImg: slideArr[0].localImg, aspect: isThumbnail ? "youtube" : isSilentCamera ? "tiktok" : "tiktok", isCard:true, editSlide:slideArr[0], silentCamera:isSilentCamera, sourceLabel:t.source||"Article photo", _renderCtx:{category,palette:localOpts.palette,format:cardFormat,imageUrl:articleImage,theme:localOpts.theme,typography:localOpts.typography,density:localOpts.density}} : {type:"carousel", slides: slideArr, images: imgsFinal, _renderCtx: { category, palette: localOpts.palette, format: cardFormat, imageUrl: articleImage, theme: localOpts.theme, typography: localOpts.typography, density: localOpts.density }});
       } else if(/image/i.test(c)){

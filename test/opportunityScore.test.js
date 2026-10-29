@@ -254,13 +254,9 @@ test('the collapsed control stays small enough not to clutter the panel', () => 
   assert.ok(!/box-shadow/.test(openPanel[0]), 'the open panel must not add decorative weight');
 });
 
-test('a missing script degrades to the old markup instead of throwing', () => {
-  // core.js must guard the call - an unguarded window.x() would be the same
-  // freeze class this codebase already fixed twice.
-  assert.match(core, /window\.cpOpportunityMarkup\s*\n?\s*\?/,
-    'core.js must check the helper exists before calling it');
-  assert.match(core, /aria-label="Heuristic opportunity estimate, not a forecast"/,
-    'the old markup must survive as the fallback');
+test('news detail panel renders clean story detail', () => {
+  assert.match(core, /cp-news-detail/);
+  assert.match(core, /cpCreateStartFromTrend/);
 });
 
 // ── wiring: the files are actually served ────────────────────────────────

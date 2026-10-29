@@ -42,7 +42,7 @@
         '<button class="btn bo bxs" type="button" onclick="cpCreateGenerate()">Try again</button></div>';
     } else if (isBusy) {
       body = '<div class="cc-busy"><span class="sp"></span><p>Writing your ' +
-        E(String(st.format || '').toLowerCase()) + '…</p></div>';
+        E(String(st.format || '').toLowerCase()) + '…</p><p class=\"cc-busy-note\">Gathering the story · shaping the design · polishing your post</p></div>';
     } else if (!outs.length) {
       body = '<div class="cc-empty"><p>Nothing generated yet.</p>' +
         '<button class="btn bp bxs" type="button" onclick="cpCreateGenerate()">Generate</button></div>';

@@ -1690,6 +1690,8 @@ function svExitCamera(){
   st.sheet = null; st.showScriptEditor = false;
   S.tab = 'home';
   render();
+  if (typeof S !== 'undefined') S.studioDirect = false;
+  if (typeof window.setTab === 'function') window.setTab('create');
 }
 
 function svGoToEditor(){
@@ -3643,3 +3645,4 @@ async function svTranscribeAll(){
   }
   if (!ok) svToast('Could not transcribe \u2014 add caption lines by hand below');
 }
+window.svDirectView = function(){ return svStartView(svState()); };

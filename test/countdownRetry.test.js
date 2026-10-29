@@ -105,11 +105,9 @@ test('the handler exists and repaints through render(), so nothing can stay stuc
   );
 });
 
-test('the label carries the story id and can never emit "undefined"', () => {
-  assert.match(core, /data-countdown="\$\{postBy == null \? '' : postBy\}"/,
-    'a null window must render as an empty attribute, not the string "undefined"');
-  assert.match(core, /data-tid="\$\{esc\(t\.id\)\}"/,
-    'the handler needs the story id from the DOM');
+test('news detail replaces countdown with direct create action', () => {
+  assert.match(core, /cp-news-detail/);
+  assert.match(core, /cpCreateStartFromTrend/);
 });
 
 test('the helper loads BEFORE core.js, and both are cache-busted', () => {
