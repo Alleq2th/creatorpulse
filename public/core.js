@@ -2920,9 +2920,7 @@ window.cpGenerateCaptionForOutput = async (tid, idx) => {
       : 'Write an engaging social caption with a strong hook, 3 short emoji takeaways, and 10 targeted hashtags for ' + platLabel + ' based on: "' + t.headline + '". Return only the caption.';
     const captionText = await generateText(SYS, userPrompt, S.tone[tid] || 'normal');
     if (!o.attachedCaption) o.attachedCaption = captionText;
-    else o.attachedCaption += '
-
-' + captionText;
+    else o.attachedCaption += '\n\n' + captionText;
     render();
     toast('Caption + hashtags ready below script!');
   } catch (err) {

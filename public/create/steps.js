@@ -153,7 +153,7 @@
       var on = st.platform === p.id;
       var logoSvg = logos[p.id] || ('<span class="cc-plat-fb">' + E(window.CPEnv.platEmoji()[p.id] || '◆') + '</span>');
       return '<button class="cc-plat-card ' + (on ? 'on' : '') + '" type="button" ' +
-        'onclick="cpCreateSetPlatform('' + p.id + '')" aria-pressed="' + (on ? 'true' : 'false') + '">' +
+        'onclick="cpCreateSetPlatform(\'' + p.id + '\')" aria-pressed="' + (on ? 'true' : 'false') + '">' +
         '<div class="cc-plat-icon">' + logoSvg + '</div>' +
         '<span class="cc-plat-title">' + E(p.label) + '</span>' +
         '<span class="cc-plat-pill">' + (on ? 'Selected' : 'Select') + '</span>' +
@@ -248,7 +248,7 @@
       content = '<div class="cc-templates-grid">' + tmpls.map(function (tmpl) {
         var on = (st.template || tmpls[0].id) === tmpl.id;
         return '<button class="cc-template-card ' + (on ? 'on' : '') + '" type="button" ' +
-          'onclick="cpCreateSetTemplate('' + tmpl.id + '')" aria-pressed="' + (on ? 'true' : 'false') + '">' +
+          'onclick="cpCreateSetTemplate(\'' + tmpl.id + '\')" aria-pressed="' + (on ? 'true' : 'false') + '">' +
           '<div class="cc-template-thumb" style="' + tmpl.preview + '">' +
           '<span>' + E(tmpl.label) + '</span>' +
           '</div>' +
@@ -263,7 +263,7 @@
       var chips = window.CPEnv.tones().map(function (t) {
         var on = st.tone === t.id;
         return '<button class="cc-chip ' + (on ? 'on' : '') + '" type="button" ' +
-          'onclick="cpCreateSetTone('' + t.id + '')" aria-pressed="' + (on ? 'true' : 'false') + '">' +
+          'onclick="cpCreateSetTone(\'' + t.id + '\')" aria-pressed="' + (on ? 'true' : 'false') + '">' +
           '<span class="cc-chip-t">' + E(t.label) + '</span></button>';
       }).join('');
       content = '<div class="cc-chips">' + chips + '</div>';
@@ -273,7 +273,7 @@
     var platMiniSwitcher = '<div class="cc-switch-plat-bar"><span class="cc-switch-lbl">Change Platform directly:</span><div class="cc-switch-plats">' +
       window.CPEnv.plats().map(function (p) {
         var on = st.platform === p.id;
-        return '<button class="cc-switch-plat ' + (on ? 'on' : '') + '" type="button" onclick="cpCreateSetPlatform('' + p.id + '')" title="' + E(p.label) + '">' +
+        return '<button class="cc-switch-plat ' + (on ? 'on' : '') + '" type="button" onclick="cpCreateSetPlatform(\'' + p.id + '\')" title="' + E(p.label) + '">' +
           (logos[p.id] || ('<span>' + E(p.label.slice(0, 2)) + '</span>')) +
           '<span>' + E(p.label) + '</span></button>';
       }).join('') + '</div></div>';
@@ -281,8 +281,8 @@
     var sum = f.summarize(st, window.CPEnv.plats(), window.CPEnv.tones());
     var rails =
       '<div class="cc-rails">' +
-      rail('Platform', sum.platform, 'cpCreateGo('platform')') +
-      rail('Format', sum.format, 'cpCreateGo('format')') +
+      rail('Platform', sum.platform, "cpCreateGo('platform')") +
+      rail('Format', sum.format, "cpCreateGo('format')") +
       '</div>';
 
     return bar('Create', 'Step 4 of 5') +
