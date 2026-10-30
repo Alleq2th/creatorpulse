@@ -114,6 +114,20 @@ async function localCardPhotoData(url, maxDim=1500){
     return canvas.toDataURL('image/jpeg',.86);
   } catch(e){ console.warn('Could not prepare local story photo fallback',e); return null; }
 }
+function localPlateImage(slide, opts){
+  opts = opts || {};
+  const pal = PALETTE_VIS[opts.palette] || PALETTE_VIS.noir_orange;
+  const th = THEME_VIS[opts.theme] || THEME_VIS.modern_dark;
+  const W = 1080, H = opts.format === "tiktok" ? 1920 : 1350;
+  const bg = opts.palette === "white_platinum" ? pal[0] : ((opts.theme === "clean_light" || opts.theme === "editorial_warm") ? th.bg : pal[0]);
+  const acc = pal[1] || "#ff5500";
+  const photo = opts.imageDataUrl || slide.customImage || slide.imageDataUrl || "";
+  const photoLayer = photo
+    ? `<image href="${svgEsc(photo)}" x="0" y="0" width="${W}" height="${H}" preserveAspectRatio="xMidYMid slice"/><rect width="100%" height="100%" fill="url(#shade)"/>`
+    : `<circle cx="${W-60}" cy="${H*0.2}" r="380" fill="${acc}" opacity=".15"/>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><defs><linearGradient id="base" x1="0" y1="0" x2="1" y2="1"><stop stop-color="${bg}"/><stop offset="1" stop-color="${acc}" stop-opacity=".3"/></linearGradient><linearGradient id="shade" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".75"/><stop offset=".7" stop-color="#000" stop-opacity=".25"/><stop offset="1" stop-color="#000" stop-opacity=".08"/></linearGradient></defs><rect width="100%" height="100%" fill="url(#base)"/>${photoLayer}</svg>`;
+  return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+}
 function localCardImage(slide, opts){
   opts = opts||{};
   const pal = PALETTE_VIS[opts.palette] || PALETTE_VIS.noir_orange;
@@ -1786,16 +1800,16 @@ function cpPlateKey(tid, idx, slideIndex) {
   return [tid, idx, slideIndex, ctx.palette || "", ctx.category || "", ctx.format || o?.aspect || "", bg, ctx.imageUrl || "", slide.customImage || "", focal].join("|");
 }
 
-function cpEnsurePlate(tid, idx, slideIndex) {
+function cpEnsurePlate(tid, idx, slideIndex, forceRetry) {
   const plateKey = cpPlateKey(tid, idx, slideIndex);
   let entry = cpPlateCache.get(plateKey);
-  if (entry) return entry;
-  entry = { src: null, failed: false, pending: true };
+  if (entry && !forceRetry && (entry.src || entry.pending)) return entry;
+  entry = { src: entry ? entry.src : null, failed: false, pending: true };
   cpPlateCache.set(plateKey, entry);
   const o = S.outs[tid]?.[idx];
   const ctx = o?._renderCtx;
   const slide = cpCardSlide(tid, idx, slideIndex);
-  if (!ctx || !slide) { entry.pending = false; entry.failed = true; return entry; }
+  if (!ctx || !slide) { entry.pending = false; entry.failed = true; cpPaintPlate(plateKey); return entry; }
   const sty = slide._style || {};
   // Dim 0: the dim is drawn live in the browser, so the plate is the bare photo.
   const payload = {
@@ -1805,12 +1819,37 @@ function cpEnsurePlate(tid, idx, slideIndex) {
     focalPoint: S.focalPoint?.[tid] ? { x: S.focalPoint[tid].x / 100, y: S.focalPoint[tid].y / 100 } : null,
     brand: BRAND_PRESETS[S.brandPreset?.[tid] || "creator"]
   };
+  const useFallbackPlate = () => {
+    // Do not depend on remote image decoding here: the branded local SVG
+    // remains visible even if the image URL has expired or is blocked by CORS.
+    const fallbackSrc = sty.bgImage || slide.customImage || slide.localImg || localPlateImage(slide, {
+      format: ctx.format, palette: ctx.palette, theme: ctx.theme
+    });
+    if (fallbackSrc) {
+      entry.src = fallbackSrc;
+      entry.failed = false;
+      entry.isFallback = true;
+    } else {
+      entry.failed = true;
+    }
+  };
   generateCardsWithRetry(payload)
-    .then(cd => { entry.src = (cd.images || [])[0] || null; entry.failed = !entry.src; })
-    .catch(() => { entry.failed = true; })
+    .then(cd => {
+      const image = (cd.images || [])[0];
+      if (typeof image !== "string" || !/^data:image\/(png|jpeg|jpg|webp|svg\+xml);base64,/i.test(image)) throw new Error("Card renderer returned no valid preview image");
+      entry.src = image;
+      entry.failed = false;
+    })
+    .catch(useFallbackPlate)
     .finally(() => { entry.pending = false; cpPaintPlate(plateKey); });
   return entry;
 }
+
+window.cpRetryPlate = function(tid, idx, slideIndex) {
+  const plateKey = cpPlateKey(tid, idx, slideIndex);
+  cpEnsurePlate(tid, idx, slideIndex, true);
+  cpPaintPlate(plateKey);
+};
 
 function cpPaintPlate(plateKey) {
   const entry = cpPlateCache.get(plateKey);
@@ -1818,7 +1857,25 @@ function cpPaintPlate(plateKey) {
     if (el.dataset.cpPlate !== plateKey) return;
     el.style.backgroundImage = entry && entry.src ? `url("${entry.src}")` : "";
     const status = el.parentElement.querySelector(".cc-live-status");
-    if (status) status.textContent = entry && entry.failed ? "Preview couldn't load. Text still updates." : (entry && entry.src ? "" : "Loading preview…");
+    if (status) {
+      status.replaceChildren();
+      if (entry && entry.failed) {
+        const message = document.createElement("span");
+        message.textContent = "Preview couldn't load. Text still updates.";
+        const retry = document.createElement("button");
+        retry.type = "button";
+        retry.className = "btn bo bxs";
+        retry.style.cssText = "margin-left:6px;padding:2px 7px;font-size:10px";
+        retry.textContent = "Retry";
+        const stage = el.closest(".cc-live-stage");
+        retry.addEventListener("click", () => {
+          if (stage) window.cpRetryPlate(stage.dataset.tid, Number(stage.dataset.idx), Number(stage.dataset.slideIndex));
+        }, { once: true });
+        status.append(message, retry);
+      } else if (!entry || (!entry.src && entry.pending)) {
+        status.textContent = "Loading preview…";
+      }
+    }
   });
   cpSyncGalleryPlate(cpThemeGallery);
   document.querySelectorAll(".cc-live-plate").forEach(el => {
