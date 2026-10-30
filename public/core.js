@@ -428,8 +428,41 @@ async function ariaAnnounceBackend(){
   } catch(e){ /* a reachability notice failing must never break the app */ }
 }
 function esc(s){ return String(s||"").replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
-window.cardImgFail = function(el, fb){ if(fb && el.src !== fb){ el.onerror=null; el.src = fb; } };
-window.imgFail = function(el){ try { const ph = document.createElement('div'); ph.className = 'timg-ph'; ph.innerHTML = I.news; if(el && el.parentNode) el.parentNode.replaceChild(ph, el); else if(el) el.remove(); } catch(e){ if(el) el.remove(); } };
+// Resilient image loading: automatic single retry with cache busting, graceful fallback, no layout jumping
+window.cardImgFail = function(el, fb){
+  if (!el) return;
+  if (!el.dataset.retried && el.src && !el.src.startsWith("data:")) {
+    el.dataset.retried = "1";
+    const separator = el.src.includes("?") ? "&" : "?";
+    el.src = el.src + separator + "retry=1";
+    return;
+  }
+  if (fb && el.src !== fb) {
+    el.onerror = null;
+    el.src = fb;
+    return;
+  }
+  el.style.opacity = "0.75";
+};
+
+window.imgFail = function(el){
+  if (!el) return;
+  if (!el.dataset.retried && el.src && !el.src.startsWith("data:")) {
+    el.dataset.retried = "1";
+    const separator = el.src.includes("?") ? "&" : "?";
+    el.src = el.src + separator + "retry=1";
+    return;
+  }
+  try {
+    const ph = document.createElement("div");
+    ph.className = "timg-ph";
+    ph.innerHTML = I.news;
+    if (el.parentNode) el.parentNode.replaceChild(ph, el);
+    else el.remove();
+  } catch(e) {
+    el.remove();
+  }
+};
 
 // Niche category color map — every niche picks a color from its category
 const NC_CATEGORY_COLOR = {
@@ -1259,7 +1292,7 @@ function renderPlatformMockup(o, tid, idx, curPlat) {
     const slideImg = curSlide?.img || o.img || o.imageUrl || "";
     const slideFb = curSlide?.localImg || o.fallbackImg || "";
     const imgEl = slideImg
-      ? `<img data-cp-export="${tid}-${idx}-${exportSi}" src="${slideImg}" onerror="cardImgFail(this, this.dataset.fb)" data-fb="${slideFb}" style="width:100%;aspect-ratio:4/5;object-fit:cover;display:block"/>`
+      ? `<img loading="lazy" decoding="async" data-cp-export="${tid}-${idx}-${exportSi}" onload="this.dataset.loaded='true'" src="${slideImg}" onerror="cardImgFail(this, this.dataset.fb)" data-fb="${slideFb}" style="width:100%;aspect-ratio:4/5;object-fit:cover;display:block"/>`
       : `<div style="padding:28px 16px;min-height:220px;display:flex;flex-direction:column;justify-content:center;background:#111;text-align:center"><div style="font-size:16px;font-weight:700;color:#fff">${esc(textContent.slice(0, 120))}</div></div>`;
 
     const navArrows = isCarousel && totalSlides > 1 ? `
@@ -1313,7 +1346,7 @@ function renderPlatformMockup(o, tid, idx, curPlat) {
     const slideImg = curSlide?.img || o.img || o.imageUrl || "";
     const slideFb = curSlide?.localImg || o.fallbackImg || "";
     const mediaEl = slideImg
-      ? `<img data-cp-export="${tid}-${idx}-${exportSi}" src="${slideImg}" onerror="cardImgFail(this, this.dataset.fb)" data-fb="${slideFb}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"/>`
+      ? `<img loading="lazy" decoding="async" data-cp-export="${tid}-${idx}-${exportSi}" onload="this.dataset.loaded='true'" src="${slideImg}" onerror="cardImgFail(this, this.dataset.fb)" data-fb="${slideFb}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"/>`
       : `<div style="padding:20px;text-align:center;color:#fff;font-weight:700;font-size:15px;z-index:1">${esc(textContent.slice(0, 140))}</div>`;
 
     inner = `
@@ -1343,7 +1376,7 @@ function renderPlatformMockup(o, tid, idx, curPlat) {
     const slideImg = curSlide?.img || o.img || o.imageUrl || "";
     const slideFb = curSlide?.localImg || o.fallbackImg || "";
     const mediaEl = slideImg
-      ? `<img data-cp-export="${tid}-${idx}-${exportSi}" src="${slideImg}" onerror="cardImgFail(this, this.dataset.fb)" data-fb="${slideFb}" style="width:100%;height:100%;object-fit:cover"/>`
+      ? `<img loading="lazy" decoding="async" data-cp-export="${tid}-${idx}-${exportSi}" onload="this.dataset.loaded='true'" src="${slideImg}" onerror="cardImgFail(this, this.dataset.fb)" data-fb="${slideFb}" style="width:100%;height:100%;object-fit:cover"/>`
       : `<div style="padding:16px;color:#fff;font-size:13px;font-weight:600;text-align:center">${esc(textContent.slice(0, 90))}</div>`;
 
     inner = `
@@ -1371,7 +1404,7 @@ function renderPlatformMockup(o, tid, idx, curPlat) {
     const slideImg = curSlide?.img || o.img || "";
     const slideFb = curSlide?.localImg || o.fallbackImg || "";
     const mediaEl = slideImg
-      ? `<div class="mock-x-media"><img data-cp-export="${tid}-${idx}-${exportSi}" src="${slideImg}" onerror="cardImgFail(this, this.dataset.fb)" data-fb="${slideFb}" style="width:100%;aspect-ratio:16/9;object-fit:cover;display:block"/></div>`
+      ? `<div class="mock-x-media"><img loading="lazy" decoding="async" data-cp-export="${tid}-${idx}-${exportSi}" onload="this.dataset.loaded='true'" src="${slideImg}" onerror="cardImgFail(this, this.dataset.fb)" data-fb="${slideFb}" style="width:100%;aspect-ratio:16/9;object-fit:cover;display:block"/></div>`
       : "";
 
     inner = `
@@ -1659,7 +1692,8 @@ function cpLiveTextStyle(slide, name, o, tid) {
   const color = (sty.layerColors || {})[name] || sty.textColor || "#ffffff";
   const k = Math.max(0.5, Math.min(1.6, Number((sty.layerScale || {})[name]) || 1));
   const upper = name === "ctaLine" ? "uppercase" : "none";
-  return `font-family:${vis.f || "Inter, sans-serif"};font-weight:${vis.w || 700};font-size:${(CP_LIVE_BASE_SIZE[name] * k).toFixed(2)}cqw;color:${color};text-transform:${upper}`;
+  const align = (sty.layerAlign || {})[name] || sty.textAlign || "left";
+  return `font-family:${vis.f || "Inter, sans-serif"};font-weight:${vis.w || 700};font-size:${(CP_LIVE_BASE_SIZE[name] * k).toFixed(2)}cqw;color:${color};text-transform:${upper};text-align:${align}`;
 }
 
 function cpSelectCanvasBlock(key, name) {
@@ -1855,6 +1889,8 @@ function cpPaintPlate(plateKey) {
   const entry = cpPlateCache.get(plateKey);
   document.querySelectorAll(".cc-live-plate").forEach(el => {
     if (el.dataset.cpPlate !== plateKey) return;
+    const stage = el.closest(".cc-live-stage");
+    if (stage) stage.dataset.loading = String(!!(entry && entry.pending));
     el.style.backgroundImage = entry && entry.src ? `url("${entry.src}")` : "";
     const status = el.parentElement.querySelector(".cc-live-status");
     if (status) {
@@ -1902,13 +1938,21 @@ function cpUpdateLiveStage(tid, idx, slideIndex) {
     // A chosen photo appears at once and needs no server render while the user is choosing.
     if (plateEl && plateEl.dataset.cpBgSrc !== sty.bgImage) {
       plateEl.style.backgroundImage = `url("${sty.bgImage}")`;
-      plateEl.style.backgroundPosition = S.focalPoint?.[tid] ? `${S.focalPoint[tid].x}% ${S.focalPoint[tid].y}%` : "center";
       plateEl.dataset.cpBgSrc = sty.bgImage;
+    }
+    if (plateEl) {
+      plateEl.style.backgroundPosition = S.focalPoint?.[tid] ? `${S.focalPoint[tid].x}% ${S.focalPoint[tid].y}%` : "center";
+      const adj = sty.backgroundAdjustments || {};
+      const brightness = Math.max(0, Math.min(2, Number(adj.brightness ?? 1)));
+      const contrast = Math.max(0, Math.min(2, Number(adj.contrast ?? 1)));
+      const saturation = Math.max(0, Math.min(2, Number(adj.saturation ?? 1)));
+      const blur = Math.max(0, Math.min(24, Number(adj.blur ?? 0)));
+      plateEl.style.filter = `brightness(${brightness}) contrast(${contrast}) saturate(${saturation}) blur(${blur}px)`;
     }
     const status = stage.querySelector(".cc-live-status");
     if (status) status.textContent = "";
   } else {
-    if (plateEl) { plateEl.dataset.cpBgSrc = ""; plateEl.style.backgroundPosition = ""; }
+    if (plateEl) { plateEl.dataset.cpBgSrc = ""; plateEl.style.backgroundPosition = ""; plateEl.style.filter = ""; }
     cpEnsurePlate(tid, idx, slideIndex);
     cpPaintPlate(plateKey);
   }
@@ -1954,56 +1998,189 @@ function cpExportAspect(o, isSlide) {
 
 // Reads everything the image needs in one synchronous step, so an edit made while
 // the image is being drawn cannot leave it half old and half new.
-function cpExportSnapshot(tid, idx, si) {
+// ── Unified Design State Architecture ──
+// Every graphic has a structured design state representing background, typography,
+// positioning, text styling, and decorative attributes. Both the live preview
+// and the export renderer share this exact representation.
+function cpGetDesignState(tid, idx, si) {
   const o = S.outs[tid]?.[idx];
   const slide = cpCardSlide(tid, idx, si);
   if (!o || !slide || !o._renderCtx) return null;
-  const sty = JSON.parse(JSON.stringify(slide._style || {}));
+  const sty = slide._style || {};
   const plateKey = cpPlateKey(tid, idx, si);
   const entry = cpPlateCache.get(plateKey);
+
   let plateSrc = "";
   let plateId = "none";
   if (sty.bgImage) {
     plateSrc = sty.bgImage;
     plateId = "upload:" + plateKey;
-  } else {
-    if (!entry || entry.pending) return null; // the photo is still on its way
-    if (entry.src) { plateSrc = entry.src; plateId = "server:" + plateKey; }
+  } else if (entry && entry.src) {
+    plateSrc = entry.src;
+    plateId = "server:" + plateKey;
   }
+
   const typo = o._renderCtx.typography;
   const layers = CARD_LAYERS.map(L => {
     const text = String(slide[L.field] || "");
     const face = (sty.layerFonts || {})[L.key] || sty.typography || typo || "impact";
     const vis = TYPO_VIS[face] || {};
     const k = Math.max(0.5, Math.min(1.6, Number((sty.layerScale || {})[L.key]) || 1));
+    const align = (sty.layerAlign || {})[L.key] || sty.textAlign || "left";
     return {
       key: L.key,
+      field: L.field,
+      label: L.label,
       text: L.key === "ctaLine" ? text.toUpperCase() : text,
       family: vis.f || "Inter, sans-serif",
+      fontFamilyName: face,
       weight: vis.w || 700,
-      size: CP_LIVE_BASE_SIZE[L.key] * k / 100, // the editor sizes text in 1% of the card width
+      size: CP_LIVE_BASE_SIZE[L.key] * k / 100,
+      scale: k,
       color: (sty.layerColors || {})[L.key] || sty.textColor || "#ffffff",
+      align,
       box: (slide.textLayout || {})[L.key] || CP_LIVE_DEFAULT_BOX[L.key]
     };
   });
+
   const focal = sty.bgImage && S.focalPoint?.[tid] ? S.focalPoint[tid] : null;
-  const state = {
+  const aspect = cpExportAspect(o, o.type === "carousel");
+
+  return {
+    template: o._renderCtx.template || o.template || "impact",
+    theme: sty.themeId || o._renderCtx.theme || "dark_editorial",
+    colourTheme: sty.colourThemeId || null,
+    aspect,
     plateId,
-    aspect: cpExportAspect(o, o.type === "carousel"),
+    plateSrc,
+    background: {
+      image: plateSrc,
+      position: focal ? [focal.x, focal.y] : [50, 50],
+      dim: Math.max(0, Math.min(0.8, Number(sty.dim) || 0)),
+      adjustments: { ...(sty.backgroundAdjustments || {}) }
+    },
+    backgroundAdjustments: { ...(sty.backgroundAdjustments || {}) },
     dim: Math.max(0, Math.min(0.8, Number(sty.dim) || 0)),
     focal: focal ? [focal.x, focal.y] : null,
-    layers
+    layers,
+    headline: slide.headline || "",
+    supportingText: slide.supportingText || "",
+    ctaLine: slide.ctaLine || "",
+    decorative: {
+      accentColor: (sty.layerColors || {})["ctaLine"] || "#ffffff",
+      overlay: !!sty.dim,
+      elements: Array.isArray(sty.decorativeElements) ? sty.decorativeElements : []
+    }
   };
-  return { state, sig: JSON.stringify(state), plateSrc };
 }
 
-function cpLoadExportImage(src) {
-  return new Promise((resolve, reject) => {
-    const im = new Image();
-    im.onload = () => resolve(im);
-    im.onerror = () => reject(new Error("photo did not load"));
-    im.src = src;
+// Applies updates to the unified design state and triggers live stage update
+function cpApplyDesignState(tid, idx, si, updates) {
+  const slide = cpCardSlide(tid, idx, si);
+  if (!slide || !updates) return;
+  slide._style = slide._style || {};
+  if (updates.dim !== undefined) slide._style.dim = updates.dim;
+  if (updates.bgImage !== undefined) slide._style.bgImage = updates.bgImage;
+  if (updates.typography) slide._style.typography = updates.typography;
+  if (updates.themeId) slide._style.themeId = updates.themeId;
+  if (updates.colourThemeId) slide._style.colourThemeId = updates.colourThemeId;
+  if (updates.backgroundPosition) slide._style.backgroundPosition = updates.backgroundPosition;
+  if (updates.backgroundAdjustments) slide._style.backgroundAdjustments = { ...(slide._style.backgroundAdjustments || {}), ...updates.backgroundAdjustments };
+  if (updates.layerFonts) slide._style.layerFonts = { ...(slide._style.layerFonts || {}), ...updates.layerFonts };
+  if (updates.layerColors) slide._style.layerColors = { ...(slide._style.layerColors || {}), ...updates.layerColors };
+  if (updates.layerScale) slide._style.layerScale = { ...(slide._style.layerScale || {}), ...updates.layerScale };
+  if (updates.layerAlign) slide._style.layerAlign = { ...(slide._style.layerAlign || {}), ...updates.layerAlign };
+  if (updates.textLayout) slide.textLayout = { ...(slide.textLayout || {}), ...updates.textLayout };
+  if (updates.headline !== undefined) slide.headline = updates.headline;
+  if (updates.supportingText !== undefined) slide.supportingText = updates.supportingText;
+  if (updates.ctaLine !== undefined) slide.ctaLine = updates.ctaLine;
+  cpUpdateLiveStage(tid, idx, si);
+}
+window.cpGetGraphicDesignState = cpGetDesignState;
+window.cpUpdateGraphicDesignState = cpApplyDesignState;
+
+// ── Font Loading & Pre-rendering Cache ──
+const cpFontReadinessCache = new Map();
+async function cpEnsureGraphicFontsLoaded(layers) {
+  if (typeof document === "undefined" || !document.fonts || !document.fonts.load) return;
+  const promises = layers.filter(l => l.text).map(l => {
+    const key = `${l.weight} 40px ${l.family}`;
+    if (cpFontReadinessCache.has(key)) return cpFontReadinessCache.get(key);
+    const p = Promise.resolve(document.fonts.load(key)).then(loaded => {
+      if (!loaded || !loaded.length || !document.fonts.check(key)) throw new Error(`Selected font did not load: ${l.fontFamilyName || l.family}`);
+      return true;
+    }).catch(error => {
+      cpFontReadinessCache.delete(key);
+      throw error;
+    });
+    cpFontReadinessCache.set(key, p);
+    return p;
   });
+  await Promise.all(promises);
+  await document.fonts.ready;
+}
+
+// Reads everything the image needs in one synchronous step, so an edit made while
+// the image is being drawn cannot leave it half old and half new.
+function cpExportSnapshot(tid, idx, si) {
+  const o = S.outs[tid]?.[idx];
+  const slide = cpCardSlide(tid, idx, si);
+  if (!o || !slide || !o._renderCtx) return null;
+  const plateKey = cpPlateKey(tid, idx, si);
+  const entry = cpPlateCache.get(plateKey);
+  const sty = slide._style || {};
+  if (!sty.bgImage && (!entry || entry.pending)) return null;
+
+  const state = cpGetDesignState(tid, idx, si);
+  if (!state) return null;
+  const signatureState = {
+    ...state,
+    plateSrc: state.plateId,
+    background: { ...state.background, image: state.plateId }
+  };
+  return { state, sig: JSON.stringify(signatureState), plateSrc: state.plateSrc };
+}
+
+// In-memory image object cache for export composition to avoid redownloading/redecoding
+const cpExportImageCache = new Map();
+function cpRememberExportImage(src, image) {
+  cpExportImageCache.delete(src);
+  cpExportImageCache.set(src, { image });
+  while (cpExportImageCache.size > 8) cpExportImageCache.delete(cpExportImageCache.keys().next().value);
+}
+function cpLoadExportImage(src) {
+  if (!src) return Promise.resolve(null);
+  const cached = cpExportImageCache.get(src);
+  if (cached?.image?.complete && cached.image.naturalWidth > 0) return Promise.resolve(cached.image);
+  if (cached?.promise) return cached.promise;
+  const promise = new Promise((resolve, reject) => {
+    const load = (attempt) => {
+      const im = new Image();
+      im.decoding = "async";
+      if (/^https?:/i.test(src)) im.crossOrigin = "anonymous";
+      im.onload = () => {
+        cpRememberExportImage(src, im);
+        resolve(im);
+      };
+      im.onerror = () => {
+        if (attempt === 0) {
+          // Retry recoverable network failures once, using an explicit reload for remote resources.
+          const retrySrc = /^https?:/i.test(src) ? `${src}${src.includes("?") ? "&" : "?"}cp_retry=1` : src;
+          const retry = new Image();
+          retry.decoding = "async";
+          if (/^https?:/i.test(src)) retry.crossOrigin = "anonymous";
+          retry.onload = () => { cpRememberExportImage(src, retry); resolve(retry); };
+          retry.onerror = () => reject(new Error("photo did not load after retry"));
+          retry.src = retrySrc;
+        } else reject(new Error("photo did not load"));
+      };
+      im.src = src;
+    };
+    load(0);
+  });
+  cpExportImageCache.set(src, { promise });
+  promise.catch(() => cpExportImageCache.delete(src));
+  return promise;
 }
 
 // Breaks text into lines the way the preview does: words wrap, and a word longer than the box breaks anywhere.
@@ -2028,6 +2205,7 @@ function cpWrapLines(ctx, text, maxW) {
 }
 
 // One text box: clipped to its box like the preview, top-aligned, 1.05 line height, with the same shadow.
+// Never draws selection outlines or editing controls into the exported image.
 function cpDrawTextBox(ctx, l, W, H) {
   const px = l.size * W;
   const lineH = px * 1.05;
@@ -2044,13 +2222,14 @@ function cpDrawTextBox(ctx, l, W, H) {
   ctx.clip();
   ctx.font = `${l.weight} ${px}px ${l.family}`;
   ctx.fillStyle = l.color;
-  ctx.textAlign = "left";
+  ctx.textAlign = l.align === "center" ? "center" : (l.align === "right" ? "right" : "left");
   ctx.textBaseline = "alphabetic";
   ctx.shadowColor = "rgba(0,0,0,0.45)";
   ctx.shadowOffsetX = 0;
-  ctx.shadowOffsetY = 0.006 * W; // 0.6% of the width, as in the preview's text-shadow
+  ctx.shadowOffsetY = 0.006 * W; // 0.6% of the width, as in the preview text-shadow
   ctx.shadowBlur = 0.035 * W;    // 3.5% of the width
-  lines.forEach((ln, i) => ctx.fillText(ln, left, firstBaseline + i * lineH));
+  const xPos = l.align === "center" ? (left + bw / 2) : (l.align === "right" ? (left + bw) : left);
+  lines.forEach((ln, i) => ctx.fillText(ln, xPos, firstBaseline + i * lineH));
   ctx.restore();
 }
 
@@ -2059,9 +2238,8 @@ async function cpComposeCard(snap) {
   const { state } = snap;
   const W = CP_EXPORT_W;
   const H = Math.round(W * state.aspect[1] / state.aspect[0]);
-  const families = [...new Set(state.layers.filter(l => l.text).map(l => l.family))];
-  await Promise.all(families.map(f => document.fonts.load(`900 40px ${f}`).catch(() => null)));
-  const photo = snap.plateSrc ? await cpLoadExportImage(snap.plateSrc) : null;
+  await cpEnsureGraphicFontsLoaded(state.layers);
+  const photo = snap.plateSrc ? await cpLoadExportImage(snap.plateSrc).catch(() => null) : null;
   const canvas = document.createElement("canvas");
   canvas.width = W;
   canvas.height = H;
@@ -2072,7 +2250,15 @@ async function cpComposeCard(snap) {
     const s = Math.max(W / photo.naturalWidth, H / photo.naturalHeight);
     const dw = photo.naturalWidth * s, dh = photo.naturalHeight * s;
     const [fx, fy] = state.focal ? state.focal.map(v => v / 100) : [0.5, 0.5];
+    const adj = state.backgroundAdjustments || {};
+    const brightness = Math.max(0, Math.min(2, Number(adj.brightness ?? 1)));
+    const contrast = Math.max(0, Math.min(2, Number(adj.contrast ?? 1)));
+    const saturation = Math.max(0, Math.min(2, Number(adj.saturation ?? 1)));
+    const blur = Math.max(0, Math.min(24, Number(adj.blur ?? 0)));
+    ctx.save();
+    ctx.filter = `brightness(${brightness}) contrast(${contrast}) saturate(${saturation}) blur(${blur}px)`;
     ctx.drawImage(photo, (W - dw) * fx, (H - dh) * fy, dw, dh);
+    ctx.restore();
   }
   if (state.dim > 0) {
     ctx.fillStyle = `rgba(0,0,0,${state.dim})`;
