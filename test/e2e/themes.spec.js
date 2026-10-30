@@ -1,7 +1,9 @@
 // Themes gallery on a generated graphic: the gallery shows the themes, picking one
 // repaints the card at once from its shared style, and the copy and photo stay the same.
 const { test, expect } = require('@playwright/test');
+const fs = require('node:fs');
 const { signIn, mockApi, openCreate, startIdeaFlow } = require('./helpers');
+const { jpegSize } = require('./exportHelpers');
 
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 
@@ -27,8 +29,6 @@ test.describe('Themes on a generated graphic', () => {
       const btn = page.locator('button.cc-th-open').first();
       await expect(btn).toBeAttached({ timeout: 20000 });
       // The editor opens by default; only open it if something closed it.
-      const editor = page.locator('details.cp-canvas-editor').first();
-      if ((await editor.getAttribute('open')) === null) await editor.locator('summary').click();
       await btn.click();
       await expect(page.locator('#cthOverlay')).toBeVisible();
     };
@@ -58,7 +58,7 @@ test.describe('Themes on a generated graphic', () => {
     await expect(headlineLayer).toHaveCSS('color', 'rgb(255, 255, 255)');
     await expect(ctaLayer).toHaveCSS('color', 'rgb(0, 229, 255)');
     expect(await style(headlineLayer, 'fontFamily')).toMatch(/Anton|Impact/);
-    await expect(page.locator('.cc-th-open-row .cc-style-hint').first()).toHaveText('Electric');
+    await expect(page.locator('.cc-th-hint').first()).toHaveText('Electric');
     await page.waitForTimeout(800);
     expect(cardRequests.length).toBe(before);
     expect(await headlineLayer.innerText()).toBe(headline);
@@ -77,19 +77,20 @@ test.describe('Themes on a generated graphic', () => {
     await page.locator('#cthOverlay button', { hasText: 'Restore original look' }).click();
     await expect(dimLayer).toHaveCSS('opacity', '0');
     await expect(ctaLayer).toHaveCSS('color', 'rgb(255, 255, 255)');
-    await expect(page.locator('.cc-th-open-row .cc-style-hint').first()).toHaveText('Original look');
+    await expect(page.locator('.cc-th-hint').first()).toHaveText('Original look');
     expect(await headlineLayer.innerText()).toBe(headline);
     expect(cardRequests.length).toBe(before);
 
-    // Applying still saves the chosen look to the card image.
+    // Download gives the chosen look straight away, with no server call.
     await openThemes();
     await page.locator('#cthOverlay .cc-th-tile', { hasText: 'Minimal' }).click();
     await expect(page.locator('#cthOverlay')).toHaveCount(0);
-    const applyCount = cardRequests.length;
-    await page.getByRole('button', { name: /Apply to card image/ }).first().click();
-    await expect.poll(() => cardRequests.length, { timeout: 15000 }).toBeGreaterThan(applyCount);
-    const applied = cardRequests[cardRequests.length - 1];
-    expect(applied.slides[0].headline).toBe(headline);
-    expect(applied.typography).toBe('modern_sans');
+    const beforeDownload = cardRequests.length;
+    const [download] = await Promise.all([
+      page.waitForEvent('download'),
+      page.getByRole('button', { name: 'Download image' }).first().click(),
+    ]);
+    expect(jpegSize(fs.readFileSync(await download.path()))).toEqual({ width: 1080, height: 1920 });
+    expect(cardRequests.length).toBe(beforeDownload);
   });
 });

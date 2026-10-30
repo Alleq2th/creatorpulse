@@ -43,10 +43,11 @@ test('card text colour is applied only for a valid hex colour', () => {
 
 test('the style panel uses the scoped cc- prefix and is wired to its handlers', () => {
   const core = read('public/core.js');
-  for (const fn of ['cpSetCardStyle', 'cpPickStyleFont', 'cpPickCardBackground', 'cpApplyCardStyle', 'cpResetCardStyle']) {
+  for (const fn of ['cpSetCardStyle', 'cpPickCardBackground']) {
     assert.match(core, new RegExp('window\\.' + fn + ' = '), fn + ' must be defined');
   }
-  assert.match(core, /class="cc-style-panel"/);
+  assert.match(core, /class="cc-tools"/);
+  assert.doesNotMatch(core, /Apply to card image/);
 });
 
 test('the Studio opens the teleprompter view for script outputs', () => {

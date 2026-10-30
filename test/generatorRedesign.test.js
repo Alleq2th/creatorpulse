@@ -31,7 +31,7 @@ test("core.js includes production beats for IG Reel scripts and TikTok scripts",
 
 test("core.js removes redundant duplicate text below carousel slide images", () => {
   assert.doesNotMatch(CORE_JS, /font-family:var\(--serif\);font-size:14px;font-weight:600;margin-top:6px">\$\{esc\(s\.headline\)\}/);
-  assert.match(CORE_JS, /View slide copy &amp; details/);
+  assert.match(CORE_JS, /View slide text/);
 });
 
 test("services/statCard.js provides improved typography sizing and framing", () => {

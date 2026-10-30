@@ -53,7 +53,7 @@ test('typing saves to the shared card state and finishes on blur, Escape or Ente
 
 test('the layer fields under the preview stay in step with the preview', () => {
   assert.match(core, /function cpSyncStylePanel\(tid, idx, slideIndex, slide\)/);
-  assert.match(core, /cpSyncStylePanel\(tid, idx, slideIndex, slide\);\n\}/);
+  assert.match(core, /cpSyncStylePanel\(tid, idx, slideIndex, slide\);/);
 });
 
 test('the editing style is scoped to the text being edited', () => {

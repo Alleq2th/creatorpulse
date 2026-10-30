@@ -14,11 +14,12 @@ test('card editor renders moveable and resizable blocks over each card preview',
   assert.match(core, /document\.addEventListener\("pointermove"/);
 });
 
-test('canvas layout changes are sent to card rendering and available for single cards and carousel slides', () => {
-  assert.match(core, /window\.applyCanvasLayout\s*=/);
-  assert.match(core, /slide\.textLayout=layout/);
+test('canvas layout changes reach the saved image through the shared card state', () => {
+  assert.doesNotMatch(core, /window\.applyCanvasLayout\s*=/);
+  assert.match(core, /slide\.textLayout/);
   assert.match(core, /renderCardCanvasEditor\(o,tid,idx,si,s/);
   assert.match(core, /editSlide:slideArr\[0\]/);
+  assert.match(core, /function cpExportSnapshot/);
 });
 
 test('server renderer supports saved positions and sizes for headline and supporting text', () => {

@@ -24,8 +24,6 @@ test.describe('Background menu on a generated graphic', () => {
     await page.getByRole('button', { name: 'Continue' }).click();
     await page.getByRole('button', { name: 'Generate' }).first().click();
 
-    const editor = page.locator('details.cp-canvas-editor').first();
-    if ((await editor.getAttribute('open')) === null) await editor.locator('summary').click();
     const stage = page.locator('.cc-live-stage').first();
     const menu = page.locator('.cc-bg').first();
     const headlineText = page.locator('.cp-canvas-block[data-canvas-block="headline"] .cc-live-text').first();
@@ -46,8 +44,8 @@ test.describe('Background menu on a generated graphic', () => {
       el.dispatchEvent(new Event('input', { bubbles: true }));
     });
     await expect(stage.locator('.cc-live-dim')).toHaveCSS('opacity', '0.6');
-    // The panel's dimming field follows the same value.
-    await expect(page.locator('.cc-style-panel input[aria-label="Dim background photo"]').first()).toHaveValue('60');
+    // The dimming field stays at the same value.
+    await expect(menu.getByLabel('Background dimming')).toHaveValue('60');
 
     // 3. Uploading a photo shows it at once, with no server render, and keeps the text.
     const textBefore = await headlineText.textContent();
