@@ -1773,6 +1773,30 @@ function sanitizeSavedContent(content) {
   if (typeof clean.fallbackImg === "string" && clean.fallbackImg.startsWith("data:")) delete clean.fallbackImg;
   return clean;
 }
+// Stores an exported card image in Supabase Storage and returns its public URL, so saved cards keep their picture.
+// Needs a public storage bucket named "card-images".
+const CARD_IMAGE_BUCKET = "card-images";
+app.post("/api/card-image", async (req, res) => {
+  if (!supabase) return res.status(503).json({ error: "Storage not configured" });
+  const { token, dataUrl } = req.body || {};
+  const match = typeof dataUrl === "string" ? dataUrl.match(/^data:image\/(jpeg|png);base64,([A-Za-z0-9+/=]+)$/) : null;
+  if (!match) return res.status(400).json({ error: "Invalid image" });
+  try {
+    const { data: userData, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !userData?.user) return res.status(401).json({ error: "Invalid token" });
+    const buffer = Buffer.from(match[2], "base64");
+    if (buffer.length > 8 * 1024 * 1024) return res.status(413).json({ error: "Image too large" });
+    const ext = match[1] === "png" ? "png" : "jpg";
+    const path = `${userData.user.id}/${Date.now()}-${require("crypto").randomBytes(6).toString("hex")}.${ext}`;
+    const { error } = await supabase.storage.from(CARD_IMAGE_BUCKET).upload(path, buffer, { contentType: `image/${match[1]}`, upsert: false });
+    if (error) throw error;
+    const { data } = supabase.storage.from(CARD_IMAGE_BUCKET).getPublicUrl(path);
+    res.json({ success: true, url: data.publicUrl });
+  } catch (e) {
+    console.error("card-image upload failed:", e?.message || e);
+    res.status(500).json({ error: "Upload failed" });
+  }
+});
 app.post("/api/save-post", async (req, res) => {
   if (!supabase) return res.status(503).json({ error: "Database not configured" });
   let { token, headline, niche, platform, contentType, content, scheduledDate } = req.body;

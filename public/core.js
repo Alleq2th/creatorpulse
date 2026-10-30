@@ -1458,7 +1458,7 @@ function renderOut(o, tid, idx){
   }
   if(o.type === "carousel"){
     const slideText = s => [s.headline, s.stat && s.statLabel ? `${s.stat} — ${s.statLabel}` : s.stat, s.sectionLabel, s.body, s.supportingText].filter(Boolean).join("\n");
-    const slides = (o.slides||[]).map((s,si)=>`<div class="cc-slide"><div class="cc-slide-head"><div class="cc-slide-label">Slide ${s.slideNumber} · ${esc(s.type||"")}</div>${s.img?`<button class="btn bo bxs tipbtn" data-tip="Download this slide" title="Download this slide" aria-label="Download slide ${s.slideNumber}" onclick="cpDownloadCard('${tid}',${idx},${si},'slide-${s.slideNumber}.png')" style="padding:3px 8px">${I.dl}</button>`:""}</div>${renderCardCanvasEditor(o,tid,idx,si,s,s.img,"4/5")}</div>`).join("");
+    const slides = (o.slides||[]).map((s,si)=>`<div class="cc-slide"><div class="cc-slide-head"><div class="cc-slide-label">Slide ${s.slideNumber} · ${esc(s.type||"")}</div>${s.img?`<button class="btn bo bxs tipbtn" data-tip="Download this slide" title="Download this slide" aria-label="Download slide ${s.slideNumber}" onclick="cpDownloadCard('${tid}',${idx},${si},'slide-${s.slideNumber}.jpg')" style="padding:3px 8px">${I.dl}</button>`:""}</div>${renderCardCanvasEditor(o,tid,idx,si,s,s.img,"4/5")}</div>`).join("");
     const cp = (o.slides||[]).map(s=>`SLIDE ${s.slideNumber}: ${slideText(s)}`).join("\n\n");
     const imgs = (o.slides||[]).map(s=>s.img).filter(Boolean);
     const dlAllBtn = o.slides?.length ? `<button class="btn bo bxs tipbtn" data-tip="Download all slide images" title="Download all slides" aria-label="Download all slides" onclick="cpDownloadAll('${tid}',${idx})">${I.dl} All</button>` : "";
@@ -1884,7 +1884,7 @@ function cpUpdateLiveStage(tid, idx, slideIndex) {
 const CP_EXPORT_W = 1080;
 const cpExportTimers = new Map();
 const cpExportSigs = new Map();
-const cpExportSeq = new Map();
+const cpExportChain = new Map();
 const cpExportKey = (tid, idx, si) => `${tid}-${idx}-${si}`;
 
 // The shape of the exported image, from the same format rules the preview uses.
@@ -2038,18 +2038,25 @@ function cpSetExportImg(tid, idx, si, url) {
   else o.img = url;
 }
 
-// Exports one card if its look has changed, then updates the mockup image in place (no re-render).
-async function cpRunExport(tid, idx, si) {
+// Queues an export for one card. Exports for a card run one after another, and each starts from
+// the newest look. Resolves to the image URL, or "" when the image could not be made.
+function cpRunExport(tid, idx, si) {
+  const key = cpExportKey(tid, idx, si);
+  const run = (cpExportChain.get(key) || Promise.resolve()).then(() => cpExportNow(tid, idx, si));
+  cpExportChain.set(key, run.catch(() => {}));
+  return run;
+}
+
+// Draws the card if its look has changed, then updates the mockup image in place (no re-render).
+async function cpExportNow(tid, idx, si) {
   const key = cpExportKey(tid, idx, si);
   const snap = cpExportSnapshot(tid, idx, si);
-  if (!snap) return cpCurrentExportImg(tid, idx, si);
+  if (!snap) return "";
   const current = cpCurrentExportImg(tid, idx, si);
   if (cpExportSigs.get(key) === snap.sig && current) return current;
-  const seq = (cpExportSeq.get(key) || 0) + 1;
-  cpExportSeq.set(key, seq);
   let url = "";
   try { url = await cpComposeCard(snap); } catch (e) { url = ""; }
-  if (!url || cpExportSeq.get(key) !== seq) return cpCurrentExportImg(tid, idx, si);
+  if (!url) return "";
   cpExportSigs.set(key, snap.sig);
   cpSetExportImg(tid, idx, si, url);
   document.querySelectorAll(`img[data-cp-export="${key}"]`).forEach(im => { if (im.src !== url) im.src = url; });
@@ -2071,14 +2078,50 @@ function cpFlushExport(tid, idx, si) {
   const key = cpExportKey(tid, idx, si);
   clearTimeout(cpExportTimers.get(key));
   cpExportTimers.delete(key);
-  return cpRunExport(tid, idx, si).catch(() => cpCurrentExportImg(tid, idx, si));
+  return cpRunExport(tid, idx, si).catch(() => "");
 }
 
+// True when a card's image already matches its look, so it can be downloaded inside the tap.
+function cpExportReady(tid, idx, si) {
+  const key = cpExportKey(tid, idx, si);
+  const snap = cpExportSnapshot(tid, idx, si);
+  return !!(snap && cpCurrentExportImg(tid, idx, si) && cpExportSigs.get(key) === snap.sig && !cpExportTimers.has(key));
+}
+
+// Brings every slide up to date. Resolves to the slide image URLs in order, or null if any slide failed.
 async function cpFlushExports(tid, idx) {
   const o = S.outs[tid]?.[idx];
-  if (!o) return;
+  if (!o) return null;
   const slideIdxs = o.type === "carousel" ? (o.slides || []).map((_, si) => si) : [0];
-  for (const si of slideIdxs) await cpFlushExport(tid, idx, si);
+  const urls = [];
+  for (const si of slideIdxs) {
+    const url = await cpFlushExport(tid, idx, si);
+    if (!url) return null;
+    urls.push(url);
+  }
+  return urls;
+}
+
+// Uploads exported images so saved cards keep their picture. Resolves to a copy of the card that points at the stored images.
+async function cpStoreCardImages(tid, idx, urls) {
+  const o = S.outs[tid]?.[idx];
+  const storeOne = async (url) => {
+    if (!url || !url.startsWith("data:")) return url;
+    const r = await api("/api/card-image", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: S.token, dataUrl: url }) });
+    if (!r || !r.success || !r.url) throw new Error(r?.error || "upload failed");
+    return r.url;
+  };
+  const copy = { ...o };
+  if (o.type === "carousel") {
+    copy.slides = [];
+    for (let si = 0; si < (o.slides || []).length; si++) {
+      const img = await storeOne(urls[si]);
+      copy.slides.push({ ...o.slides[si], img });
+    }
+  } else {
+    copy.img = await storeOne(urls[0]);
+  }
+  return copy;
 }
 
 // Keeps the "Text on the card" fields in step with the preview, leaving any field the user is typing in alone.
@@ -2421,24 +2464,34 @@ window.copyTxt = (t) => { navigator.clipboard.writeText(t); toast("Copied"); };
 window.dl = (url, name) => { const a=document.createElement("a"); a.href=url; a.download=name; a.click(); };
 // Staggered so mobile browsers don't drop/block downloads fired back-to-back
 // from a single tap.
-// Downloads a card as it looks now: the export is brought up to date first.
+// Downloads a card as it looks now. A card that is already up to date downloads inside the tap,
+// which phone browsers need; otherwise it is brought up to date first.
 window.cpDownloadCard = async (tid, idx, si, name) => {
-  // An export that is already up to date downloads inside the tap, which phone browsers need.
-  const key = cpExportKey(tid, idx, si);
-  const snap = cpExportSnapshot(tid, idx, si);
-  const ready = cpCurrentExportImg(tid, idx, si);
-  if (ready && snap && cpExportSigs.get(key) === snap.sig && !cpExportTimers.has(key)) { window.dl(ready, name); return; }
-  const url = (await cpFlushExport(tid, idx, si)) || cpCurrentExportImg(tid, idx, si);
-  if (!url) { toast("The image is still loading. Try again in a moment."); return; }
+  if (cpExportReady(tid, idx, si)) { window.dl(cpCurrentExportImg(tid, idx, si), name); return; }
+  const url = await cpFlushExport(tid, idx, si);
+  if (!url) { toast("Couldn't prepare this image. Try again in a moment."); return; }
   window.dl(url, name);
 };
 window.cpDownloadAll = async (tid, idx) => {
-  await cpFlushExports(tid, idx);
-  const urls = (S.outs[tid]?.[idx]?.slides || []).map(s => s.img).filter(Boolean);
-  if (!urls.length) { toast("The slides are still loading. Try again in a moment."); return; }
+  const o = S.outs[tid]?.[idx];
+  const slideIdxs = (o?.slides || []).map((_, si) => si);
+  if (!slideIdxs.length) return;
+  if (slideIdxs.every(si => cpExportReady(tid, idx, si))) {
+    window.dlAll(slideIdxs.map(si => cpCurrentExportImg(tid, idx, si)));
+    return;
+  }
+  const urls = await cpFlushExports(tid, idx);
+  if (!urls) { toast("Couldn't prepare every slide. Try again in a moment."); return; }
   window.dlAll(urls);
 };
-window.dlAll = (urls) => { (urls||[]).forEach((u,i)=> setTimeout(()=> window.dl(u, `slide-${i+1}.png`), i*350)); toast(`Downloading ${urls?.length||0} slides`); };
+// The first file starts inside the tap; the rest follow on a short delay so phones don't drop them.
+window.dlAll = (urls) => {
+  (urls || []).forEach((u, i) => {
+    if (i === 0) window.dl(u, "slide-1.jpg");
+    else setTimeout(() => window.dl(u, `slide-${i + 1}.jpg`), i * 350);
+  });
+  toast(`Downloading ${urls?.length || 0} slides`);
+};
 
 window.gen = async (tid, all) => {
   const t = S.trends.find(x=>x.id===tid); if(!t) return;
@@ -2744,7 +2797,11 @@ window.sanitizeContentForSave = sanitizeContentForSave;
 
 window.saveOut = async (tid, idx) => {
   const t = S.trends.find(x=>x.id===tid); const o = S.outs[tid]?.[idx]; if(!t||!o) return;
-  await cpFlushExports(tid, idx);
+  const flushed = await cpFlushExports(tid, idx);
+  if (!flushed) { toast("Couldn't prepare the image to save. Try again."); return; }
+  let savedCopy;
+  try { savedCopy = await cpStoreCardImages(tid, idx, flushed); }
+  catch (e) { toast("Couldn't save the image. Try again."); return; }
   const today = new Date(); const sd = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
   const plat = S.plat[tid] || S.user?.primaryPlatform || "instagram";
   const kind = o.type==="carousel"?"Carousel":o.type==="image"?"Image":"Script";
@@ -2756,7 +2813,7 @@ window.saveOut = async (tid, idx) => {
   delete S.errors.saveOut;
   render();
   try {
-    const r = await api("/api/save-post",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:S.token,headline:t.headline,niche:t.niche,platform:plat,contentType:kind,content:sanitizeContentForSave(o),scheduledDate:sd})});
+    const r = await api("/api/save-post",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({token:S.token,headline:t.headline,niche:t.niche,platform:plat,contentType:kind,content:sanitizeContentForSave(savedCopy),scheduledDate:sd})});
     if(!r || !r.success) throw new Error(r?.error || "save failed");
     toast("Saved"); loadSchedule(); loadSaved();
   } catch(e){
