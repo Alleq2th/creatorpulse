@@ -212,7 +212,7 @@ body{padding-bottom:calc(var(--tab-h) + env(safe-area-inset-bottom));letter-spac
 @media(prefers-reduced-motion:reduce){.tc-peaking{animation:none}}
 .tc.exp{border-color:var(--br2)}
 .th{padding:14px;cursor:pointer;display:flex;gap:12px;align-items:flex-start}
-.timg{width:56px;height:56px;border-radius:8px;object-fit:cover;flex-shrink:0;background:var(--sf2);border:1px solid var(--br)}
+.timg{width:56px;height:56px;aspect-ratio:1/1;border-radius:8px;object-fit:cover;flex-shrink:0;background:var(--sf2);border:1px solid var(--br);content-visibility:auto}
 .timg-ph{width:56px;height:56px;border-radius:8px;flex-shrink:0;background:linear-gradient(135deg,var(--sf2),var(--sf));border:1px solid var(--br);display:flex;align-items:center;justify-content:center;color:var(--mu2)}
 .thead{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
 .tmeta-top{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
@@ -2392,7 +2392,7 @@ body{padding-bottom:calc(var(--tab-h) + env(safe-area-inset-bottom));letter-spac
      so the card's "Create content" button always has its helper available. -->
 <script src="lib/storyToCreate.js?v=45"></script>
 <script src="create/cardThemes.js?v=1"></script>
-<script src="core.js?v=55"></script>
+<script src="core.js?v=56"></script>
 <!-- Create flow (spec PART 6). Order matters: flow.js defines the rules,
      steps/review render from it, generate.js wires to the existing pipeline,
      and index.js exposes the handlers the markup calls. All of them load
