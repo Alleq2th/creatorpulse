@@ -51,6 +51,14 @@
     else html = Step.sourceStep(st);
 
     maybeRetry(st, html);
+    window.setTimeout(function(){
+      var library=window.CPTemplateLibrary;
+      if(!library)return;
+      var images=Array.prototype.slice.call(document.querySelectorAll('.cc-template-thumb-img[data-template-id]:not([src])'));
+      function load(img){if(!img||img.src)return;var src=library.thumbnail(img.dataset.templateId);if(src)img.src=src;}
+      if('IntersectionObserver' in window){var observer=new IntersectionObserver(function(entries){entries.forEach(function(entry){if(entry.isIntersecting){load(entry.target);observer.unobserve(entry.target);}});},{rootMargin:'180px'});images.forEach(function(img){observer.observe(img);});}
+      else images.slice(0,24).forEach(load);
+    },0);
     // .cc-root is the scroll container and bottom-safe-area owner defined in
     // create.css. Wrapping every step here (rather than inside each step's
     // markup) means the five screens cannot drift apart, and the bottom nav
@@ -301,6 +309,16 @@
     var st = cs();
     st.template = id;
     repaint();
+  };
+  window.cpFilterCreateTemplates = function (select) {
+    var category = select && select.value || 'all';
+    var search = String(document.querySelector('[aria-label="Search templates"]')?.value || '').trim().toLowerCase();
+    document.querySelectorAll('[data-create-template-grid] [data-template-category]').forEach(function(card){card.hidden=(category!=='all'&&card.dataset.templateCategory!==category)||!!search&&!card.dataset.templateSearch.includes(search);});
+  };
+  window.cpSearchCreateTemplates = function (input) {
+    var query = String(input && input.value || '').trim().toLowerCase();
+    var category = document.querySelector('[aria-label="Filter templates by category"]')?.value || 'all';
+    document.querySelectorAll('[data-create-template-grid] [data-template-search]').forEach(function(card){card.hidden=!!query&&!card.dataset.templateSearch.includes(query)||(category!=='all'&&card.dataset.templateCategory!==category);});
   };
 
   /* ── the Studio hand-off ─────────────────────────────────────────────── */
