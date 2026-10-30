@@ -33,7 +33,7 @@ test('the gallery applies themes and restores the original look', () => {
 test('gallery previews use a text-free plate so the photo is the same on every tile', () => {
   assert.match(core, /plateOnly: true/);
   assert.match(core, /dim: 0,/);
-  assert.match(core, /Dim 0 here/);
+  assert.match(core, /Dim 0: the dim is drawn live/);
 });
 
 test('gallery scrolls vertically and is styled for a phone sheet', () => {
