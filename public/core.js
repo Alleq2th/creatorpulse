@@ -1435,7 +1435,7 @@ function renderCardCanvasEditor(o, tid, idx, slideIndex, slide, imageUrl, aspect
     <div class="cc-style-title">Text on the card</div>
     ${layerRows}
     <div class="cc-style-title">Background</div>
-    <div class="cc-style-row"><span class="cc-style-label">Photo</span><label class="btn bo bxs">Change background image<input type="file" accept="image/*" hidden onchange="cpPickCardBackground(this,'${tid}',${idx},${slideIndex})"/></label><span class="cc-style-hint">${sty.bgName ? esc(sty.bgName) : "Article photo"}</span></div>
+    <div class="cc-style-row"><span class="cc-style-label">Photo</span><label class="btn bo bxs">Change background image<input type="file" accept="image/*" hidden onchange="cpPickCardBackground(this,'${tid}',${idx},${slideIndex})"/></label><span class="cc-style-hint cc-bg-hint">${sty.bgName ? esc(sty.bgName) : "Article photo"}</span></div>
     <div class="cc-style-row"><span class="cc-style-label">Dim photo</span><input type="range" min="0" max="80" value="${Math.round((sty.dim || 0) * 100)}" aria-label="Dim background photo" oninput="cpSetCardStyle('${tid}',${idx},${slideIndex},'dim',this.value/100)"/></div>
     <div class="cc-style-title">Phone overlay text</div>
     ${mockRow("handle", "Name", mt.handle || "", defHandle)}
@@ -1446,9 +1446,11 @@ function renderCardCanvasEditor(o, tid, idx, slideIndex, slide, imageUrl, aspect
   </div>`;
   const stage = `<div class="cp-canvas-stage cc-live-stage" data-canvas-stage="${key}" data-tid="${tid}" data-idx="${idx}" data-slide-index="${slideIndex}" style="aspect-ratio:${aspectRatio}"><div class="cc-live-plate"></div><div class="cc-live-dim"></div><div class="cc-live-status" role="status"></div><div class="cp-canvas-blocks" data-canvas-key="${key}" data-slide-index="${slideIndex}" data-card-key="${tid}-${idx}">${CARD_LAYERS.map(L => box(L.key, L.label, live[L.field])).join("")}</div></div>`;
   const ctxBar = `<div class="cc-ctx" data-cp-ctx="${key}" data-tid="${tid}" data-idx="${idx}" data-slide-index="${slideIndex}" hidden><div class="cc-ctx-bar" role="toolbar" aria-label="Text tools"><span class="cc-ctx-name"></span><button type="button" class="cc-ctx-btn" data-cp-ctx-kind="font" aria-pressed="false" onclick="cpToggleCtxPanel('font')">Font</button><button type="button" class="cc-ctx-btn" data-cp-ctx-kind="color" aria-pressed="false" onclick="cpToggleCtxPanel('color')">Color</button></div><div class="cc-ctx-panel" hidden></div></div>`;
+  const bgBar = `<div class="cc-bg" data-cp-bg="${key}" data-tid="${tid}" data-idx="${idx}" data-slide-index="${slideIndex}" hidden></div>`;
   setTimeout(cpSyncLiveStages, 0);
   setTimeout(cpRefreshCtx, 0);
-  return `<details class="cp-canvas-editor" open><summary>Edit layout on canvas</summary><div class="cp-canvas-instructions">Tap a text block to select it, then pick its Font or Color. Double-tap to edit the words. Drag to move it, or drag its corner to resize. Apply saves these changes to the card image.</div>${stage}${ctxBar}<div class="cp-canvas-actions"><button type="button" class="btn bo bxs" onclick="resetCardCanvas('${tid}',${idx},${slideIndex})">Reset layout</button><button type="button" class="btn bp bxs" onclick="applyCanvasLayout('${tid}',${idx},${slideIndex})">Apply layout</button></div>${stylePanel}</details>`;
+  setTimeout(cpRefreshBgMenu, 0);
+  return `<details class="cp-canvas-editor" open><summary>Edit layout on canvas</summary><div class="cp-canvas-instructions">Tap a text block to select it, then pick its Font or Color. Double-tap to edit the words. Tap an empty part of the card to change the background. Drag to move a block, or drag its corner to resize. Apply saves these changes to the card image.</div>${stage}${ctxBar}${bgBar}<div class="cp-canvas-actions"><button type="button" class="btn bo bxs" onclick="resetCardCanvas('${tid}',${idx},${slideIndex})">Reset layout</button><button type="button" class="btn bp bxs" onclick="applyCanvasLayout('${tid}',${idx},${slideIndex})">Apply layout</button></div>${stylePanel}</details>`;
 }
 
 function renderOut(o, tid, idx){
@@ -1689,6 +1691,7 @@ const CP_LIVE_BASE_SIZE = { headline: 9, supportingText: 4.6, ctaLine: 4 };
 let cpCanvasSel = null;      // { key, name } of the selected text block
 let cpCanvasActive = null;   // drag or resize in progress
 let cpCtxPanel = null;       // "font" | "color" | null: the panel open in the text toolbar
+let cpBgKey = null;          // the card whose background menu is open, if any
 const CP_CTX_COLORS = ["#ffffff", "#000000", "#ffd60a", "#44d7ff", "#ff3b30", "#34c759", "#a855f7", "#ff7a00"];
 const cpPlateCache = new Map(); // plate key -> { src, failed, pending }
 
@@ -1706,6 +1709,7 @@ function cpLiveTextStyle(slide, name, o, tid) {
 
 function cpSelectCanvasBlock(key, name) {
   cpCanvasSel = key && name ? { key, name } : null;
+  if (key) cpBgKey = null;
   document.querySelectorAll(".cp-canvas-block").forEach(el => {
     el.classList.toggle("is-selected", !!cpCanvasSel && el.dataset.canvasKey === cpCanvasSel.key && el.dataset.canvasBlock === cpCanvasSel.name);
   });
@@ -1714,7 +1718,42 @@ function cpSelectCanvasBlock(key, name) {
     el.classList.toggle("is-selected", !!cpCanvasSel && panel?.dataset.cpStyle === cpCanvasSel.key && el.dataset.cpLayer === cpCanvasSel.name);
   });
   cpRefreshCtx();
+  cpRefreshBgMenu();
 }
+
+// Shows the background menu under the card: the photo choices, upload and dimming.
+function cpRefreshBgMenu() {
+  document.querySelectorAll("[data-cp-bg]").forEach(bar => {
+    const on = !!cpBgKey && bar.dataset.cpBg === cpBgKey;
+    bar.hidden = !on;
+    if (on) bar.innerHTML = cpBgMenuHTML(bar.dataset.tid, Number(bar.dataset.idx), Number(bar.dataset.slideIndex));
+  });
+}
+
+function cpBgMenuHTML(tid, idx, slideIndex) {
+  const slide = cpCardSlide(tid, idx, slideIndex) || {};
+  const sty = slide._style || {};
+  const o = S.outs[tid]?.[idx];
+  const articleSrc = (o && o._renderCtx && o._renderCtx.imageUrl) || (S.trends.find(t => t.id === tid) || {}).image || "";
+  const history = sty.bgHistory || [];
+  const cur = sty.bgImage || "";
+  const thumb = (src, label, on, call) => `<button type="button" class="cc-bg-thumb${on ? " active" : ""}" aria-pressed="${on}" aria-label="${esc(label)}" style="${src ? `background-image:url('${esc(src)}')` : ""}" onclick="${call}"><span>${esc(label)}</span></button>`;
+  const thumbs = thumb(articleSrc, "Article photo", !cur, `cpUseBackgroundAt('${tid}',${idx},${slideIndex},-1)`)
+    + history.map((h, i) => thumb(h.src, h.name || "Upload", cur === h.src, `cpUseBackgroundAt('${tid}',${idx},${slideIndex},${i})`)).join("");
+  return `<div class="cc-bg-title">Background</div>
+    <div class="cc-bg-thumbs" role="group" aria-label="Choose a background image">${thumbs}</div>
+    <div class="cc-bg-row"><label class="btn bo bxs">Upload image<input type="file" accept="image/*" hidden onchange="cpPickCardBackground(this,'${tid}',${idx},${slideIndex})"/></label></div>
+    <label class="cc-bg-row"><span class="cc-style-label">Dimming</span><input type="range" min="0" max="80" value="${Math.round((sty.dim || 0) * 100)}" aria-label="Background dimming" oninput="cpSetCardStyle('${tid}',${idx},${slideIndex},'dim',this.value/100)"/></label>`;
+}
+
+// Chooses the article photo (index -1) or one of this card's earlier uploads.
+window.cpUseBackgroundAt = (tid, idx, slideIndex, i) => {
+  const slide = cpCardSlide(tid, idx, slideIndex); if (!slide) return;
+  const h = i >= 0 ? ((slide._style || {}).bgHistory || [])[i] : null;
+  window.cpSetCardStyle(tid, idx, slideIndex, "bgImage", h ? h.src : "");
+  window.cpSetCardStyle(tid, idx, slideIndex, "bgName", h ? h.name : "");
+  cpRefreshBgMenu();
+};
 
 // Shows the Font and Color toolbar under the selected text block and fills its open panel.
 function cpRefreshCtx() {
@@ -1855,8 +1894,20 @@ function cpUpdateLiveStage(tid, idx, slideIndex) {
   if (plateEl) plateEl.dataset.cpPlate = plateKey;
   const dimEl = stage.querySelector(".cc-live-dim");
   if (dimEl) dimEl.style.opacity = String(Math.max(0, Math.min(0.8, Number(sty.dim) || 0)));
-  cpEnsurePlate(tid, idx, slideIndex);
-  cpPaintPlate(plateKey);
+  if (sty.bgImage) {
+    // A chosen photo appears at once and needs no server render while the user is choosing.
+    if (plateEl && plateEl.dataset.cpBgSrc !== sty.bgImage) {
+      plateEl.style.backgroundImage = `url("${sty.bgImage}")`;
+      plateEl.style.backgroundPosition = S.focalPoint?.[tid] ? `${S.focalPoint[tid].x}% ${S.focalPoint[tid].y}%` : "center";
+      plateEl.dataset.cpBgSrc = sty.bgImage;
+    }
+    const status = stage.querySelector(".cc-live-status");
+    if (status) status.textContent = "";
+  } else {
+    if (plateEl) { plateEl.dataset.cpBgSrc = ""; plateEl.style.backgroundPosition = ""; }
+    cpEnsurePlate(tid, idx, slideIndex);
+    cpPaintPlate(plateKey);
+  }
   CARD_LAYERS.forEach(L => {
     const block = stage.querySelector(`[data-canvas-block="${L.key}"]`);
     if (!block) return;
@@ -1880,9 +1931,12 @@ function cpUpdateLiveStage(tid, idx, slideIndex) {
 
 // Keeps the "Text on the card" fields in step with the preview, leaving any field the user is typing in alone.
 function cpSyncStylePanel(tid, idx, slideIndex, slide) {
-  const panel = document.querySelector(`[data-cp-style="${tid}-${idx}-${slideIndex}"]`);
-  if (!panel) return;
+  const key = `${tid}-${idx}-${slideIndex}`;
   const sty = slide._style || {};
+  const dimPct = Math.round((Number(sty.dim) || 0) * 100);
+  document.querySelectorAll(`[data-cp-bg="${key}"] input[type=range]`).forEach(r => { if (r !== document.activeElement) r.value = dimPct; });
+  const panel = document.querySelector(`[data-cp-style="${key}"]`);
+  if (!panel) return;
   CARD_LAYERS.forEach(L => {
     const row = panel.querySelector(`[data-cp-layer="${L.key}"]`);
     if (!row) return;
@@ -1895,6 +1949,10 @@ function cpSyncStylePanel(tid, idx, slideIndex, slide) {
     const range = row.querySelector("input[type=range]");
     if (range && range !== document.activeElement) range.value = Math.round((((sty.layerScale || {})[L.key]) || 1) * 100);
   });
+  const dimRange = panel.querySelector('input[aria-label="Dim background photo"]');
+  if (dimRange && dimRange !== document.activeElement) dimRange.value = dimPct;
+  const hint = panel.querySelector(".cc-bg-hint");
+  if (hint) hint.textContent = sty.bgName || "Article photo";
 }
 
 function cpSyncLiveStages() {
@@ -1929,9 +1987,9 @@ const cardCanvasPointer = (() => {
     if (active && active.contains(event.target)) return; // native caret and selection while typing
     if (active) active.blur(); // tapping anywhere else finishes the edit
     const stage = event.target.closest(".cc-live-stage");
-    if (!stage) { if (!event.target.closest(".cp-canvas-editor")) cpSelectCanvasBlock(null, null); return; }
+    if (!stage) { if (!event.target.closest(".cp-canvas-editor")) { cpSelectCanvasBlock(null, null); cpBgKey = null; cpRefreshBgMenu(); } return; }
     const block = event.target.closest(".cp-canvas-block");
-    if (!block) { cpSelectCanvasBlock(null, null); return; }
+    if (!block) { cpSelectCanvasBlock(null, null); cpBgKey = stage.dataset.canvasStage; cpRefreshBgMenu(); return; }
     const key = stage.dataset.canvasStage, name = block.dataset.canvasBlock;
     const now = Date.now();
     const doubleTap = !!lastTap && lastTap.key === key && lastTap.name === name && now - lastTap.time < 350 && !event.target.closest("[data-canvas-resize]");
@@ -2062,11 +2120,16 @@ window.cpPickCardBackground = async (input, tid, idx, slideIndex) => {
   let dataUrl;
   try { dataUrl = await downscaleImageFile(file, 1600, 0.85); }
   catch (e) { toast("Couldn't read that image. Try a different photo."); return; }
+  const name = file.name.slice(0, 40);
+  const slide = cpCardSlide(tid, idx, slideIndex);
+  if (slide) {
+    slide._style = slide._style || {};
+    slide._style.bgHistory = [{ src: dataUrl, name }, ...(slide._style.bgHistory || []).filter(h => h.name !== name).slice(0, 2)];
+  }
   window.cpSetCardStyle(tid, idx, slideIndex, "bgImage", dataUrl);
-  window.cpSetCardStyle(tid, idx, slideIndex, "bgName", file.name.slice(0, 40));
-  const hint = input.closest(".cc-style-row")?.querySelector(".cc-style-hint");
-  if (hint) hint.textContent = file.name.slice(0, 40);
-  toast("Background ready. Tap Apply style.");
+  window.cpSetCardStyle(tid, idx, slideIndex, "bgName", name);
+  cpRefreshBgMenu();
+  toast("Background updated. Apply saves it to the card image.");
 };
 window.cpApplyCardStyle = async (tid, idx, slideIndex) => {
   const o = S.outs[tid]?.[idx];
