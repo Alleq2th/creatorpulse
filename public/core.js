@@ -1931,7 +1931,23 @@ function cpUpdateLiveStage(tid, idx, slideIndex) {
   const sty = slide._style || {};
   const plateKey = cpPlateKey(tid, idx, slideIndex);
   const plateEl = stage.querySelector(".cc-live-plate");
-  if (plateEl) plateEl.dataset.cpPlate = plateKey;
+  if (plateEl) {
+    plateEl.dataset.cpPlate = plateKey;
+    const tpl = sty.templateId && window.CPTemplateLibrary?.get(sty.templateId);
+    if (tpl) {
+      const r = tpl.layout.image;
+      Object.assign(plateEl.style, { left: (r.x*100)+"%", top: (r.y*100)+"%", width: (r.width*100)+"%", height: (r.height*100)+"%" });
+      stage.style.background = tpl.palette.background;
+    } else {
+      Object.assign(plateEl.style, { left:"", top:"", width:"", height:"" }); stage.style.background = "";
+    }
+  }
+  let deco = stage.querySelector(".cc-live-decoration");
+  if (!deco) { deco=document.createElement("div"); deco.className="cc-live-decoration"; deco.setAttribute("aria-hidden","true"); stage.appendChild(deco); }
+  const liveTemplate = sty.templateId && window.CPTemplateLibrary?.get(sty.templateId);
+  const decoData = liveTemplate && liveTemplate.decorativeElements[0];
+  deco.className = "cc-live-decoration" + (decoData ? " is-"+decoData.type : ""); deco.hidden = !decoData;
+  deco.style.setProperty("--cc-template-accent", liveTemplate ? liveTemplate.palette.accent : "#fff");
   const dimEl = stage.querySelector(".cc-live-dim");
   if (dimEl) dimEl.style.opacity = String(Math.max(0, Math.min(0.8, Number(sty.dim) || 0)));
   if (sty.bgImage) {
@@ -2045,8 +2061,13 @@ function cpGetDesignState(tid, idx, si) {
 
   const focal = sty.bgImage && S.focalPoint?.[tid] ? S.focalPoint[tid] : null;
   const aspect = cpExportAspect(o, o.type === "carousel");
+  const template = sty.templateId && window.CPTemplateLibrary?.get(sty.templateId);
 
   return {
+    templateId: template ? template.id : null,
+    templatePalette: template ? template.palette : null,
+    imageLayout: template ? template.layout.image : null,
+    templateDecoration: template ? template.decorativeElements : [],
     template: o._renderCtx.template || o.template || "impact",
     theme: sty.themeId || o._renderCtx.theme || "dark_editorial",
     colourTheme: sty.colourThemeId || null,
@@ -2067,9 +2088,9 @@ function cpGetDesignState(tid, idx, si) {
     supportingText: slide.supportingText || "",
     ctaLine: slide.ctaLine || "",
     decorative: {
-      accentColor: (sty.layerColors || {})["ctaLine"] || "#ffffff",
+      accentColor: (sty.layerColors || {})["ctaLine"] || (template && template.palette.accent) || "#ffffff",
       overlay: !!sty.dim,
-      elements: Array.isArray(sty.decorativeElements) ? sty.decorativeElements : []
+      elements: template ? template.decorativeElements : (Array.isArray(sty.decorativeElements) ? sty.decorativeElements : [])
     }
   };
 }
@@ -2233,6 +2254,17 @@ function cpDrawTextBox(ctx, l, W, H) {
   ctx.restore();
 }
 
+function cpDrawTemplateDecoration(ctx, el, accent, W, H) {
+  ctx.save(); ctx.fillStyle = el.color || accent || "#fff";
+  const t = Math.max(3, W * (Number(el.weight) || 0.04));
+  if (el.type === "frame") { ctx.strokeStyle=ctx.fillStyle; ctx.lineWidth=t; ctx.strokeRect(t,t,W-2*t,H-2*t); }
+  else if (el.type === "orb") { ctx.globalAlpha=.55; ctx.beginPath(); ctx.arc(W*.88,H*.12,Math.min(W,H)*.12,0,Math.PI*2); ctx.fill(); }
+  else if (el.type === "stripes") { for(let i=0;i<3;i++){ctx.globalAlpha=.5;ctx.fillRect(0,H*(.78+i*.035),W,H*.018);} }
+  else if (el.type === "corner") ctx.fillRect(0,0,W,t*1.5);
+  else ctx.fillRect(0,H-t*1.4,W,t*1.4);
+  ctx.restore();
+}
+
 // Draws one card from a snapshot and returns it as a JPEG data URL.
 async function cpComposeCard(snap) {
   const { state } = snap;
@@ -2244,26 +2276,30 @@ async function cpComposeCard(snap) {
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext("2d");
-  ctx.fillStyle = "#1b1b1f";
+  ctx.fillStyle = (state.templatePalette && state.templatePalette.background) || "#1b1b1f";
   ctx.fillRect(0, 0, W, H);
   if (photo) {
-    const s = Math.max(W / photo.naturalWidth, H / photo.naturalHeight);
-    const dw = photo.naturalWidth * s, dh = photo.naturalHeight * s;
     const [fx, fy] = state.focal ? state.focal.map(v => v / 100) : [0.5, 0.5];
     const adj = state.backgroundAdjustments || {};
     const brightness = Math.max(0, Math.min(2, Number(adj.brightness ?? 1)));
     const contrast = Math.max(0, Math.min(2, Number(adj.contrast ?? 1)));
     const saturation = Math.max(0, Math.min(2, Number(adj.saturation ?? 1)));
     const blur = Math.max(0, Math.min(24, Number(adj.blur ?? 0)));
+    const r = state.imageLayout || { x: 0, y: 0, width: 1, height: 1 };
+    const x = r.x * W, y = r.y * H, rw = r.width * W, rh = r.height * H;
+    const scale = Math.max(rw / photo.naturalWidth, rh / photo.naturalHeight);
+    const dw = photo.naturalWidth * scale, dh = photo.naturalHeight * scale;
     ctx.save();
+    ctx.beginPath(); ctx.rect(x, y, rw, rh); ctx.clip();
     ctx.filter = `brightness(${brightness}) contrast(${contrast}) saturate(${saturation}) blur(${blur}px)`;
-    ctx.drawImage(photo, (W - dw) * fx, (H - dh) * fy, dw, dh);
+    ctx.drawImage(photo, x + (rw - dw) * fx, y + (rh - dh) * fy, dw, dh);
     ctx.restore();
   }
   if (state.dim > 0) {
     ctx.fillStyle = `rgba(0,0,0,${state.dim})`;
     ctx.fillRect(0, 0, W, H);
   }
+  (state.templateDecoration || []).forEach(el => cpDrawTemplateDecoration(ctx, el, state.templatePalette && state.templatePalette.accent, W, H));
   state.layers.forEach(l => { if (l.text) cpDrawTextBox(ctx, l, W, H); });
   return canvas.toDataURL("image/jpeg", 0.92);
 }
@@ -3000,6 +3036,19 @@ Return only the ready-to-post spoken text — no labels, no headers, no meta-com
       }
     }
     S.outs[tid] = out;
+    const selectedTemplateId = S.cardTemplate && S.cardTemplate[tid];
+    const selectedTemplate = selectedTemplateId && window.CPTemplateLibrary && window.CPTemplateLibrary.get(selectedTemplateId);
+    if (selectedTemplate) out.forEach(function(output){
+      if (output.type !== "carousel" && !output.isCard) return;
+      const slides = output.type === "carousel" ? (output.slides || []) : [output.editSlide].filter(Boolean);
+      slides.forEach(function(slide){
+        slide._style = slide._style || {};
+        slide._style.templateId = selectedTemplate.id;
+        slide._style.layerFonts = Object.assign({}, slide._style.layerFonts || {}, {headline:selectedTemplate.typography.headline});
+        slide._style.layerColors = Object.assign({}, slide._style.layerColors || {}, {headline:selectedTemplate.palette.text,supportingText:selectedTemplate.palette.text,ctaLine:selectedTemplate.palette.accent});
+        slide.textLayout = Object.assign({}, slide.textLayout || {}, selectedTemplate.layout.elements);
+      });
+    });
     if(out.length && S.token){
       const today = new Date();
       const sd = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;

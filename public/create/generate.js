@@ -100,6 +100,8 @@
     S.ctype[trend.id] = st.format;
     S.tone[trend.id] = st.tone || 'normal';
     if (st.template) {
+      S.cardTemplate = S.cardTemplate || {};
+      S.cardTemplate[trend.id] = st.template;
       if (st.template === 'editorial' || st.template === 'minimal_noir') S.cardTypography[trend.id] = 'editorial_serif';
       else if (st.template === 'stat_split' || st.template === 'viral_hook') S.cardTypography[trend.id] = 'condensed_sans';
       else if (st.template === 'neon_noir') S.cardTypography[trend.id] = 'code_mono';

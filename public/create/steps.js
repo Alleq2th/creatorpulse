@@ -245,7 +245,8 @@
     var content = '';
     if (isImage) {
       var tmpls = st.platform === 'tiktok' ? TEMPLATES_TT : TEMPLATES_IG;
-      content = '<div class="cc-templates-grid">' + tmpls.map(function (tmpl) {
+      var newTemplates = window.CPTemplateLibrary ? window.CPTemplateLibrary.templates : [];
+      content = '<div class="cc-template-library-tools"><label>Category <select aria-label="Filter templates by category" onchange="cpFilterCreateTemplates(this)"><option value="all">All categories</option>' + (window.CPTemplateLibrary ? window.CPTemplateLibrary.categories.map(function(c){return '<option value="'+E(c.id)+'">'+E(c.label)+' ('+c.count+')</option>';}).join('') : '') + '</select></label><input type="search" placeholder="Search 240 templates" aria-label="Search templates" oninput="cpSearchCreateTemplates(this)"/></div><div class="cc-template-library-grid" data-create-template-grid>' + newTemplates.map(function(t){var active=st.template===t.id;return '<button class="cc-template-card cc-template-library-card '+(active?'on':'')+'" type="button" data-template-category="'+E(t.category)+'" data-template-search="'+E((t.name+' '+t.categoryLabel+' '+t.tags.join(' ')).toLowerCase())+'" onclick="cpCreateSetTemplate(\''+E(t.id)+'\')" aria-pressed="'+(active?'true':'false')+'"><img class="cc-template-thumb-img" loading="lazy" decoding="async" width="120" height="150" data-template-id="'+E(t.id)+'" alt="'+E(t.name)+' template preview"/><span class="cc-template-title">'+E(t.name)+'</span><span class="cc-template-sub">'+E(t.categoryLabel)+' · '+E(t.layout.archetype)+'</span></button>';}).join('')+'</div><div class="cc-template-originals"><strong>Original styles</strong><div class="cc-templates-grid">' + tmpls.map(function (tmpl) {
         var on = (st.template || tmpls[0].id) === tmpl.id;
         return '<button class="cc-template-card ' + (on ? 'on' : '') + '" type="button" ' +
           'onclick="cpCreateSetTemplate(\'' + tmpl.id + '\')" aria-pressed="' + (on ? 'true' : 'false') + '">' +
@@ -258,7 +259,7 @@
           '</div>' +
           '<span class="cc-template-badge">' + (on ? '✓ Selected' : 'Use style') + '</span>' +
           '</button>';
-      }).join('') + '</div>';
+      }).join('') + '</div></div>';
     } else {
       var chips = window.CPEnv.tones().map(function (t) {
         var on = st.tone === t.id;
