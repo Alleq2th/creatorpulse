@@ -20,8 +20,6 @@ test.describe('Live text tools on a generated graphic', () => {
     await page.getByRole('button', { name: 'Continue' }).click();
     await page.getByRole('button', { name: 'Generate' }).first().click();
 
-    const editor = page.locator('details.cp-canvas-editor').first();
-    if ((await editor.getAttribute('open')) === null) await editor.locator('summary').click();
     const headline = page.locator('.cp-canvas-block[data-canvas-block="headline"]').first();
     const support = page.locator('.cp-canvas-block[data-canvas-block="supportingText"]').first();
     const toolbar = page.locator('.cc-ctx').first();
@@ -57,8 +55,6 @@ test.describe('Live text tools on a generated graphic', () => {
     await toolbar.locator('.cc-ctx-swatch[aria-label="Color #ffd60a"]').click();
     await expect(headline.locator('.cc-live-text')).toHaveCSS('color', 'rgb(255, 214, 10)');
     await expect(toolbar.locator('.cc-ctx-swatch[aria-label="Color #ffd60a"]')).toHaveAttribute('aria-pressed', 'true');
-    // The layer's own colour field in the panel follows the preview.
-    await expect(page.locator('[data-cp-style] [data-cp-layer="headline"] input[type=color]').first()).toHaveValue('#ffd60a');
 
     // 5. Double-tap opens the words for typing, keeping font and colour.
     await headline.dblclick();
@@ -70,10 +66,10 @@ test.describe('Live text tools on a generated graphic', () => {
     await expect(headline.locator('.cc-live-text')).toHaveCSS('font-family', serifFamily);
     await expect(headline.locator('.cc-live-text')).toHaveCSS('color', 'rgb(255, 214, 10)');
 
-    // 6. Escape finishes the edit, and the edited words land in the layer field.
+    // 6. Escape finishes the edit, and the edited words stay on the card.
     await page.keyboard.press('Escape');
     await expect(headline.locator('.cc-live-text[contenteditable="true"]')).toHaveCount(0);
-    await expect(page.locator('[data-cp-style] [data-cp-layer="headline"] textarea').first()).toHaveValue(/ now$/);
+    await expect(headline.locator('.cc-live-text')).toHaveText(/ now$/);
     await expect(headline.locator('.cc-live-text')).toHaveCSS('font-family', serifFamily);
   });
 });

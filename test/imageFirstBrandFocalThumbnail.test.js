@@ -27,10 +27,9 @@ test("generator exposes brand, focal point, silent-camera, and text editing cont
   assert.match(core, /window\.setFocalPoint\s*=/);
   assert.match(core, /TEXT SAFE ZONE/);
   assert.match(core, /Text is \$\{silentText\.length\} characters/);
-  assert.match(core, /window\.applyCardText\s*=/);
-  assert.match(core, /Text size/);
-  assert.match(core, /Font<select/);
-  assert.match(core, /Edit layout on canvas/);
+  assert.doesNotMatch(core, /window\.applyCardText\s*=/);
+  assert.doesNotMatch(core, /Edit layout on canvas|Apply layout/);
+  assert.match(core, /cp-canvas-editor/);
 });
 
 test("card generation route forwards focal point and brand preset options", () => {

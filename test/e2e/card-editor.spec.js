@@ -1,87 +1,96 @@
-// End-to-end checks for the card editor on a generated graphic: text layers,
-// dim, phone overlay text, and what is sent to the server when the style is applied.
+// End-to-end checks for the card editor on a generated graphic: the preview is the
+// editor, dim and phone overlay text update at once, and Download gives the same look.
+const fs = require('node:fs');
 const { test, expect } = require('@playwright/test');
 const { signIn, mockApi, openCreate, startIdeaFlow } = require('./helpers');
+const { jpegSize } = require('./exportHelpers');
 
 // A 1x1 PNG stands in for the rendered card image.
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 
+async function setupTikTokGraphic(context, page, cardRequests) {
+  await signIn(context);
+  await mockApi(page, 'unused caption');
+  await page.route('**/api/generate-cards', (route) => {
+    cardRequests.push(JSON.parse(route.request().postData() || '{}'));
+    return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ images: [PNG] }) });
+  });
+  await openCreate(page);
+  await startIdeaFlow(page);
+  await page.locator('button[onclick="cpCreateSetPlatform(\'tiktok\')"]').click();
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.locator('button[onclick^="cpCreateSetFormat"]', { hasText: 'TikTok No-Face Graphic' }).click();
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.getByRole('button', { name: 'Generate' }).first().click();
+}
+
+// The export that Download saves, read from the card's image.
+async function exportBuffer(page) {
+  const src = await page.locator('img[data-cp-export]').first().getAttribute('src');
+  return Buffer.from(src.split(',')[1], 'base64');
+}
+
+async function downloadImage(page) {
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: 'Download image' }).first().click(),
+  ]);
+  return fs.readFileSync(await download.path());
+}
+
 test.describe('Card editor on a graphic', () => {
-  test('text layers, dim and phone overlay text are editable and sent on Apply', async ({ context, page }) => {
-    await signIn(context);
-    await mockApi(page, 'unused caption');
+  test('dim and phone overlay text update the preview with no Apply step, and Download gives the edited card', async ({ context, page }) => {
     const cardRequests = [];
-    await page.route('**/api/generate-cards', (route) => {
-      cardRequests.push(JSON.parse(route.request().postData() || '{}'));
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ images: [PNG] }) });
-    });
+    await setupTikTokGraphic(context, page, cardRequests);
 
-    await openCreate(page);
-    await startIdeaFlow(page);
-    await page.locator('button[onclick="cpCreateSetPlatform(\'tiktok\')"]').click();
-    await page.getByRole('button', { name: 'Continue' }).click();
-    await page.locator('button[onclick^="cpCreateSetFormat"]', { hasText: 'TikTok No-Face Graphic' }).click();
-    await page.getByRole('button', { name: 'Continue' }).click();
-    await page.getByRole('button', { name: 'Generate' }).first().click();
+    const stage = page.locator('.cc-live-stage').first();
+    await expect(stage).toBeAttached({ timeout: 20000 });
+    await expect.poll(() => stage.locator('.cc-live-plate').evaluate((el) => el.style.backgroundImage), { timeout: 15000 }).toContain('data:image');
 
-    // Open the editor on the generated graphic.
-    const panel = page.locator('.cc-style-panel').first();
-    const editor = page.locator('details.cp-canvas-editor').first();
-    if ((await editor.getAttribute('open')) === null) await editor.locator('summary').click();
-    await expect(panel).toBeAttached({ timeout: 20000 });
+    // The editor has no Apply step.
+    await expect(page.getByRole('button', { name: /Apply/ })).toHaveCount(0);
 
-    // 1. Every text layer has its own text box, font, colour and size.
-    for (const key of ['headline', 'supportingText', 'ctaLine']) {
-      await expect(panel.locator(`[data-cp-layer="${key}"]`)).toHaveCount(1);
-    }
-    await panel.locator('[data-cp-layer="headline"] textarea').fill('Edited headline for the test');
-    await panel.locator('[data-cp-layer="headline"] select').selectOption('code_mono');
-    await panel.locator('[data-cp-layer="ctaLine"] input[type=text]').fill('SAVE THIS NOW');
-
-    // 2. Dim slider and phone overlay text.
-    await panel.locator('input[aria-label="Dim background photo"]').evaluate((el) => {
+    // 1. Dim from the background menu, opened by tapping an empty part of the card.
+    await stage.scrollIntoViewIfNeeded();
+    const box = await stage.boundingBox();
+    await page.mouse.click(box.x + box.width * 0.95, box.y + box.height * 0.05);
+    const menu = page.locator('.cc-bg').first();
+    await expect(menu).toBeVisible();
+    await menu.getByLabel('Background dimming').evaluate((el) => {
       el.value = '60';
       el.dispatchEvent(new Event('input', { bubbles: true }));
     });
-    await panel.locator('input[aria-label="Phone name"]').fill('creator_test');
+    await expect(stage.locator('.cc-live-dim')).toHaveCSS('opacity', '0.6');
+
+    // 2. Phone overlay text sits under Post details and updates the mockup at once.
+    await page.locator('.cc-post-details summary').click();
+    await page.locator('input[aria-label="Phone name"]').fill('creator_test');
     await expect(page.locator('[data-cp-mock="handle"]').first()).toHaveText('creator_test');
 
-    // 3. Apply sends the layer settings to the card renderer.
+    // 3. Download gives the card as it looks now, with no server call.
     const before = cardRequests.length;
-    await panel.getByRole('button', { name: 'Apply to card image' }).click();
-    await expect.poll(() => cardRequests.length, { timeout: 15000 }).toBeGreaterThan(before);
-    const slide = cardRequests[cardRequests.length - 1].slides[0];
-    expect(slide.headline).toBe('Edited headline for the test');
-    expect(slide.ctaLine).toBe('SAVE THIS NOW');
-    expect(slide.layerFonts.headline).toBe('code_mono');
-    expect(slide.dim).toBeCloseTo(0.6, 2);
+    const buf = await downloadImage(page);
+    expect(buf[0]).toBe(0xff);
+    expect(buf[1]).toBe(0xd8);
+    expect(jpegSize(buf)).toEqual({ width: 1080, height: 1920 });
+    expect(cardRequests.length).toBe(before);
   });
 });
 
 test.describe('Live card preview', () => {
-  test('tap selects a text block, drag moves it, the corner resizes it, and the preview updates without a server call', async ({ context, page }) => {
-    await signIn(context);
-    await mockApi(page, 'unused caption');
+  test('tap selects a text block, drag moves it, the corner resizes it, and the download follows the preview', async ({ context, page }) => {
     const cardRequests = [];
-    await page.route('**/api/generate-cards', (route) => {
-      cardRequests.push(JSON.parse(route.request().postData() || '{}'));
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ images: [PNG] }) });
-    });
-
-    await openCreate(page);
-    await startIdeaFlow(page);
-    await page.locator('button[onclick="cpCreateSetPlatform(\'tiktok\')"]').click();
-    await page.getByRole('button', { name: 'Continue' }).click();
-    await page.locator('button[onclick^="cpCreateSetFormat"]', { hasText: 'TikTok No-Face Graphic' }).click();
-    await page.getByRole('button', { name: 'Continue' }).click();
-    await page.getByRole('button', { name: 'Generate' }).first().click();
+    await setupTikTokGraphic(context, page, cardRequests);
 
     const stage = page.locator('.cc-live-stage').first();
     await expect(stage).toBeAttached({ timeout: 20000 });
-    // The plate loads into the preview and the text is drawn on top of it.
     await expect.poll(() => stage.locator('.cc-live-plate').evaluate((el) => el.style.backgroundImage), { timeout: 15000 }).toContain('data:image');
     const headline = stage.locator('[data-canvas-block="headline"]');
     await expect(headline.locator('.cc-live-text')).toBeVisible();
+
+    // The image as it looks before any move, once the first export has finished.
+    await expect.poll(() => page.locator('img[data-cp-export]').first().getAttribute('src'), { timeout: 15000 }).toMatch(/^data:image\/jpeg/);
+    const before = await exportBuffer(page);
 
     // Tap selects: outline and resize handle appear.
     await headline.click({ position: { x: 30, y: 12 } });
@@ -108,17 +117,20 @@ test.describe('Live card preview', () => {
     expect(b2.width).toBeLessThan(b1.width - 25);
     expect(b2.height).toBeGreaterThan(b1.height + 15);
 
-    // Typing updates the live text straight away, and moves and resizes made no server calls.
-    await page.locator('.cc-style-panel [data-cp-layer="headline"] textarea').fill('Live text check');
-    await expect(headline.locator('.cc-live-text')).toHaveText('Live text check');
+    // Moves and resizes made no server calls, and there is no Apply step.
     expect(cardRequests.length).toBe(requestsBeforeEdits);
+    await expect(page.getByRole('button', { name: /Apply/ })).toHaveCount(0);
 
-    // Save: the same layout goes to the card renderer.
-    await page.locator('.cc-style-panel').first().getByRole('button', { name: 'Apply to card image' }).click();
-    await expect.poll(() => cardRequests.length, { timeout: 15000 }).toBeGreaterThan(requestsBeforeEdits);
-    const slide = cardRequests[cardRequests.length - 1].slides[0];
-    expect(slide.textLayout.headline.width).toBeGreaterThan(0.2);
-    expect(slide.textLayout.headline.x).toBeGreaterThan(0.1);
+    // Once the export catches up with the edits, Download shows the moved and resized headline.
+    const beforeSrc = await page.locator('img[data-cp-export]').first().getAttribute('src');
+    await expect.poll(() => page.locator('img[data-cp-export]').first().getAttribute('src'), { timeout: 15000 }).not.toBe(beforeSrc);
+    const after = await exportBuffer(page);
+    // The image changed, and it is still 9:16.
+    expect(after.equals(before)).toBe(false);
+    expect(jpegSize(after)).toEqual({ width: 1080, height: 1920 });
+    expect(cardRequests.length).toBe(requestsBeforeEdits);
+    // Download saves that same image.
+    const saved = await downloadImage(page);
+    expect(saved.equals(after)).toBe(true);
   });
 });
-

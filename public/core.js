@@ -1219,6 +1219,7 @@ function renderTrend(t){
 function renderPlatformMockup(o, tid, idx, curPlat) {
   const prevKey = `${tid}-${idx}`;
   const sIdx = (S.previewSlideIdx && S.previewSlideIdx[prevKey]) || 0;
+  const exportSi = o.type === "carousel" ? sIdx : 0;
   const isCarousel = o.type === "carousel";
   const slides = isCarousel ? (o.slides || []) : [];
   const curSlide = isCarousel ? (slides[sIdx] || slides[0] || {}) : null;
@@ -1244,7 +1245,7 @@ function renderPlatformMockup(o, tid, idx, curPlat) {
     const slideImg = curSlide?.img || o.img || o.imageUrl || "";
     const slideFb = curSlide?.localImg || o.fallbackImg || "";
     const imgEl = slideImg
-      ? `<img src="${slideImg}" onerror="cardImgFail(this, this.dataset.fb)" data-fb="${slideFb}" style="width:100%;aspect-ratio:4/5;object-fit:cover;display:block"/>`
+      ? `<img data-cp-export="${tid}-${idx}-${exportSi}" src="${slideImg}" onerror="cardImgFail(this, this.dataset.fb)" data-fb="${slideFb}" style="width:100%;aspect-ratio:4/5;object-fit:cover;display:block"/>`
       : `<div style="padding:28px 16px;min-height:220px;display:flex;flex-direction:column;justify-content:center;background:#111;text-align:center"><div style="font-size:16px;font-weight:700;color:#fff">${esc(textContent.slice(0, 120))}</div></div>`;
 
     const navArrows = isCarousel && totalSlides > 1 ? `
@@ -1298,7 +1299,7 @@ function renderPlatformMockup(o, tid, idx, curPlat) {
     const slideImg = curSlide?.img || o.img || o.imageUrl || "";
     const slideFb = curSlide?.localImg || o.fallbackImg || "";
     const mediaEl = slideImg
-      ? `<img src="${slideImg}" onerror="cardImgFail(this, this.dataset.fb)" data-fb="${slideFb}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"/>`
+      ? `<img data-cp-export="${tid}-${idx}-${exportSi}" src="${slideImg}" onerror="cardImgFail(this, this.dataset.fb)" data-fb="${slideFb}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"/>`
       : `<div style="padding:20px;text-align:center;color:#fff;font-weight:700;font-size:15px;z-index:1">${esc(textContent.slice(0, 140))}</div>`;
 
     inner = `
@@ -1328,7 +1329,7 @@ function renderPlatformMockup(o, tid, idx, curPlat) {
     const slideImg = curSlide?.img || o.img || o.imageUrl || "";
     const slideFb = curSlide?.localImg || o.fallbackImg || "";
     const mediaEl = slideImg
-      ? `<img src="${slideImg}" onerror="cardImgFail(this, this.dataset.fb)" data-fb="${slideFb}" style="width:100%;height:100%;object-fit:cover"/>`
+      ? `<img data-cp-export="${tid}-${idx}-${exportSi}" src="${slideImg}" onerror="cardImgFail(this, this.dataset.fb)" data-fb="${slideFb}" style="width:100%;height:100%;object-fit:cover"/>`
       : `<div style="padding:16px;color:#fff;font-size:13px;font-weight:600;text-align:center">${esc(textContent.slice(0, 90))}</div>`;
 
     inner = `
@@ -1356,7 +1357,7 @@ function renderPlatformMockup(o, tid, idx, curPlat) {
     const slideImg = curSlide?.img || o.img || "";
     const slideFb = curSlide?.localImg || o.fallbackImg || "";
     const mediaEl = slideImg
-      ? `<div class="mock-x-media"><img src="${slideImg}" onerror="cardImgFail(this, this.dataset.fb)" data-fb="${slideFb}" style="width:100%;aspect-ratio:16/9;object-fit:cover;display:block"/></div>`
+      ? `<div class="mock-x-media"><img data-cp-export="${tid}-${idx}-${exportSi}" src="${slideImg}" onerror="cardImgFail(this, this.dataset.fb)" data-fb="${slideFb}" style="width:100%;aspect-ratio:16/9;object-fit:cover;display:block"/></div>`
       : "";
 
     inner = `
@@ -1398,59 +1399,30 @@ function renderCardCanvasEditor(o, tid, idx, slideIndex, slide, imageUrl, aspect
     return `<div class="cp-canvas-block${sel ? " is-selected" : ""}" data-canvas-key="${key}" data-canvas-block="${name}" tabindex="0" role="slider" aria-label="Drag or resize ${label}" style="left:${pos.x*100}%;top:${pos.y*100}%;width:${pos.width*100}%;height:${pos.height*100}%"><div class="cc-live-text${text ? "" : " is-empty"}" data-cp-live="${name}" style="${cpLiveTextStyle(live, name, o, tid)}">${esc(text || label)}</div><span class="cp-canvas-label">${label}</span><button type="button" class="cp-canvas-resize" data-canvas-resize="true" aria-label="Resize ${label}"></button></div>`;
   };
   const sty = live._style || {};
-  const curTypo = sty.typography || (o._renderCtx && o._renderCtx.typography) || "impact";
-  const curColor = sty.textColor || "#ffffff";
-  const fontChips = CARD_TYPOGRAPHIES.map(x => {
-    const fam = String((TYPO_VIS[x.id] || {}).f || "Inter, sans-serif").replace(/"/g, "'");
-    const on = curTypo === x.id;
-    return `<button type="button" class="cc-style-chip${on ? " active" : ""}" style="font-family:${fam}" aria-pressed="${on}" onclick="cpPickStyleFont(this,'${tid}',${idx},${slideIndex},'${x.id}')">${x.label}</button>`;
-  }).join("");
-  const layerRows = CARD_LAYERS.map(L => {
-    const txt = live[L.field] || "";
-    const lf = (sty.layerFonts || {})[L.key] || "";
-    const lc = (sty.layerColors || {})[L.key] || "";
-    const sc = Math.round((((sty.layerScale || {})[L.key]) || 1) * 100);
-    const fontOpts = '<option value="">Card font</option>' + CARD_TYPOGRAPHIES.map(x => `<option value="${x.id}"${lf === x.id ? " selected" : ""}>${x.label}</option>`).join("");
-    const onText = `cpSetSlideText('${tid}',${idx},${slideIndex},'${L.field}',this.value)`;
-    const field = L.multi
-      ? `<textarea rows="2" aria-label="${L.label} text" oninput="${onText}" onfocus="cpSelectCanvasBlock('${key}','${L.key}')">${esc(txt)}</textarea>`
-      : `<input type="text" value="${esc(txt)}" aria-label="${L.label} text" oninput="${onText}" onfocus="cpSelectCanvasBlock('${key}','${L.key}')"/>`;
-    return `<div class="cc-layer" data-cp-layer="${L.key}">
-      <div class="cc-layer-name">${L.label}</div>
-      ${field}
-      <div class="cc-layer-tools">
-        <select aria-label="${L.label} font" onchange="cpSetLayerStyle('${tid}',${idx},${slideIndex},'layerFonts','${L.key}',this.value)">${fontOpts}</select>
-        <input type="color" value="${lc || curColor}" aria-label="${L.label} colour" oninput="cpSetLayerStyle('${tid}',${idx},${slideIndex},'layerColors','${L.key}',this.value)"/>
-        <label class="cc-layer-size">Size <input type="range" min="60" max="160" value="${sc}" aria-label="${L.label} size" oninput="cpSetLayerStyle('${tid}',${idx},${slideIndex},'layerScale','${L.key}',this.value/100)"/></label>
-      </div>
-    </div>`;
-  }).join("");
-  const mt = (S.mockText && S.mockText[tid]) || {};
-  const defHandle = S.user?.handle || S.user?.name?.toLowerCase().replace(/\s+/g, "") || "creatorpulse";
-  const mockRow = (k, label, val, def) => `<div class="cc-style-row cc-style-row-wide"><span class="cc-style-label">${label}</span><input type="text" value="${esc(val)}" placeholder="${esc(def)}" aria-label="Phone ${label.toLowerCase()}" oninput="cpSetMockText('${tid}','${k}',this.value)"/></div>`;
-  const stylePanel = `<div class="cc-style-panel" data-cp-style="${key}">
-    <div class="cc-style-title">Style this card</div><div class="cc-style-row cc-th-open-row"><button type="button" class="btn bp bxs cc-th-open" onclick="cpOpenThemes('${tid}',${idx},${slideIndex})">Themes</button><span class="cc-style-hint">${esc(window.CardThemes?.themeName(sty.themeId) || window.CardThemes?.colourName(sty.colourThemeId) || "Original look")}</span></div>
-    <div class="cc-style-row"><span class="cc-style-label">All text font</span><div class="cc-style-chips">${fontChips}</div></div>
-    <div class="cc-style-row"><span class="cc-style-label">All text colour</span><input type="color" value="${curColor}" aria-label="All text colour" oninput="cpSetCardStyle('${tid}',${idx},${slideIndex},'textColor',this.value)"/></div>
-    <div class="cc-style-title">Text on the card</div>
-    ${layerRows}
-    <div class="cc-style-title">Background</div>
-    <div class="cc-style-row"><span class="cc-style-label">Photo</span><label class="btn bo bxs">Change background image<input type="file" accept="image/*" hidden onchange="cpPickCardBackground(this,'${tid}',${idx},${slideIndex})"/></label><span class="cc-style-hint cc-bg-hint">${sty.bgName ? esc(sty.bgName) : "Article photo"}</span></div>
-    <div class="cc-style-row"><span class="cc-style-label">Dim photo</span><input type="range" min="0" max="80" value="${Math.round((sty.dim || 0) * 100)}" aria-label="Dim background photo" oninput="cpSetCardStyle('${tid}',${idx},${slideIndex},'dim',this.value/100)"/></div>
-    <div class="cc-style-title">Phone overlay text</div>
-    ${mockRow("handle", "Name", mt.handle || "", defHandle)}
-    ${mockRow("caption", "Caption", mt.caption || "", "Caption from the card")}
-    ${mockRow("hashtags", "Hashtags", mt.hashtags || "", "#fyp #viral")}
-    ${mockRow("sound", "Sound", mt.sound || "", "Trending Sound · Original Audio")}
-    <div class="cc-style-actions"><button type="button" class="btn bo bxs" onclick="cpResetCardStyle('${tid}',${idx},${slideIndex})">Reset style</button><button type="button" class="btn bp bxs" onclick="cpApplyCardStyle('${tid}',${idx},${slideIndex})">Apply to card image</button></div>
-  </div>`;
   const stage = `<div class="cp-canvas-stage cc-live-stage" data-canvas-stage="${key}" data-tid="${tid}" data-idx="${idx}" data-slide-index="${slideIndex}" style="aspect-ratio:${aspectRatio}"><div class="cc-live-plate"></div><div class="cc-live-dim"></div><div class="cc-live-status" role="status"></div><div class="cp-canvas-blocks" data-canvas-key="${key}" data-slide-index="${slideIndex}" data-card-key="${tid}-${idx}">${CARD_LAYERS.map(L => box(L.key, L.label, live[L.field])).join("")}</div></div>`;
   const ctxBar = `<div class="cc-ctx" data-cp-ctx="${key}" data-tid="${tid}" data-idx="${idx}" data-slide-index="${slideIndex}" hidden><div class="cc-ctx-bar" role="toolbar" aria-label="Text tools"><span class="cc-ctx-name"></span><button type="button" class="cc-ctx-btn" data-cp-ctx-kind="font" aria-pressed="false" onclick="cpToggleCtxPanel('font')">Font</button><button type="button" class="cc-ctx-btn" data-cp-ctx-kind="color" aria-pressed="false" onclick="cpToggleCtxPanel('color')">Color</button></div><div class="cc-ctx-panel" hidden></div></div>`;
   const bgBar = `<div class="cc-bg" data-cp-bg="${key}" data-tid="${tid}" data-idx="${idx}" data-slide-index="${slideIndex}" hidden></div>`;
   setTimeout(cpSyncLiveStages, 0);
   setTimeout(cpRefreshCtx, 0);
   setTimeout(cpRefreshBgMenu, 0);
-  return `<details class="cp-canvas-editor" open><summary>Edit layout on canvas</summary><div class="cp-canvas-instructions">Tap a text block to select it, then pick its Font or Color. Double-tap to edit the words. Tap an empty part of the card to change the background. Drag to move a block, or drag its corner to resize. Apply saves these changes to the card image.</div>${stage}${ctxBar}${bgBar}<div class="cp-canvas-actions"><button type="button" class="btn bo bxs" onclick="resetCardCanvas('${tid}',${idx},${slideIndex})">Reset layout</button><button type="button" class="btn bp bxs" onclick="applyCanvasLayout('${tid}',${idx},${slideIndex})">Apply layout</button></div>${stylePanel}</details>`;
+  const mt = (S.mockText && S.mockText[tid]) || {};
+  const defHandle = S.user?.handle || S.user?.name?.toLowerCase().replace(/\s+/g, "") || "creatorpulse";
+  const mockRow = (k, label, val, def) => `<label class="cc-post-row"><span class="cc-post-label">${label}</span><input type="text" value="${esc(val)}" placeholder="${esc(def)}" aria-label="Phone ${label.toLowerCase()}" oninput="cpSetMockText('${tid}','${k}',this.value)"/></label>`;
+  const themeLabel = window.CardThemes?.themeName(sty.themeId) || window.CardThemes?.colourName(sty.colourThemeId) || "Original look";
+  return `<div class="cp-canvas-editor" data-cp-style="${key}">
+    <div class="cp-canvas-instructions">Tap text to select it, then pick its Font or Color. Double-tap to edit the words. Drag or resize the box. Tap the photo to change it.</div>
+    ${stage}${ctxBar}${bgBar}
+    <div class="cc-tools">
+      <button type="button" class="btn bp bxs cc-th-open" onclick="cpOpenThemes('${tid}',${idx},${slideIndex})">Themes</button>
+      <span class="cc-style-hint cc-th-hint">${esc(themeLabel)}</span>
+    </div>
+    <details class="cc-post-details"><summary>Post details</summary>
+      ${mockRow("handle", "Name", mt.handle || "", defHandle)}
+      ${mockRow("caption", "Caption", mt.caption || "", "Caption from the card")}
+      ${mockRow("hashtags", "Hashtags", mt.hashtags || "", "#fyp #viral")}
+      ${mockRow("sound", "Sound", mt.sound || "", "Trending Sound · Original Audio")}
+    </details>
+  </div>`;
 }
 
 function renderOut(o, tid, idx){
@@ -1470,14 +1442,15 @@ function renderOut(o, tid, idx){
     return `<div class="oc">
       <div class="oh">${badge}<span style="font-size:10.5px;color:var(--mu)">Swipe format above to test</span></div>
       ${mockupHTML}
-      ${o.isCard ? `<details style="margin:0 10px 10px;background:var(--sf);border-radius:6px;padding:8px 12px;border:1px solid var(--br)"><summary style="cursor:pointer;font-size:11px;font-weight:600;color:var(--mu2)">Edit text &amp; framing</summary><div style="display:grid;gap:8px;padding-top:10px"><label style="font-size:11px;color:var(--mu2)">Headline<textarea oninput="setCardText('${tid}',${idx},'headline',this.value)" style="width:100%;min-height:54px">${esc(o.editSlide?.headline||S.trends.find(t=>t.id===tid)?.headline||'')}</textarea></label><label style="font-size:11px;color:var(--mu2)">Supporting text<textarea oninput="setCardText('${tid}',${idx},'supportingText',this.value)" style="width:100%;min-height:54px">${esc(o.editSlide?.supportingText||'')}</textarea></label><label style="font-size:11px;color:var(--mu2)">Move headline vertically<input type="range" min="-240" max="240" step="8" value="${Number(o.editSlide?.textOffset||0)}" oninput="setCardText('${tid}',${idx},'textOffset',this.value)" style="width:100%"/></label><button class="btn bo bxs" onclick="applyCardText('${tid}',${idx})">Update card text</button></div></details>` : ""}
       ${o.isCard ? renderCardCanvasEditor(o,tid,idx,0,o.editSlide||{headline:S.trends.find(t=>t.id===tid)?.headline||o.label},o.img,aspectRatioCSS.replace('/','/')) : ""}
+      ${o.isCard ? "" : `
       <details style="margin:0 10px 10px;background:var(--sf);border-radius:6px;padding:8px 12px;border:1px solid var(--br)">
         <summary style="cursor:pointer;font-size:11px;font-weight:600;color:var(--mu2)">View raw image canvas</summary>
         <div style="padding:10px 0"><img loading="lazy" decoding="async" src="${o.img}" data-fb="${o.fallbackImg||""}" onerror="cardImgFail(this, this.dataset.fb)" style="width:100%;max-width:280px;margin:0 auto;display:block;aspect-ratio:${aspectRatioCSS};object-fit:contain;border-radius:6px"/></div>
       </details>
+`}
       <div class="ofoot">
-        <button class="btn bo bxs tipbtn" data-tip="Download image" title="Download image" aria-label="Download image" onclick="dl('${o.img}','image.jpg')">${I.dl} Download</button>
+        <button class="btn bo bxs tipbtn" data-tip="Download image" title="Download image" aria-label="Download image" onclick="${o.isCard ? `cpDownloadCard('${tid}',${idx},0,'image.jpg')` : `dl('${o.img}','image.jpg')`}">${I.dl} Download</button>
         ${gptBtn}
         <button class="btn bp bxs tipbtn" data-tip="Save to library" title="Save to library" aria-label="Save to library" onclick="saveOut('${tid}',${idx})">${I.save} Save</button>
       </div>
@@ -1485,10 +1458,10 @@ function renderOut(o, tid, idx){
   }
   if(o.type === "carousel"){
     const slideText = s => [s.headline, s.stat && s.statLabel ? `${s.stat} — ${s.statLabel}` : s.stat, s.sectionLabel, s.body, s.supportingText].filter(Boolean).join("\n");
-    const slides = (o.slides||[]).map((s,si)=>`<div style="padding:8px 0;border-bottom:1px solid var(--br)"><div style="display:flex;align-items:center;justify-content:space-between"><div style="font-size:10px;color:var(--mu);font-weight:600">Slide ${s.slideNumber} · ${esc(s.type||"")}</div><div style="display:flex;gap:4px;align-items:center">${o._imgLoading===si?`<span style="font-size:10px;color:var(--mu)">Applying…</span>`:`${s.img?`<button class="btn bo bxs tipbtn" data-tip="Download this slide" title="Download this slide" aria-label="Download slide ${s.slideNumber}" onclick="dl('${s.img}','slide-${s.slideNumber}.png')" style="padding:3px 8px">${I.dl}</button>`:""}<input type="file" accept="image/*" id="slideimg-${tid}-${idx}-${si}" style="display:none" onchange="setSlideBackgroundImage('${tid}',${idx},${si},this.files[0])"/><button class="btn bo bxs tipbtn" data-tip="Use your own photo as this slide's background" title="Add background image" aria-label="Add background image for slide ${s.slideNumber}" onclick="document.getElementById('slideimg-${tid}-${idx}-${si}').click()" style="padding:3px 8px">${I.image}</button>`}</div></div>${s.img?`<img loading="lazy" decoding="async" src="${s.img}" data-fb="${s.localImg||""}" onerror="cardImgFail(this, this.dataset.fb)" style="width:100%;border-radius:6px;margin-top:6px;aspect-ratio:4/5;object-fit:cover"/>`:""}${renderCardCanvasEditor(o,tid,idx,si,s,s.img,"4/5")}<details style="margin-top:7px"><summary style="cursor:pointer;font-size:10px;color:var(--mu2)">Edit this slide</summary><div style="display:grid;gap:6px;padding:7px 0"><label style="font-size:10px;color:var(--mu2)">Headline<textarea oninput="setSlideText('${tid}',${idx},${si},'headline',this.value)" style="width:100%;min-height:42px">${esc(s._edit?.headline??s.headline??'')}</textarea></label><label style="font-size:10px;color:var(--mu2)">Supporting text<textarea oninput="setSlideText('${tid}',${idx},${si},'supportingText',this.value)" style="width:100%;min-height:42px">${esc(s._edit?.supportingText??s.supportingText??s.body??'')}</textarea></label><label style="font-size:10px;color:var(--mu2)">Text size<input type="range" min="80" max="130" step="5" value="${Number(s._edit?.textScale??100)}" oninput="setSlideText('${tid}',${idx},${si},'textScale',this.value)" style="width:100%"/></label><label style="font-size:10px;color:var(--mu2)">Font<select onchange="setSlideText('${tid}',${idx},${si},'typography',this.value)" style="width:100%"><option value="impact">Impact Bold</option><option value="modern_sans">Modern Sans</option><option value="editorial_serif">Editorial Serif</option><option value="code_mono">Modern Mono</option><option value="condensed_sans">Condensed Display</option><option value="classic_serif">Classic Editorial</option></select></label><button class="btn bo bxs" onclick="applyCardText('${tid}',${idx},${si})">Update slide</button></div></details></div>`).join("");
+    const slides = (o.slides||[]).map((s,si)=>`<div class="cc-slide"><div class="cc-slide-head"><div class="cc-slide-label">Slide ${s.slideNumber} · ${esc(s.type||"")}</div>${s.img?`<button class="btn bo bxs tipbtn" data-tip="Download this slide" title="Download this slide" aria-label="Download slide ${s.slideNumber}" onclick="cpDownloadCard('${tid}',${idx},${si},'slide-${s.slideNumber}.png')" style="padding:3px 8px">${I.dl}</button>`:""}</div>${renderCardCanvasEditor(o,tid,idx,si,s,s.img,"4/5")}</div>`).join("");
     const cp = (o.slides||[]).map(s=>`SLIDE ${s.slideNumber}: ${slideText(s)}`).join("\n\n");
     const imgs = (o.slides||[]).map(s=>s.img).filter(Boolean);
-    const dlAllBtn = imgs.length ? `<button class="btn bo bxs tipbtn" data-tip="Download all slide images" title="Download all slides" aria-label="Download all slides" onclick='dlAll(${JSON.stringify(imgs)})'>${I.dl} All</button>` : "";
+    const dlAllBtn = o.slides?.length ? `<button class="btn bo bxs tipbtn" data-tip="Download all slide images" title="Download all slides" aria-label="Download all slides" onclick="cpDownloadAll('${tid}',${idx})">${I.dl} All</button>` : "";
     return `<div class="oc">
       <div class="oh">
         <span class="ol">Carousel · ${o.slides?.length||0} slides · ${esc(o.theme||'modern_dark')}</span>
@@ -1498,11 +1471,8 @@ function renderOut(o, tid, idx){
         </div>
       </div>
       ${mockupHTML}
-      <details style="margin:0 10px 10px;background:var(--sf);border-radius:6px;padding:8px 12px;border:1px solid var(--br)">
-        <summary style="cursor:pointer;font-size:11px;font-weight:600;color:var(--mu2)">View slide copy &amp; details</summary>
-        <div style="padding:10px 0">${slides}</div>
-        <div style="font-size:11px;color:var(--tx);margin-top:6px;line-height:1.6;white-space:pre-wrap;border-top:1px solid var(--br);padding-top:8px">${esc(cp)}</div>
-      </details>
+      <div class="cc-slides">${slides}</div>
+      <details class="cc-copy-details"><summary>View slide text</summary><div class="cc-copy-text">${esc(cp)}</div></details>
       <div class="ofoot">
         <button class="btn bp bxs tipbtn" data-tip="Save to library" title="Save to library" aria-label="Save to library" onclick="saveOut('${tid}',${idx})">${I.save} Save</button>
       </div>
@@ -1582,35 +1552,6 @@ window.studioShootScript = (tid, idx) => {
   }
 };
 
-window.setSlideBackgroundImage = async (tid, idx, slideIdx, file) => {
-  if (!file) return;
-  const o = S.outs[tid]?.[idx];
-  if (!o || o.type !== "carousel" || !o._renderCtx) return;
-  // A phone photo can easily be 10-20MB — base64-encoding it adds another
-  // ~33% on top, which used to blow straight through the server's 2MB
-  // request-body limit and fail with no useful error. There's no reason to
-  // send the original size anyway: the card canvas only needs ~1080px
-  // wide. Downscaling here (max 1600px on the long edge, JPEG ~0.85
-  // quality) shrinks a typical photo to a few hundred KB — faster upload,
-  // and comfortably inside the server limit regardless of the source size.
-  let dataUrl;
-  try {
-    dataUrl = await downscaleImageFile(file, 1600, 0.85);
-  } catch (e) {
-    toast("Couldn't read that image. Try a different photo.");
-    return;
-  }
-  o.slides[slideIdx].customImage = dataUrl;
-  o._imgLoading = slideIdx; render();
-  try {
-    const { category, palette, format, imageUrl, theme, typography, density } = o._renderCtx;
-    const cd = await generateCardsWithRetry({slides: o.slides, category, palette, format, imageUrl, theme, typography, density, focalPoint:S.focalPoint[tid]?{x:S.focalPoint[tid].x/100,y:S.focalPoint[tid].y/100}:null, brand:BRAND_PRESETS[S.brandPreset[tid]||"creator"]});
-    const newImgs = cd.images || [];
-    o.slides.forEach((s,i)=>{ if(newImgs[i]) s.img = newImgs[i]; });
-    o.images = newImgs;
-  } catch(e) { toast("Couldn't apply that image. Try again."); }
-  o._imgLoading = null; render();
-};
 function downscaleImageFile(file, maxDim, quality) {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -1880,6 +1821,11 @@ function cpPaintPlate(plateKey) {
     if (status) status.textContent = entry && entry.failed ? "Preview couldn't load. Text still updates." : (entry && entry.src ? "" : "Loading preview…");
   });
   cpSyncGalleryPlate(cpThemeGallery);
+  document.querySelectorAll(".cc-live-plate").forEach(el => {
+    if (el.dataset.cpPlate !== plateKey) return;
+    const st = el.closest(".cc-live-stage");
+    if (st) cpScheduleExport(st.dataset.tid, Number(st.dataset.idx), Number(st.dataset.slideIndex));
+  });
 }
 
 // Writes the shared card state into one live stage: photo, dim, text, fonts, colours and boxes.
@@ -1928,6 +1874,211 @@ function cpUpdateLiveStage(tid, idx, slideIndex) {
     block.style.height = `${pos.height * 100}%`;
   });
   cpSyncStylePanel(tid, idx, slideIndex, slide);
+  cpScheduleExport(tid, idx, slideIndex);
+}
+
+// ── Export: the saved image is drawn from the same card state as the live preview ──
+// The photo (or chosen background), the dimming and each text box are drawn on a
+// 1080-wide canvas with the same box positions, fonts, sizes and colours the editor
+// uses. Nothing is sent to the server, so downloads and saves match the preview.
+const CP_EXPORT_W = 1080;
+const cpExportTimers = new Map();
+const cpExportSigs = new Map();
+const cpExportSeq = new Map();
+const cpExportKey = (tid, idx, si) => `${tid}-${idx}-${si}`;
+
+// The shape of the exported image, from the same format rules the preview uses.
+function cpExportAspect(o, isSlide) {
+  if (isSlide) return [4, 5];
+  if (o.aspect === "reel" || o.aspect === "tiktok") return [9, 16];
+  if (o.aspect === "youtube") return [16, 9];
+  return [1, 1];
+}
+
+// Reads everything the image needs in one synchronous step, so an edit made while
+// the image is being drawn cannot leave it half old and half new.
+function cpExportSnapshot(tid, idx, si) {
+  const o = S.outs[tid]?.[idx];
+  const slide = cpCardSlide(tid, idx, si);
+  if (!o || !slide || !o._renderCtx) return null;
+  const sty = JSON.parse(JSON.stringify(slide._style || {}));
+  const plateKey = cpPlateKey(tid, idx, si);
+  const entry = cpPlateCache.get(plateKey);
+  let plateSrc = "";
+  let plateId = "none";
+  if (sty.bgImage) {
+    plateSrc = sty.bgImage;
+    plateId = "upload:" + plateKey;
+  } else {
+    if (!entry || entry.pending) return null; // the photo is still on its way
+    if (entry.src) { plateSrc = entry.src; plateId = "server:" + plateKey; }
+  }
+  const typo = o._renderCtx.typography;
+  const layers = CARD_LAYERS.map(L => {
+    const text = String(slide[L.field] || "");
+    const face = (sty.layerFonts || {})[L.key] || sty.typography || typo || "impact";
+    const vis = TYPO_VIS[face] || {};
+    const k = Math.max(0.5, Math.min(1.6, Number((sty.layerScale || {})[L.key]) || 1));
+    return {
+      key: L.key,
+      text: L.key === "ctaLine" ? text.toUpperCase() : text,
+      family: vis.f || "Inter, sans-serif",
+      weight: vis.w || 700,
+      size: CP_LIVE_BASE_SIZE[L.key] * k / 100, // the editor sizes text in 1% of the card width
+      color: (sty.layerColors || {})[L.key] || sty.textColor || "#ffffff",
+      box: (slide.textLayout || {})[L.key] || CP_LIVE_DEFAULT_BOX[L.key]
+    };
+  });
+  const focal = sty.bgImage && S.focalPoint?.[tid] ? S.focalPoint[tid] : null;
+  const state = {
+    plateId,
+    aspect: cpExportAspect(o, o.type === "carousel"),
+    dim: Math.max(0, Math.min(0.8, Number(sty.dim) || 0)),
+    focal: focal ? [focal.x, focal.y] : null,
+    layers
+  };
+  return { state, sig: JSON.stringify(state), plateSrc };
+}
+
+function cpLoadExportImage(src) {
+  return new Promise((resolve, reject) => {
+    const im = new Image();
+    im.onload = () => resolve(im);
+    im.onerror = () => reject(new Error("photo did not load"));
+    im.src = src;
+  });
+}
+
+// Breaks text into lines the way the preview does: words wrap, and a word longer than the box breaks anywhere.
+function cpWrapLines(ctx, text, maxW) {
+  const out = [];
+  String(text).split("\n").forEach(para => {
+    const words = para.split(/\s+/).filter(Boolean);
+    let line = "";
+    words.forEach(w => {
+      const candidate = line ? `${line} ${w}` : w;
+      if (ctx.measureText(candidate).width <= maxW) { line = candidate; return; }
+      if (line) { out.push(line); line = ""; }
+      if (ctx.measureText(w).width <= maxW) { line = w; return; }
+      for (const ch of w) {
+        if (line && ctx.measureText(line + ch).width > maxW) { out.push(line); line = ""; }
+        line += ch;
+      }
+    });
+    out.push(line);
+  });
+  return out;
+}
+
+// One text box: clipped to its box like the preview, top-aligned, 1.05 line height, with the same shadow.
+function cpDrawTextBox(ctx, l, W, H) {
+  const px = l.size * W;
+  const lineH = px * 1.05;
+  const left = l.box.x * W, top = l.box.y * H, bw = l.box.width * W, bh = l.box.height * H;
+  ctx.font = `${l.weight} ${px}px ${l.family}`;
+  const lines = cpWrapLines(ctx, l.text, bw);
+  const m = ctx.measureText("Hg");
+  const asc = m.fontBoundingBoxAscent ?? px * 0.8;
+  const desc = m.fontBoundingBoxDescent ?? px * 0.2;
+  const firstBaseline = top + (lineH - (asc + desc)) / 2 + asc;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(left, top, bw, bh);
+  ctx.clip();
+  ctx.font = `${l.weight} ${px}px ${l.family}`;
+  ctx.fillStyle = l.color;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+  ctx.shadowColor = "rgba(0,0,0,0.45)";
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 0.006 * W; // 0.6% of the width, as in the preview's text-shadow
+  ctx.shadowBlur = 0.035 * W;    // 3.5% of the width
+  lines.forEach((ln, i) => ctx.fillText(ln, left, firstBaseline + i * lineH));
+  ctx.restore();
+}
+
+// Draws one card from a snapshot and returns it as a JPEG data URL.
+async function cpComposeCard(snap) {
+  const { state } = snap;
+  const W = CP_EXPORT_W;
+  const H = Math.round(W * state.aspect[1] / state.aspect[0]);
+  const families = [...new Set(state.layers.filter(l => l.text).map(l => l.family))];
+  await Promise.all(families.map(f => document.fonts.load(`900 40px ${f}`).catch(() => null)));
+  const photo = snap.plateSrc ? await cpLoadExportImage(snap.plateSrc) : null;
+  const canvas = document.createElement("canvas");
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext("2d");
+  ctx.fillStyle = "#1b1b1f";
+  ctx.fillRect(0, 0, W, H);
+  if (photo) {
+    const s = Math.max(W / photo.naturalWidth, H / photo.naturalHeight);
+    const dw = photo.naturalWidth * s, dh = photo.naturalHeight * s;
+    const [fx, fy] = state.focal ? state.focal.map(v => v / 100) : [0.5, 0.5];
+    ctx.drawImage(photo, (W - dw) * fx, (H - dh) * fy, dw, dh);
+  }
+  if (state.dim > 0) {
+    ctx.fillStyle = `rgba(0,0,0,${state.dim})`;
+    ctx.fillRect(0, 0, W, H);
+  }
+  state.layers.forEach(l => { if (l.text) cpDrawTextBox(ctx, l, W, H); });
+  return canvas.toDataURL("image/jpeg", 0.92);
+}
+
+function cpCurrentExportImg(tid, idx, si) {
+  const o = S.outs[tid]?.[idx];
+  if (!o) return "";
+  return o.type === "carousel" ? (o.slides?.[si]?.img || "") : (o.img || "");
+}
+
+function cpSetExportImg(tid, idx, si, url) {
+  const o = S.outs[tid]?.[idx];
+  if (!o) return;
+  if (o.type === "carousel") { if (o.slides?.[si]) o.slides[si].img = url; }
+  else o.img = url;
+}
+
+// Exports one card if its look has changed, then updates the mockup image in place (no re-render).
+async function cpRunExport(tid, idx, si) {
+  const key = cpExportKey(tid, idx, si);
+  const snap = cpExportSnapshot(tid, idx, si);
+  if (!snap) return cpCurrentExportImg(tid, idx, si);
+  const current = cpCurrentExportImg(tid, idx, si);
+  if (cpExportSigs.get(key) === snap.sig && current) return current;
+  const seq = (cpExportSeq.get(key) || 0) + 1;
+  cpExportSeq.set(key, seq);
+  let url = "";
+  try { url = await cpComposeCard(snap); } catch (e) { url = ""; }
+  if (!url || cpExportSeq.get(key) !== seq) return cpCurrentExportImg(tid, idx, si);
+  cpExportSigs.set(key, snap.sig);
+  cpSetExportImg(tid, idx, si, url);
+  document.querySelectorAll(`img[data-cp-export="${key}"]`).forEach(im => { if (im.src !== url) im.src = url; });
+  return url;
+}
+
+// Live edits export after a short pause, so typing and dragging do not redraw on every frame.
+function cpScheduleExport(tid, idx, si) {
+  const key = cpExportKey(tid, idx, si);
+  clearTimeout(cpExportTimers.get(key));
+  cpExportTimers.set(key, setTimeout(() => {
+    cpExportTimers.delete(key);
+    cpRunExport(tid, idx, si).catch(() => {});
+  }, 180));
+}
+
+// Runs a card's export now, skipping the pause. Used before a download or a save.
+function cpFlushExport(tid, idx, si) {
+  const key = cpExportKey(tid, idx, si);
+  clearTimeout(cpExportTimers.get(key));
+  cpExportTimers.delete(key);
+  return cpRunExport(tid, idx, si).catch(() => cpCurrentExportImg(tid, idx, si));
+}
+
+async function cpFlushExports(tid, idx) {
+  const o = S.outs[tid]?.[idx];
+  if (!o) return;
+  const slideIdxs = o.type === "carousel" ? (o.slides || []).map((_, si) => si) : [0];
+  for (const si of slideIdxs) await cpFlushExport(tid, idx, si);
 }
 
 // Keeps the "Text on the card" fields in step with the preview, leaving any field the user is typing in alone.
@@ -1954,7 +2105,7 @@ function cpSyncStylePanel(tid, idx, slideIndex, slide) {
   if (dimRange && dimRange !== document.activeElement) dimRange.value = dimPct;
   const hint = panel.querySelector(".cc-bg-hint");
   if (hint) hint.textContent = sty.bgName || "Article photo";
-  const themeHint = panel.querySelector(".cc-th-open-row .cc-style-hint");
+  const themeHint = panel.querySelector(".cc-th-hint");
   if (themeHint) themeHint.textContent = window.CardThemes?.themeName(sty.themeId) || window.CardThemes?.colourName(sty.colourThemeId) || "Original look";
 }
 
@@ -1981,6 +2132,7 @@ function cpCommitBlockLayout(block) {
       height: b.height / rect.height
     }
   };
+  cpScheduleExport(stage.dataset.tid, Number(stage.dataset.idx), Number(stage.dataset.slideIndex));
 }
 
 const cardCanvasPointer = (() => {
@@ -2061,18 +2213,6 @@ const cardCanvasPointer = (() => {
   });
   return true;
 })();
-window.resetCardCanvas = (tid,idx,slideIndex) => { const slide=S.outs[tid]?.[idx]?.type==="carousel"?S.outs[tid][idx].slides[slideIndex]:S.outs[tid]?.[idx]?.editSlide; if(slide)delete slide.textLayout; render(); };
-window.applyCanvasLayout = async (tid,idx,slideIndex) => {
-  const o=S.outs[tid]?.[idx]; if(!o)return;
-  const blocks=document.querySelectorAll(`[data-canvas-key="${tid}-${idx}-${slideIndex}"][data-canvas-block]`);
-  const stage=document.querySelector(`[data-canvas-stage="${tid}-${idx}-${slideIndex}"]`); if(!stage)return;
-  const rect=stage.getBoundingClientRect(), layout={};
-  blocks.forEach(el=>{const b=el.getBoundingClientRect();layout[el.dataset.canvasBlock]={x:(b.left-rect.left)/rect.width,y:(b.top-rect.top)/rect.height,width:b.width/rect.width,height:b.height/rect.height};});
-  const slide=o.type==="carousel"?o.slides[slideIndex]:(o.editSlide||(o.editSlide={type:"hook",headline:S.trends.find(t=>t.id===tid)?.headline||o.label,slideNumber:1,totalSlides:1,imageUrl:o._renderCtx?.imageUrl}));
-  slide.textLayout=layout;
-  const ctx=o._renderCtx; if(!ctx)return;
-  try { const cd=await generateCardsWithRetry({...ctx,slides:[slide],focalPoint:S.focalPoint[tid]?{x:S.focalPoint[tid].x/100,y:S.focalPoint[tid].y/100}:null,brand:BRAND_PRESETS[S.brandPreset[tid]||"creator"]}); if(cd.images?.[0]){if(o.type==="carousel")slide.img=cd.images[0];else o.img=cd.images[0]; render();toast("Card layout updated");} } catch(e){toast("Couldn't apply that layout. Try again.");}
-};
 
 // ── Card style: font, text colour and background for a generated graphic ──
 function cpCardSlide(tid, idx, slideIndex) {
@@ -2108,15 +2248,6 @@ window.cpSetMockText = (tid, key, value) => {
     el.textContent = value || el.dataset.cpDefault || "";
   });
 };
-window.cpPickStyleFont = (btn, tid, idx, slideIndex, typoId) => {
-  window.cpSetCardStyle(tid, idx, slideIndex, "typography", typoId);
-  // Move the highlight without repainting the whole screen, which would close the editor.
-  btn.parentElement.querySelectorAll(".cc-style-chip").forEach(b => {
-    const on = b === btn;
-    b.classList.toggle("active", on);
-    b.setAttribute("aria-pressed", String(on));
-  });
-};
 window.cpPickCardBackground = async (input, tid, idx, slideIndex) => {
   const file = input.files && input.files[0];
   if (!file) return;
@@ -2133,44 +2264,6 @@ window.cpPickCardBackground = async (input, tid, idx, slideIndex) => {
   window.cpSetCardStyle(tid, idx, slideIndex, "bgName", name);
   cpRefreshBgMenu();
   toast("Background updated. Apply saves it to the card image.");
-};
-window.cpApplyCardStyle = async (tid, idx, slideIndex) => {
-  const o = S.outs[tid]?.[idx];
-  const ctx = o?._renderCtx;
-  const slide = cpCardSlide(tid, idx, slideIndex);
-  if (!o || !ctx || !slide || o.type === "carousel") { toast("This card cannot be styled."); return; }
-  const sty = slide._style || {};
-  const payloadSlide = {
-    ...slide, img: undefined, localImg: undefined,
-    customImage: sty.bgImage || slide.customImage || undefined,
-    textColor: sty.textColor || undefined,
-    layerFonts: sty.layerFonts, layerColors: sty.layerColors, layerScale: sty.layerScale,
-    dim: sty.dim || undefined
-  };
-  const payload = {
-    ...ctx,
-    typography: sty.typography || ctx.typography,
-    slides: [payloadSlide],
-    focalPoint: S.focalPoint[tid] ? {x: S.focalPoint[tid].x/100, y: S.focalPoint[tid].y/100} : null,
-    brand: BRAND_PRESETS[S.brandPreset[tid]||"creator"]
-  };
-  toast("Applying to card image…");
-  try {
-    const cd = await generateCardsWithRetry(payload);
-    const img = (cd.images || [])[0];
-    if (!img) throw new Error("no image");
-    slide.img = img;
-    o.img = img;
-    render();
-    toast("Card image updated");
-  } catch (e) {
-    toast("Couldn't apply that style. Try again.");
-  }
-};
-window.cpResetCardStyle = (tid, idx, slideIndex) => {
-  const slide = cpCardSlide(tid, idx, slideIndex); if (!slide) return;
-  delete slide._style;
-  window.cpApplyCardStyle(tid, idx, slideIndex);
 };
 
 // ── Themes gallery ──────────────────────────────────────────────
@@ -2267,7 +2360,7 @@ window.cpCloseThemes = () => {
   cpThemeGallery = null;
 };
 // Repaints the open card from its shared style at once. Themes and restore never
-// call the server: "Apply to card image" is still what saves the look to the image.
+// call the server. The image is drawn from the same look on Download or Save.
 function cpApplyThemeLive(tid, idx, slideIndex) {
   const stage = document.querySelector(`[data-canvas-stage="${tid}-${idx}-${slideIndex}"]`);
   if (stage) cpUpdateLiveStage(tid, idx, slideIndex);
@@ -2299,9 +2392,6 @@ window.cpRestoreTheme = (tid, idx, slideIndex) => {
   window.cpCloseThemes();
   cpApplyThemeLive(tid, idx, slideIndex);
 };
-window.setCardText = (tid,idx,key,value) => { const o=S.outs[tid]?.[idx]; if(!o)return; o.editSlide=o.editSlide||{type:"hook",headline:S.trends.find(t=>t.id===tid)?.headline||o.label,slideNumber:1,totalSlides:1,imageUrl:o._renderCtx?.imageUrl}; o.editSlide[key]=key==="textOffset"||key==="textScale"?Number(value):value; };
-window.setSlideText = (tid,idx,slideIndex,key,value) => { const slide=S.outs[tid]?.[idx]?.slides?.[slideIndex]; if(!slide)return; slide._edit=slide._edit||{}; slide._edit[key]=key==="textOffset"||key==="textScale"?Number(value):value; };
-window.applyCardText = async (tid,idx,slideIndex=null) => { const o=S.outs[tid]?.[idx]; if(!o)return; const ctx=o._renderCtx; if(!ctx){toast("This image cannot be edited as a card.");return;} const carouselSlide=o.type==="carousel"?o.slides[slideIndex??0]:null; const base=carouselSlide||o.editSlide||{type:"hook",headline:S.trends.find(t=>t.id===tid)?.headline||o.label,slideNumber:1,totalSlides:1,imageUrl:ctx.imageUrl}; const edited={...base,...(carouselSlide?carouselSlide._edit||{}:o.editSlide||{})}; try { const cd=await generateCardsWithRetry({...ctx,slides:[edited],focalPoint:S.focalPoint[tid]?{x:S.focalPoint[tid].x/100,y:S.focalPoint[tid].y/100}:null,brand:BRAND_PRESETS[S.brandPreset[tid]||"creator"]}); if(cd.images?.[0]) { if(carouselSlide){carouselSlide.img=cd.images[0];carouselSlide._edit=edited;} else {o.img=cd.images[0];o.editSlide=edited;} render(); toast("Card text updated"); } } catch(e){toast("Couldn't update the card text.");} };
 window.copyOutput = (tid, idx) => { const output=S.outs[tid]?.[idx]; if(output) copyTxt(output.content||""); };
 window.toggleOutputEdit = (tid, idx) => {
   const key = `${tid}-${idx}`;
@@ -2331,6 +2421,23 @@ window.copyTxt = (t) => { navigator.clipboard.writeText(t); toast("Copied"); };
 window.dl = (url, name) => { const a=document.createElement("a"); a.href=url; a.download=name; a.click(); };
 // Staggered so mobile browsers don't drop/block downloads fired back-to-back
 // from a single tap.
+// Downloads a card as it looks now: the export is brought up to date first.
+window.cpDownloadCard = async (tid, idx, si, name) => {
+  // An export that is already up to date downloads inside the tap, which phone browsers need.
+  const key = cpExportKey(tid, idx, si);
+  const snap = cpExportSnapshot(tid, idx, si);
+  const ready = cpCurrentExportImg(tid, idx, si);
+  if (ready && snap && cpExportSigs.get(key) === snap.sig && !cpExportTimers.has(key)) { window.dl(ready, name); return; }
+  const url = (await cpFlushExport(tid, idx, si)) || cpCurrentExportImg(tid, idx, si);
+  if (!url) { toast("The image is still loading. Try again in a moment."); return; }
+  window.dl(url, name);
+};
+window.cpDownloadAll = async (tid, idx) => {
+  await cpFlushExports(tid, idx);
+  const urls = (S.outs[tid]?.[idx]?.slides || []).map(s => s.img).filter(Boolean);
+  if (!urls.length) { toast("The slides are still loading. Try again in a moment."); return; }
+  window.dlAll(urls);
+};
 window.dlAll = (urls) => { (urls||[]).forEach((u,i)=> setTimeout(()=> window.dl(u, `slide-${i+1}.png`), i*350)); toast(`Downloading ${urls?.length||0} slides`); };
 
 window.gen = async (tid, all) => {
@@ -2637,6 +2744,7 @@ window.sanitizeContentForSave = sanitizeContentForSave;
 
 window.saveOut = async (tid, idx) => {
   const t = S.trends.find(x=>x.id===tid); const o = S.outs[tid]?.[idx]; if(!t||!o) return;
+  await cpFlushExports(tid, idx);
   const today = new Date(); const sd = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
   const plat = S.plat[tid] || S.user?.primaryPlatform || "instagram";
   const kind = o.type==="carousel"?"Carousel":o.type==="image"?"Image":"Script";

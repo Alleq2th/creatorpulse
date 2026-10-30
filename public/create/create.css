@@ -679,7 +679,7 @@
 .cc-live-stage .cp-canvas-block:not(.is-selected) .cp-canvas-resize{display:none}
 .cc-live-stage .cp-canvas-label{display:none}
 .cc-live-stage .cp-canvas-block.is-selected .cp-canvas-label{display:block}
-.cc-live-text{position:absolute;inset:0;overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.05;text-shadow:0 2px 12px rgba(0,0,0,.45);pointer-events:none;color:#fff}
+.cc-live-text{position:absolute;inset:0;overflow:hidden;white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.05;text-shadow:0 .6cqw 3.5cqw rgba(0,0,0,.45);pointer-events:none;color:#fff}
 .cc-live-text.is-empty{opacity:.45}
 .cc-layer.is-selected{outline:2px solid #44d7ff;outline-offset:3px;border-radius:6px}
 
@@ -712,3 +712,18 @@
 .cc-bg-thumb span{position:absolute;left:0;right:0;bottom:0;padding:2px 4px;font-size:10px;color:#fff;background:#000a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cc-bg-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .cc-bg-row input[type=range]{flex:1;min-width:140px}
+
+/* Editor: the preview is the editor. Themes and post details sit under it. */
+.cc-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px}
+.cc-th-hint{max-width:none}
+.cc-post-details{margin-top:10px;border:1px solid var(--br);border-radius:10px;background:var(--sf);padding:10px 12px}
+.cc-post-details summary{cursor:pointer;font-size:12px;font-weight:700;color:var(--tx)}
+.cc-post-row{display:flex;flex-direction:column;gap:4px;margin-top:8px}
+.cc-post-label{font-size:11px;font-weight:600;color:var(--mu)}
+.cc-post-row input{width:100%;box-sizing:border-box;font:inherit;font-size:13px;padding:7px 9px;border:1px solid var(--br);border-radius:8px;background:var(--sf);color:var(--tx)}
+.cc-slides{display:flex;flex-direction:column;gap:16px;margin:10px 0}
+.cc-slide-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.cc-slide-label{font-size:11px;font-weight:700;color:var(--mu)}
+.cc-copy-details{margin:0 10px 10px;background:var(--sf);border-radius:6px;padding:8px 12px;border:1px solid var(--br)}
+.cc-copy-details summary{cursor:pointer;font-size:11px;font-weight:600;color:var(--mu2)}
+.cc-copy-text{font-size:11px;color:var(--tx);margin-top:6px;line-height:1.6;white-space:pre-wrap;border-top:1px solid var(--br);padding-top:8px}
