@@ -1879,6 +1879,7 @@ function cpPaintPlate(plateKey) {
     const status = el.parentElement.querySelector(".cc-live-status");
     if (status) status.textContent = entry && entry.failed ? "Preview couldn't load. Text still updates." : (entry && entry.src ? "" : "Loading preview…");
   });
+  cpSyncGalleryPlate(cpThemeGallery);
 }
 
 // Writes the shared card state into one live stage: photo, dim, text, fonts, colours and boxes.
@@ -1953,6 +1954,8 @@ function cpSyncStylePanel(tid, idx, slideIndex, slide) {
   if (dimRange && dimRange !== document.activeElement) dimRange.value = dimPct;
   const hint = panel.querySelector(".cc-bg-hint");
   if (hint) hint.textContent = sty.bgName || "Article photo";
+  const themeHint = panel.querySelector(".cc-th-open-row .cc-style-hint");
+  if (themeHint) themeHint.textContent = window.CardThemes?.themeName(sty.themeId) || window.CardThemes?.colourName(sty.colourThemeId) || "Original look";
 }
 
 function cpSyncLiveStages() {
@@ -2214,28 +2217,31 @@ function cpRenderThemeGallery() {
     <div class="cc-th-swatches">${CT.COLOUR_THEMES.map(t => cpThemeTileHTML(gal, "colour", t, sty, slide, plateCss)).join("")}</div>
     <div class="cc-th-status" role="status">${status}</div>`;
 }
-async function cpLoadThemePlate(gal) {
+// The gallery shows the same bare photo as the editor. A photo the user chose is
+// already in the browser, and the editor\'s plate is cached, so opening the gallery
+// normally needs no request at all.
+function cpLoadThemePlate(gal) {
   const o = S.outs[gal.tid]?.[gal.idx];
   const ctx = o?._renderCtx;
   const slide = cpCardSlide(gal.tid, gal.idx, gal.slideIndex);
   if (!ctx || !slide) return;
   const sty = slide._style || {};
-  // Dim 0 here: each tile dims its own preview, so the plate is the bare photo.
-  const payload = {
-    ...ctx,
-    slides: [{ ...slide, img: undefined, localImg: undefined, customImage: sty.bgImage || slide.customImage || undefined, dim: 0, plateOnly: true }],
-    plateOnly: true,
-    focalPoint: S.focalPoint[gal.tid] ? { x: S.focalPoint[gal.tid].x / 100, y: S.focalPoint[gal.tid].y / 100 } : null,
-    brand: BRAND_PRESETS[S.brandPreset[gal.tid] || "creator"]
-  };
-  try {
-    const cd = await generateCardsWithRetry(payload);
-    gal.plate = (cd.images || [])[0] || null;
-    if (!gal.plate) gal.failed = true;
-  } catch (e) {
-    gal.failed = true;
-  }
-  if (cpThemeGallery === gal) cpRenderThemeGallery();
+  if (sty.bgImage) { gal.plate = sty.bgImage; cpRenderThemeGallery(); return; }
+  gal.plateKey = cpPlateKey(gal.tid, gal.idx, gal.slideIndex);
+  cpEnsurePlate(gal.tid, gal.idx, gal.slideIndex);
+  cpSyncGalleryPlate(gal);
+}
+// Moves the cached plate into an open gallery once it has loaded.
+function cpSyncGalleryPlate(gal) {
+  if (!gal || cpThemeGallery !== gal || !gal.plateKey) return;
+  const entry = cpPlateCache.get(gal.plateKey);
+  if (!entry || entry.pending) return;
+  const src = entry.src || null;
+  const failed = !!entry.failed;
+  if (gal.plate === src && gal.failed === failed) return;
+  gal.plate = src;
+  gal.failed = failed;
+  cpRenderThemeGallery();
 }
 window.cpOpenThemes = (tid, idx, slideIndex) => {
   const o = S.outs[tid]?.[idx];
@@ -2260,12 +2266,19 @@ window.cpCloseThemes = () => {
   document.getElementById("cthOverlay")?.remove();
   cpThemeGallery = null;
 };
+// Repaints the open card from its shared style at once. Themes and restore never
+// call the server: "Apply to card image" is still what saves the look to the image.
+function cpApplyThemeLive(tid, idx, slideIndex) {
+  const stage = document.querySelector(`[data-canvas-stage="${tid}-${idx}-${slideIndex}"]`);
+  if (stage) cpUpdateLiveStage(tid, idx, slideIndex);
+  else render();
+}
 function cpApplyThemeResult(tid, idx, slideIndex, next) {
   const slide = cpCardSlide(tid, idx, slideIndex);
   if (!slide || !next) { toast("That theme isn't available."); return; }
   slide._style = next;
   window.cpCloseThemes();
-  window.cpApplyCardStyle(tid, idx, slideIndex);
+  cpApplyThemeLive(tid, idx, slideIndex);
 }
 window.cpPickTheme = (tid, idx, slideIndex, themeId) => {
   const slide = cpCardSlide(tid, idx, slideIndex);
@@ -2284,7 +2297,7 @@ window.cpRestoreTheme = (tid, idx, slideIndex) => {
   if (!res.restored) { toast("This graphic is already in its original look."); return; }
   slide._style = res.style;
   window.cpCloseThemes();
-  window.cpApplyCardStyle(tid, idx, slideIndex);
+  cpApplyThemeLive(tid, idx, slideIndex);
 };
 window.setCardText = (tid,idx,key,value) => { const o=S.outs[tid]?.[idx]; if(!o)return; o.editSlide=o.editSlide||{type:"hook",headline:S.trends.find(t=>t.id===tid)?.headline||o.label,slideNumber:1,totalSlides:1,imageUrl:o._renderCtx?.imageUrl}; o.editSlide[key]=key==="textOffset"||key==="textScale"?Number(value):value; };
 window.setSlideText = (tid,idx,slideIndex,key,value) => { const slide=S.outs[tid]?.[idx]?.slides?.[slideIndex]; if(!slide)return; slide._edit=slide._edit||{}; slide._edit[key]=key==="textOffset"||key==="textScale"?Number(value):value; };

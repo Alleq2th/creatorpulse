@@ -1,5 +1,5 @@
 // Themes gallery on a generated graphic: the gallery shows the themes, picking one
-// sends the look to the card renderer, and the copy and photo stay the same.
+// repaints the card at once from its shared style, and the copy and photo stay the same.
 const { test, expect } = require('@playwright/test');
 const { signIn, mockApi, openCreate, startIdeaFlow } = require('./helpers');
 
@@ -42,32 +42,54 @@ test.describe('Themes on a generated graphic', () => {
     const headline = await page.locator('#cthOverlay .cc-th-tile').first().locator('.cc-th-headline').innerText();
     expect(headline.length).toBeGreaterThan(0);
 
-    // Picking a look applies its type, text colour and accent, and keeps the copy.
+    // Wait for the gallery's photo before picking, so the next count is only about the pick.
+    await expect.poll(async () => page.locator('#cthOverlay .cc-th-frame').first().evaluate((el) => getComputedStyle(el).backgroundImage), { timeout: 15000 }).not.toBe('none');
+    const liveStage = page.locator('[data-canvas-stage]').first();
+    const headlineLayer = liveStage.locator('[data-cp-live="headline"]');
+    const ctaLayer = liveStage.locator('[data-cp-live="ctaLine"]');
+    const dimLayer = liveStage.locator('.cc-live-dim');
+    const style = (loc, prop) => loc.evaluate((el, p) => getComputedStyle(el)[p], prop);
+
+    // Picking a look repaints the card at once: no request to the card renderer.
     const before = cardRequests.length;
     await page.locator('#cthOverlay .cc-th-tile', { hasText: 'Electric' }).click();
     await expect(page.locator('#cthOverlay')).toHaveCount(0);
-    await expect.poll(() => cardRequests.length, { timeout: 15000 }).toBeGreaterThan(before);
-    let slide = cardRequests[cardRequests.length - 1].slides[0];
-    expect(cardRequests[cardRequests.length - 1].typography).toBe('impact');
-    expect(slide.textColor).toBe('#FFFFFF');
-    expect(slide.layerColors.ctaLine).toBe('#00E5FF');
-    expect(slide.headline).toBe(headline);
+    await expect(dimLayer).toHaveCSS('opacity', '0.35');
+    await expect(headlineLayer).toHaveCSS('color', 'rgb(255, 255, 255)');
+    await expect(ctaLayer).toHaveCSS('color', 'rgb(0, 229, 255)');
+    expect(await style(headlineLayer, 'fontFamily')).toMatch(/Anton|Impact/);
+    await expect(page.locator('.cc-th-open-row .cc-style-hint').first()).toHaveText('Electric');
+    await page.waitForTimeout(800);
+    expect(cardRequests.length).toBe(before);
+    expect(await headlineLayer.innerText()).toBe(headline);
 
-    // A colour theme changes colours only; the look stays on Electric's type.
+    // A colour theme changes colours only; the look stays on Electric's type and dim.
     await openThemes();
     await page.locator('#cthOverlay .cc-th-swatch', { hasText: 'Black & Gold' }).click();
-    await expect.poll(() => cardRequests.length, { timeout: 15000 }).toBeGreaterThan(before + 1);
-    slide = cardRequests[cardRequests.length - 1].slides[0];
-    expect(slide.layerColors.ctaLine).toBe('#D4AF37');
-    expect(cardRequests[cardRequests.length - 1].typography).toBe('impact');
-    expect(slide.headline).toBe(headline);
+    await expect(ctaLayer).toHaveCSS('color', 'rgb(212, 175, 55)');
+    await expect(dimLayer).toHaveCSS('opacity', '0.35');
+    expect(await style(headlineLayer, 'fontFamily')).toMatch(/Anton|Impact/);
+    expect(await headlineLayer.innerText()).toBe(headline);
+    expect(cardRequests.length).toBe(before);
 
-    // Restore returns to the original look: no theme colours or type are sent.
+    // Restore returns to the original look straight away: no dim and white text.
     await openThemes();
     await page.locator('#cthOverlay button', { hasText: 'Restore original look' }).click();
-    await expect.poll(() => cardRequests.length, { timeout: 15000 }).toBeGreaterThan(before + 2);
-    slide = cardRequests[cardRequests.length - 1].slides[0];
-    expect(slide.layerColors).toBeUndefined();
-    expect(slide.headline).toBe(headline);
+    await expect(dimLayer).toHaveCSS('opacity', '0');
+    await expect(ctaLayer).toHaveCSS('color', 'rgb(255, 255, 255)');
+    await expect(page.locator('.cc-th-open-row .cc-style-hint').first()).toHaveText('Original look');
+    expect(await headlineLayer.innerText()).toBe(headline);
+    expect(cardRequests.length).toBe(before);
+
+    // Applying still saves the chosen look to the card image.
+    await openThemes();
+    await page.locator('#cthOverlay .cc-th-tile', { hasText: 'Minimal' }).click();
+    await expect(page.locator('#cthOverlay')).toHaveCount(0);
+    const applyCount = cardRequests.length;
+    await page.getByRole('button', { name: /Apply to card image/ }).first().click();
+    await expect.poll(() => cardRequests.length, { timeout: 15000 }).toBeGreaterThan(applyCount);
+    const applied = cardRequests[cardRequests.length - 1];
+    expect(applied.slides[0].headline).toBe(headline);
+    expect(applied.typography).toBe('modern_sans');
   });
 });
