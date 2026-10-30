@@ -701,3 +701,14 @@
 .cc-ctx-custom input{position:absolute;inset:-8px;width:calc(100% + 16px);height:calc(100% + 16px);opacity:0;cursor:pointer;border:0;padding:0}
 /* While a text block is being typed in, it takes pointer input and shows a caret */
 .cc-live-text[contenteditable="true"]{pointer-events:auto;cursor:text;user-select:text;-webkit-user-select:text;outline:1px dashed #44d7ff;outline-offset:4px;overflow:visible}
+
+/* Background menu under the live card: photo choices, upload and dimming */
+.cc-bg{margin-top:8px;display:flex;flex-direction:column;gap:10px;padding:10px;border:1px solid var(--br);border-radius:10px;background:var(--sf)}
+.cc-bg[hidden]{display:none}
+.cc-bg-title{font-size:12px;font-weight:700;color:var(--tx)}
+.cc-bg-thumbs{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px}
+.cc-bg-thumb{position:relative;flex:0 0 auto;width:64px;height:80px;padding:0;border-radius:8px;border:2px solid var(--br);background:#2a2a30 center/cover no-repeat;overflow:hidden;cursor:pointer}
+.cc-bg-thumb.active{border-color:var(--ac);box-shadow:0 0 0 2px var(--sf), 0 0 0 4px var(--ac)}
+.cc-bg-thumb span{position:absolute;left:0;right:0;bottom:0;padding:2px 4px;font-size:10px;color:#fff;background:#000a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cc-bg-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.cc-bg-row input[type=range]{flex:1;min-width:140px}
