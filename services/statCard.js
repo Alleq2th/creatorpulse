@@ -604,7 +604,7 @@ function renderHookSVG(p, f, slide, category, scrimStrength, typo) {
     footerSVG = `
       <g opacity="0.95">
         ${srcText ? `<text x="${m}" y="${footerY - (ctaText ? 36 : 0)}" font-family="${fontBody}" font-size="20" font-weight="700" letter-spacing="1.5" fill="${p.secondaryText}">${escXml(srcText)}</text>` : ""}
-        ${ctaText ? `<text x="${m}" y="${footerY}" font-family="${layerFont(slide, "ctaLine", fontHead)}" font-size="32" font-weight="800" letter-spacing="2" fill="${layerColor(slide, "ctaLine") || p.accent}">${escXml(ctaText)}</text>` : ""}
+        ${ctaText ? `<g ${textLayoutTransform(slide, "ctaLine", f, { x: m, y: footerY - 34, width: f.w - 2*m, height: 40 })}><text x="${m}" y="${footerY}" font-family="${layerFont(slide, "ctaLine", fontHead)}" font-size="32" font-weight="800" letter-spacing="2" fill="${layerColor(slide, "ctaLine") || p.accent}">${escXml(ctaText)}</text></g>` : ""}
       </g>`;
   } else {
     footerSVG = swipeFooter(p, f, typo);
@@ -905,7 +905,7 @@ function renderBodySVG(p, f, slide, category, scrimStrength, typo) {
     ${slide.sectionLabel ? `<rect x="${m}" y="${sectionLabelY-20}" width="4" height="24" fill="${p.accent}"/><text x="${m+18}" y="${sectionLabelY}" font-family="${fontBody}" font-size="${f.sectionLabelSize}" font-weight="700" letter-spacing="1.5" fill="${p.accent}">${escXml((slide.sectionLabel||"").toUpperCase())}</text>` : ""}
     <g ${textLayoutTransform(slide, "headline", f, { x: m, y: headlineStartY - hSize, width: f.w - 2*m, height: Math.max(hLineH, hLines.length * hLineH) })}><text x="${m}" y="${headlineStartY}" font-family="${layerFont(slide, "headline", fontHead)}" font-size="${hSize}" font-weight="400" fill="${layerColor(slide, "headline") || p.primaryText}">${tspans(hLines, m, headlineStartY, hLineH)}</text></g>
     <g ${textLayoutTransform(slide, "supportingText", f, { x: m, y: afterHeadlineY - 40, width: f.w - 2*m, height: Math.max(180, middleBlockH) })}>${middleSVG}</g>
-    ${hasCtaLine ? `<text x="${m}" y="${footerDividerY - 32}" font-family="${layerFont(slide, "ctaLine", fontHead)}" font-size="34" fill="${layerColor(slide, "ctaLine") || p.accent}">${escXml((slide.ctaLine||"").toUpperCase())}</text>` : ""}
+    ${hasCtaLine ? `<g ${textLayoutTransform(slide, "ctaLine", f, { x: m, y: footerDividerY - 66, width: f.w - 2*m, height: 40 })}><text x="${m}" y="${footerDividerY - 32}" font-family="${layerFont(slide, "ctaLine", fontHead)}" font-size="34" fill="${layerColor(slide, "ctaLine") || p.accent}">${escXml((slide.ctaLine||"").toUpperCase())}</text></g>` : ""}
     <rect x="${m}" y="${footerDividerY}" width="${f.w-2*m}" height="1" fill="${p.muted}" opacity="0.4"/>
     ${slide.tag ? `<rect x="${m}" y="${footerY-32}" width="${40+slide.tag.length*15}" height="44" rx="22" fill="none" stroke="${p.muted}" stroke-width="1.5"/><text x="${m+20}" y="${footerY-4}" font-family="${fontBody}" font-size="22" font-weight="600" letter-spacing="1" fill="${p.secondaryText}">${escXml((slide.tag||"").toUpperCase())}</text>` : ""}
     ${(hasCtaLine || (slide.totalSlides || 1) <= 1) ? "" : swipeArrow(p, f, f.w - m, footerY - 4)}
@@ -1067,6 +1067,19 @@ async function renderYouTubeThumbnail(slide, imageUrl, options = {}) {
   return sharp(cover.buffer).composite([{ input: layer }]).png().toBuffer();
 }
 
+// Background only: the cover photo with the requested dim, or a plain palette
+// gradient when there is no photo. Matches the dim used by the full render.
+async function renderPlate(p, f, cover, slide) {
+  const dim = Number(slide.dim);
+  const a = Number.isFinite(dim) && dim > 0 ? Math.min(0.8, dim).toFixed(2) : "0";
+  if (cover) {
+    const dimSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${f.w}" height="${f.h}"><rect width="${f.w}" height="${f.h}" fill="#000" fill-opacity="${a}"/></svg>`;
+    return sharp(cover.buffer).composite([{ input: await sharp(Buffer.from(dimSvg)).png().toBuffer() }]).png().toBuffer();
+  }
+  const bg = `<svg xmlns="http://www.w3.org/2000/svg" width="${f.w}" height="${f.h}"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${p.backgroundStart}"/><stop offset="1" stop-color="${p.backgroundEnd}"/></linearGradient></defs><rect width="${f.w}" height="${f.h}" fill="url(#g)"/></svg>`;
+  return sharp(Buffer.from(bg)).png().toBuffer();
+}
+
 async function renderStatCard(slide, category, paletteKey, format, imageUrl, options = {}) {
   if (String(format || "").toLowerCase().includes("thumbnail")) {
     return renderYouTubeThumbnail(slide, imageUrl, { ...options, palette: paletteKey });
@@ -1108,6 +1121,12 @@ async function renderStatCard(slide, category, paletteKey, format, imageUrl, opt
   if (!cover && !slide.customImage) {
     const missingText = hasRequestedArticleImage ? "SOURCE PHOTO UNAVAILABLE" : "NO ARTICLE PHOTO PROVIDED";
     labels.push(`<g><rect x="${f.margin}" y="${f.h-198}" width="390" height="42" rx="21" fill="${p.backgroundEnd}" fill-opacity="0.92" stroke="${p.accent}" stroke-opacity="0.9" stroke-width="2"/><text x="${f.margin+20}" y="${f.h-170}" font-family="${typo.body}" font-size="17" font-weight="700" letter-spacing="1.2" fill="${p.primaryText}">${missingText}</text></g>`);
+  }
+  // Plate mode: the photo (dimmed) or the palette background, with no text or
+  // chrome. The browser draws live text on top of this, so text edits never
+  // need a server round trip.
+  if (options.plateOnly || slide.plateOnly) {
+    return renderPlate(p, f, cover, slide);
   }
   const labeledSvg = labels.length ? svg.replace("</svg>", `${labels.join("")}</svg>`) : svg;
   const textLayer = await sharp(Buffer.from(labeledSvg)).png().toBuffer();
