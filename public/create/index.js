@@ -305,9 +305,13 @@
     repaint();
   };
 
-  window.cpCreateSetTemplate = function (id) {
+  window.cpCreateSetTemplate = function (id, autoAdvance) {
     var st = cs();
     st.template = id;
+    if (autoAdvance) {
+      window.cpCreateNext();
+      return;
+    }
     repaint();
   };
   window.cpFilterCreateTemplates = function (select) {

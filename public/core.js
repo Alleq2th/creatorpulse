@@ -1732,8 +1732,16 @@ function cpBgMenuHTML(tid, idx, slideIndex) {
   return `<div class="cc-bg-title">Background</div>
     <div class="cc-bg-thumbs" role="group" aria-label="Choose a background image">${thumbs}</div>
     <div class="cc-bg-row"><label class="btn bo bxs">Upload image<input type="file" accept="image/*" hidden onchange="cpPickCardBackground(this,'${tid}',${idx},${slideIndex})"/></label></div>
-    <label class="cc-bg-row"><span class="cc-style-label">Dimming</span><input type="range" min="0" max="80" value="${Math.round((sty.dim || 0) * 100)}" aria-label="Background dimming" oninput="cpSetCardStyle('${tid}',${idx},${slideIndex},'dim',this.value/100)"/></label>`;
+    <label class="cc-bg-row"><span class="cc-style-label">Dimming</span><input type="range" min="0" max="80" value="${Math.round((sty.dim || 0) * 100)}" aria-label="Background dimming" oninput="cpSetCardStyle('${tid}',${idx},${slideIndex},'dim',this.value/100)"/></label>
+    <label class="cc-bg-row"><span class="cc-style-label">Blurring</span><input type="range" min="0" max="24" value="${Math.round((((sty.backgroundAdjustments || {}).blur) ?? 0))}" aria-label="Background blurring" oninput="cpSetCardBackgroundAdjustment('${tid}',${idx},${slideIndex},'blur',Number(this.value))"/></label>`;
 }
+
+window.cpSetCardBackgroundAdjustment = (tid, idx, slideIndex, key, value) => {
+  const slide = cpCardSlide(tid, idx, slideIndex); if (!slide) return;
+  slide._style = slide._style || {};
+  slide._style.backgroundAdjustments = Object.assign({}, slide._style.backgroundAdjustments || {}, { [key]: value });
+  cpUpdateLiveStage(tid, idx, slideIndex);
+};
 
 // Chooses the article photo (index -1) or one of this card's earlier uploads.
 window.cpUseBackgroundAt = (tid, idx, slideIndex, i) => {
@@ -1968,7 +1976,18 @@ function cpUpdateLiveStage(tid, idx, slideIndex) {
     const status = stage.querySelector(".cc-live-status");
     if (status) status.textContent = "";
   } else {
-    if (plateEl) { plateEl.dataset.cpBgSrc = ""; plateEl.style.backgroundPosition = ""; plateEl.style.filter = ""; }
+    if (plateEl) {
+      plateEl.dataset.cpBgSrc = "";
+      plateEl.style.backgroundPosition = "";
+      const adj = sty.backgroundAdjustments || {};
+      const brightness = Math.max(0, Math.min(2, Number(adj.brightness ?? 1)));
+      const contrast = Math.max(0, Math.min(2, Number(adj.contrast ?? 1)));
+      const saturation = Math.max(0, Math.min(2, Number(adj.saturation ?? 1)));
+      const blur = Math.max(0, Math.min(24, Number(adj.blur ?? 0)));
+      plateEl.style.filter = (brightness !== 1 || contrast !== 1 || saturation !== 1 || blur > 0)
+        ? `brightness(${brightness}) contrast(${contrast}) saturate(${saturation}) blur(${blur}px)`
+        : "";
+    }
     cpEnsurePlate(tid, idx, slideIndex);
     cpPaintPlate(plateKey);
   }
