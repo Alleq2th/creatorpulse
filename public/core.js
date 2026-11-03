@@ -1682,6 +1682,7 @@ let cpCtxPanel = null;       // "font" | "color" | null: the panel open in the t
 let cpBgKey = null;          // the card whose background menu is open, if any
 const CP_CTX_COLORS = ["#ffffff", "#000000", "#ffd60a", "#44d7ff", "#ff3b30", "#34c759", "#a855f7", "#ff7a00"];
 const cpPlateCache = new Map(); // plate key -> { src, failed, pending }
+const cpPlateRequestChains = new Map(); // carousel key -> serial plate render promise
 
 function cpCanvasDragging(block) { return !!cpCanvasActive && cpCanvasActive.block === block; }
 
@@ -1864,8 +1865,8 @@ function cpEnsurePlate(tid, idx, slideIndex, forceRetry) {
   const useFallbackPlate = () => {
     // Do not depend on remote image decoding here: the branded local SVG
     // remains visible even if the image URL has expired or is blocked by CORS.
-    const fallbackSrc = sty.bgImage || slide.customImage || slide.localImg || localPlateImage(slide, {
-      format: ctx.format, palette: ctx.palette, theme: ctx.theme
+    const fallbackSrc = sty.bgImage || slide.customImage || slide.imageDataUrl || localPlateImage(slide, {
+      format: ctx.format, palette: ctx.palette, theme: ctx.theme, imageDataUrl: slide.imageDataUrl
     });
     if (fallbackSrc) {
       entry.src = fallbackSrc;
@@ -1875,7 +1876,11 @@ function cpEnsurePlate(tid, idx, slideIndex, forceRetry) {
       entry.failed = true;
     }
   };
-  generateCardsWithRetry(payload)
+  const requestKey = `${tid}-${idx}`;
+  const previousRequest = cpPlateRequestChains.get(requestKey) || Promise.resolve();
+  const request = previousRequest.catch(() => {}).then(() => generateCardsWithRetry(payload));
+  cpPlateRequestChains.set(requestKey, request.catch(() => {}));
+  request
     .then(cd => {
       const image = (cd.images || [])[0];
       if (typeof image !== "string" || !/^data:image\/(png|jpeg|jpg|webp|svg\+xml);base64,/i.test(image)) throw new Error("Card renderer returned no valid preview image");
@@ -2680,7 +2685,7 @@ function cpSyncGalleryPlate(gal) {
 window.cpOpenThemes = (tid, idx, slideIndex) => {
   const o = S.outs[tid]?.[idx];
   const slide = cpCardSlide(tid, idx, slideIndex);
-  if (!o || !o._renderCtx || !slide || o.type === "carousel") { toast("Themes work on a single graphic for now."); return; }
+  if (!o || !o._renderCtx || !slide) { toast("That graphic is not ready for themes yet."); return; }
   window.cpCloseThemes();
   const gal = { tid, idx, slideIndex, plate: null, failed: false };
   cpThemeGallery = gal;
@@ -2688,7 +2693,7 @@ window.cpOpenThemes = (tid, idx, slideIndex) => {
   overlay.className = "cc-th-overlay";
   overlay.id = "cthOverlay";
   overlay.innerHTML = `<div class="cc-th-sheet" role="dialog" aria-modal="true" aria-labelledby="cthTitle">
-    <div class="cc-th-head"><h2 id="cthTitle">Themes</h2><button type="button" class="btn bo bxs" onclick="cpCloseThemes()" aria-label="Close themes">Close</button></div>
+    <div class="cc-th-head"><div><h2 id="cthTitle">Themes</h2>${o.type === "carousel" ? '<p class="cc-th-hint">Your choice will apply consistently to every slide.</p>' : ""}</div><button type="button" class="btn bo bxs" onclick="cpCloseThemes()" aria-label="Close themes">Close</button></div>
     <div class="cc-th-body" id="cthBody"></div>
     <div class="cc-th-foot"><button type="button" class="btn bo bxs" onclick="cpRestoreTheme('${tid}',${idx},${slideIndex})">Restore original look</button></div>
   </div>`;
@@ -2709,10 +2714,25 @@ function cpApplyThemeLive(tid, idx, slideIndex) {
 }
 function cpApplyThemeResult(tid, idx, slideIndex, next) {
   const slide = cpCardSlide(tid, idx, slideIndex);
+  const output = S.outs[tid]?.[idx];
   if (!slide || !next) { toast("That theme isn't available."); return; }
-  slide._style = next;
+  if (output?.type === "carousel" && Array.isArray(output.slides)) {
+    const themeId = next.themeId;
+    const colourThemeId = next.colourThemeId;
+    output.slides.forEach((item, si) => {
+      item._style = item._style || {};
+      const current = item._style;
+      const themed = themeId
+        ? window.CardThemes.applyTheme(current, themeId)
+        : window.CardThemes.applyColourTheme(current, colourThemeId);
+      if (themed) item._style = themed;
+      cpApplyThemeLive(tid, idx, si);
+    });
+  } else {
+    slide._style = next;
+    cpApplyThemeLive(tid, idx, slideIndex);
+  }
   window.cpCloseThemes();
-  cpApplyThemeLive(tid, idx, slideIndex);
 }
 window.cpPickTheme = (tid, idx, slideIndex, themeId) => {
   const slide = cpCardSlide(tid, idx, slideIndex);
@@ -2726,12 +2746,25 @@ window.cpPickColourTheme = (tid, idx, slideIndex, colourId) => {
 };
 window.cpRestoreTheme = (tid, idx, slideIndex) => {
   const slide = cpCardSlide(tid, idx, slideIndex);
+  const output = S.outs[tid]?.[idx];
   if (!slide) return;
-  const res = window.CardThemes.restore(slide._style || {});
-  if (!res.restored) { toast("This graphic is already in its original look."); return; }
-  slide._style = res.style;
+  if (output?.type === "carousel" && Array.isArray(output.slides)) {
+    let restored = false;
+    output.slides.forEach((item, si) => {
+      const res = window.CardThemes.restore(item._style || {});
+      if (!res.restored) return;
+      item._style = res.style;
+      restored = true;
+      cpApplyThemeLive(tid, idx, si);
+    });
+    if (!restored) { toast("These slides are already in their original look."); return; }
+  } else {
+    const res = window.CardThemes.restore(slide._style || {});
+    if (!res.restored) { toast("This graphic is already in its original look."); return; }
+    slide._style = res.style;
+    cpApplyThemeLive(tid, idx, slideIndex);
+  }
   window.cpCloseThemes();
-  cpApplyThemeLive(tid, idx, slideIndex);
 };
 window.copyOutput = (tid, idx) => { const output=S.outs[tid]?.[idx]; if(output) copyTxt(output.content||""); };
 window.toggleOutputEdit = (tid, idx) => {
