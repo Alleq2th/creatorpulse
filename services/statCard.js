@@ -1100,6 +1100,12 @@ async function renderStatCard(slide, category, paletteKey, format, imageUrl, opt
   const wantsCover = type === "hook" || slide.useCover || slide.imageUrl || isFirstSlide || isSingle;
   const photoUrl = slide.imageUrl || (wantsCover ? imageUrl : null);
   if (!cover && photoUrl) cover = await fetchCoverImage(photoUrl, f.w, f.h, options.focalPoint || slide.focalPoint);
+  // Plate mode: clean background photo (dimmed) or palette gradient with no text
+  // or chrome. Early return isolates clean plates and skips text layout / SVG processing.
+  if (options.plateOnly || slide.plateOnly) {
+    return renderPlate(p, f, cover, slide);
+  }
+
   const hasRequestedArticleImage = !!(slide.imageUrl || imageUrl);
   const scrimStrength = cover ? cover.brightness : null;
 
@@ -1121,12 +1127,6 @@ async function renderStatCard(slide, category, paletteKey, format, imageUrl, opt
   if (!cover && !slide.customImage) {
     const missingText = hasRequestedArticleImage ? "SOURCE PHOTO UNAVAILABLE" : "NO ARTICLE PHOTO PROVIDED";
     labels.push(`<g><rect x="${f.margin}" y="${f.h-198}" width="390" height="42" rx="21" fill="${p.backgroundEnd}" fill-opacity="0.92" stroke="${p.accent}" stroke-opacity="0.9" stroke-width="2"/><text x="${f.margin+20}" y="${f.h-170}" font-family="${typo.body}" font-size="17" font-weight="700" letter-spacing="1.2" fill="${p.primaryText}">${missingText}</text></g>`);
-  }
-  // Plate mode: the photo (dimmed) or the palette background, with no text or
-  // chrome. The browser draws live text on top of this, so text edits never
-  // need a server round trip.
-  if (options.plateOnly || slide.plateOnly) {
-    return renderPlate(p, f, cover, slide);
   }
   const labeledSvg = labels.length ? svg.replace("</svg>", `${labels.join("")}</svg>`) : svg;
   const textLayer = await sharp(Buffer.from(labeledSvg)).png().toBuffer();
@@ -1151,16 +1151,24 @@ async function renderStatCard(slide, category, paletteKey, format, imageUrl, opt
 // a forced restart. Capping how many run at once bounds peak memory
 // regardless of carousel size, at the cost of a slightly longer total
 // render time — a trade worth making over the service restarting.
-const CARD_RENDER_CONCURRENCY = 3;
+// Render carousel slides sequentially (concurrency 1) rather than in parallel.
+// Each slide with a photo runs a full decode+resize+composite pipeline through
+// sharp — sequential processing ensures peak memory remains bounded to a single
+// slide's buffers, eliminating out-of-memory crashes on memory-constrained servers.
+const CARD_RENDER_CONCURRENCY = 1;
 async function renderCardSet(slides, category, paletteKey, format, imageUrl, options = {}) {
   const total = slides.length;
   const buffers = new Array(total);
-  for (let start = 0; start < total; start += CARD_RENDER_CONCURRENCY) {
-    const batch = slides.slice(start, start + CARD_RENDER_CONCURRENCY);
-    const results = await Promise.all(
-      batch.map((s, j) => renderStatCard({ ...s, slideNumber: start + j + 1, totalSlides: total }, category, paletteKey, format, imageUrl, options))
+  for (let i = 0; i < total; i++) {
+    const s = slides[i];
+    buffers[i] = await renderStatCard(
+      { ...s, slideNumber: i + 1, totalSlides: total },
+      category,
+      paletteKey,
+      format,
+      imageUrl,
+      options
     );
-    results.forEach((buf, j) => { buffers[start + j] = buf; });
   }
   return buffers.map(b => `data:image/png;base64,${b.toString("base64")}`);
 }
