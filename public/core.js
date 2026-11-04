@@ -1263,6 +1263,19 @@ function renderTrend(t){
 }
 
 
+function renderCardLiveStage(o, tid, idx, slideIndex, slide, aspectRatio) {
+  const key = `${tid}-${idx}-${slideIndex}`;
+  const live = cpCardSlide(tid, idx, slideIndex) || slide || {};
+  const layout = live.textLayout || {};
+  const box = (name, label, text) => {
+    const pos = layout[name] || CP_LIVE_DEFAULT_BOX[name];
+    const sel = !!cpCanvasSel && cpCanvasSel.key === key && cpCanvasSel.name === name;
+    const hasText = text !== undefined && text !== null && String(text).trim().length > 0;
+    return `<div class="cp-canvas-block${sel ? " is-selected" : ""}${hasText ? "" : " is-empty"}" data-canvas-key="${key}" data-canvas-block="${name}" tabindex="0" role="slider" aria-label="Drag or resize ${label}" style="left:${pos.x*100}%;top:${pos.y*100}%;width:${pos.width*100}%;height:${pos.height*100}%"><div class="cc-live-text${hasText ? "" : " is-empty"}" data-cp-live="${name}" style="${cpLiveTextStyle(live, name, o, tid)}">${esc(hasText ? text : label)}</div><span class="cp-canvas-label">${label}</span><button type="button" class="cp-canvas-resize" data-canvas-resize="true" aria-label="Resize ${label}"></button></div>`;
+  };
+  return `<div class="cp-canvas-stage cc-live-stage" data-canvas-stage="${key}" data-tid="${tid}" data-idx="${idx}" data-slide-index="${slideIndex}" style="aspect-ratio:${aspectRatio}"><div class="cc-live-plate"></div><div class="cc-live-dim"></div><div class="cc-live-status" role="status"></div><div class="cp-canvas-blocks" data-canvas-key="${key}" data-slide-index="${slideIndex}" data-card-key="${tid}-${idx}">${CARD_LAYERS.map(L => box(L.key, L.label, live[L.field])).join("")}</div></div>`;
+}
+
 function renderPlatformMockup(o, tid, idx, curPlat) {
   const prevKey = `${tid}-${idx}`;
   const sIdx = (S.previewSlideIdx && S.previewSlideIdx[prevKey]) || 0;
@@ -1275,6 +1288,8 @@ function renderPlatformMockup(o, tid, idx, curPlat) {
   const userDisp = S.user?.name || "CreatorPulse";
   const initial = userDisp.slice(0, 1).toUpperCase();
   const textContent = o.type === "text" ? String(o.content || "") : (curSlide ? [curSlide.headline, curSlide.stat, curSlide.body].filter(Boolean).join(" · ") : "");
+  const isCardGraphic = o.isCard || isCarousel;
+  const activeSlideObj = isCarousel ? curSlide : (o.editSlide || { headline: S.trends.find(t => t.id === tid)?.headline || o.label });
 
   // Tab switcher
   const tabs = `
@@ -1323,7 +1338,7 @@ function renderPlatformMockup(o, tid, idx, curPlat) {
           <div style="color:#aaa;font-size:13px;letter-spacing:1px">•••</div>
         </div>
         <div class="mock-ig-body" style="position:relative">
-          ${imgEl}
+          ${isCardGraphic ? renderCardLiveStage(o, tid, idx, exportSi, activeSlideObj, "4/5") : imgEl}
           ${navArrows}
         </div>
         ${dots}
@@ -1345,9 +1360,11 @@ function renderPlatformMockup(o, tid, idx, curPlat) {
     const silentWarning = silent && silentText.length > 90 ? `<div style="position:absolute;top:42px;left:8px;right:8px;background:rgba(160,35,22,.94);color:white;padding:6px 8px;font-size:10px;z-index:4;border-radius:5px">Text is ${silentText.length} characters. Keep Silent Camera overlay under 90 for readability.</div>` : "";
     const slideImg = curSlide?.img || o.img || o.imageUrl || "";
     const slideFb = curSlide?.localImg || o.fallbackImg || "";
-    const mediaEl = slideImg
-      ? `<img loading="lazy" decoding="async" data-cp-export="${tid}-${idx}-${exportSi}" onload="this.dataset.loaded='true'" src="${slideImg}" onerror="cardImgFail(this, this.dataset.fb)" data-fb="${slideFb}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"/>`
-      : `<div style="padding:20px;text-align:center;color:#fff;font-weight:700;font-size:15px;z-index:1">${esc(textContent.slice(0, 140))}</div>`;
+    const mediaEl = isCardGraphic
+      ? renderCardLiveStage(o, tid, idx, exportSi, activeSlideObj, "9/16")
+      : (slideImg
+        ? `<img loading="lazy" decoding="async" data-cp-export="${tid}-${idx}-${exportSi}" onload="this.dataset.loaded='true'" src="${slideImg}" onerror="cardImgFail(this, this.dataset.fb)" data-fb="${slideFb}" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover"/>`
+        : `<div style="padding:20px;text-align:center;color:#fff;font-weight:700;font-size:15px;z-index:1">${esc(textContent.slice(0, 140))}</div>`);
 
     inner = `
       <div class="mock-shell mock-tt mock-tt-shell">
@@ -1375,9 +1392,11 @@ function renderPlatformMockup(o, tid, idx, curPlat) {
   } else if (curPlat === "youtube") {
     const slideImg = curSlide?.img || o.img || o.imageUrl || "";
     const slideFb = curSlide?.localImg || o.fallbackImg || "";
-    const mediaEl = slideImg
-      ? `<img loading="lazy" decoding="async" data-cp-export="${tid}-${idx}-${exportSi}" onload="this.dataset.loaded='true'" src="${slideImg}" onerror="cardImgFail(this, this.dataset.fb)" data-fb="${slideFb}" style="width:100%;height:100%;object-fit:cover"/>`
-      : `<div style="padding:16px;color:#fff;font-size:13px;font-weight:600;text-align:center">${esc(textContent.slice(0, 90))}</div>`;
+    const mediaEl = isCardGraphic
+      ? renderCardLiveStage(o, tid, idx, exportSi, activeSlideObj, "16/9")
+      : (slideImg
+        ? `<img loading="lazy" decoding="async" data-cp-export="${tid}-${idx}-${exportSi}" onload="this.dataset.loaded='true'" src="${slideImg}" onerror="cardImgFail(this, this.dataset.fb)" data-fb="${slideFb}" style="width:100%;height:100%;object-fit:cover"/>`
+        : `<div style="padding:16px;color:#fff;font-size:13px;font-weight:600;text-align:center">${esc(textContent.slice(0, 90))}</div>`);
 
     inner = `
       <div class="mock-shell mock-yt">
@@ -1403,9 +1422,11 @@ function renderPlatformMockup(o, tid, idx, curPlat) {
     // X (Twitter)
     const slideImg = curSlide?.img || o.img || "";
     const slideFb = curSlide?.localImg || o.fallbackImg || "";
-    const mediaEl = slideImg
-      ? `<div class="mock-x-media"><img loading="lazy" decoding="async" data-cp-export="${tid}-${idx}-${exportSi}" onload="this.dataset.loaded='true'" src="${slideImg}" onerror="cardImgFail(this, this.dataset.fb)" data-fb="${slideFb}" style="width:100%;aspect-ratio:16/9;object-fit:cover;display:block"/></div>`
-      : "";
+    const mediaEl = isCardGraphic
+      ? `<div class="mock-x-media">${renderCardLiveStage(o, tid, idx, exportSi, activeSlideObj, "16/9")}</div>`
+      : (slideImg
+        ? `<div class="mock-x-media"><img loading="lazy" decoding="async" data-cp-export="${tid}-${idx}-${exportSi}" onload="this.dataset.loaded='true'" src="${slideImg}" onerror="cardImgFail(this, this.dataset.fb)" data-fb="${slideFb}" style="width:100%;aspect-ratio:16/9;object-fit:cover;display:block"/></div>`
+        : "");
 
     inner = `
       <div class="mock-shell mock-x">
@@ -1436,7 +1457,7 @@ function renderPlatformMockup(o, tid, idx, curPlat) {
   return `<div class="mock-wrap">${tabs}${inner}</div>`;
 }
 
-function renderCardCanvasEditor(o, tid, idx, slideIndex, slide, imageUrl, aspectRatio) {
+function renderCardCanvasEditor(o, tid, idx, slideIndex, slide, imageUrl, aspectRatio, options = {}) {
   const key = `${tid}-${idx}-${slideIndex}`;
   const live = cpCardSlide(tid, idx, slideIndex) || slide || {};
   const layout = live.textLayout || {};
@@ -1447,8 +1468,8 @@ function renderCardCanvasEditor(o, tid, idx, slideIndex, slide, imageUrl, aspect
     return `<div class="cp-canvas-block${sel ? " is-selected" : ""}${hasText ? "" : " is-empty"}" data-canvas-key="${key}" data-canvas-block="${name}" tabindex="0" role="slider" aria-label="Drag or resize ${label}" style="left:${pos.x*100}%;top:${pos.y*100}%;width:${pos.width*100}%;height:${pos.height*100}%"><div class="cc-live-text${hasText ? "" : " is-empty"}" data-cp-live="${name}" style="${cpLiveTextStyle(live, name, o, tid)}">${esc(hasText ? text : label)}</div><span class="cp-canvas-label">${label}</span><button type="button" class="cp-canvas-resize" data-canvas-resize="true" aria-label="Resize ${label}"></button></div>`;
   };
   const sty = live._style || {};
-  const stage = `<div class="cp-canvas-stage cc-live-stage" data-canvas-stage="${key}" data-tid="${tid}" data-idx="${idx}" data-slide-index="${slideIndex}" style="aspect-ratio:${aspectRatio}"><div class="cc-live-plate"></div><div class="cc-live-dim"></div><div class="cc-live-status" role="status"></div><div class="cp-canvas-blocks" data-canvas-key="${key}" data-slide-index="${slideIndex}" data-card-key="${tid}-${idx}">${CARD_LAYERS.map(L => box(L.key, L.label, live[L.field])).join("")}</div></div>`;
-  const ctxBar = `<div class="cc-ctx" data-cp-ctx="${key}" data-tid="${tid}" data-idx="${idx}" data-slide-index="${slideIndex}" hidden><div class="cc-ctx-bar" role="toolbar" aria-label="Text tools"><span class="cc-ctx-name"></span><button type="button" class="cc-ctx-btn" data-cp-ctx-kind="font" aria-pressed="false" onclick="cpToggleCtxPanel('font')">Font</button><button type="button" class="cc-ctx-btn" data-cp-ctx-kind="color" aria-pressed="false" onclick="cpToggleCtxPanel('color')">Color</button></div><div class="cc-ctx-panel" hidden></div></div>`;
+  const stage = options && options.controlsOnly ? "" : renderCardLiveStage(o, tid, idx, slideIndex, slide, aspectRatio);
+  const ctxBar = `<div class="cc-ctx" data-cp-ctx="${key}" data-tid="${tid}" data-idx="${idx}" data-slide-index="${slideIndex}" hidden><div class="cc-ctx-bar" role="toolbar" aria-label="Text tools"><span class="cc-ctx-name"></span><button type="button" class="cc-ctx-btn" data-cp-ctx-kind="font" aria-pressed="false" onclick="cpToggleCtxPanel('font')">Font</button><button type="button" class="cc-ctx-btn" data-cp-ctx-kind="size" aria-pressed="false" onclick="cpToggleCtxPanel('size')">Size</button><button type="button" class="cc-ctx-btn" data-cp-ctx-kind="color" aria-pressed="false" onclick="cpToggleCtxPanel('color')">Color</button><button type="button" class="cc-ctx-btn" onclick="cpTriggerTextEdit('${key}')">✏️ Edit</button></div><div class="cc-ctx-panel" hidden></div></div>`;
   const bgBar = `<div class="cc-bg" data-cp-bg="${key}" data-tid="${tid}" data-idx="${idx}" data-slide-index="${slideIndex}" hidden></div>`;
   setTimeout(cpSyncLiveStages, 0);
   setTimeout(cpRefreshCtx, 0);
@@ -1457,8 +1478,9 @@ function renderCardCanvasEditor(o, tid, idx, slideIndex, slide, imageUrl, aspect
   const defHandle = S.user?.handle || S.user?.name?.toLowerCase().replace(/\s+/g, "") || "creatorpulse";
   const mockRow = (k, label, val, def) => `<label class="cc-post-row"><span class="cc-post-label">${label}</span><input type="text" value="${esc(val)}" placeholder="${esc(def)}" aria-label="Phone ${label.toLowerCase()}" oninput="cpSetMockText('${tid}','${k}',this.value)"/></label>`;
   const themeLabel = window.CardThemes?.themeName(sty.themeId) || window.CardThemes?.colourName(sty.colourThemeId) || "Original look";
+  const instructions = options && options.controlsOnly ? "" : `<div class="cp-canvas-instructions">Tap text to select it, then pick its Font or Color. Double-tap to edit the words. Drag or resize the box. Tap the photo to change it.</div>`;
   return `<div class="cp-canvas-editor" data-cp-style="${key}">
-    <div class="cp-canvas-instructions">Tap text to select it, then pick its Font or Color. Double-tap to edit the words. Drag or resize the box. Tap the photo to change it.</div>
+    ${instructions}
     ${stage}${ctxBar}${bgBar}
     <div class="cc-tools">
       <button type="button" class="btn bp bxs cc-th-open" onclick="cpOpenThemes('${tid}',${idx},${slideIndex})">Themes</button>
@@ -1491,7 +1513,7 @@ function renderOut(o, tid, idx){
     return `<div class="oc">
       <div class="oh">${badge}<span style="font-size:10.5px;color:var(--mu)">Swipe format above to test</span></div>
       ${mockupHTML}
-      ${o.isCard ? renderCardCanvasEditor(o,tid,idx,0,o.editSlide||{headline:S.trends.find(t=>t.id===tid)?.headline||o.label},o.img,aspectRatioCSS.replace('/','/')) : ""}
+      ${o.isCard ? renderCardCanvasEditor(o,tid,idx,0,o.editSlide||{headline:S.trends.find(t=>t.id===tid)?.headline||o.label},o.img,aspectRatioCSS.replace('/','/'), { controlsOnly: true }) : ""}
       ${o.isCard ? "" : `
       <details style="margin:0 10px 10px;background:var(--sf);border-radius:6px;padding:8px 12px;border:1px solid var(--br)">
         <summary style="cursor:pointer;font-size:11px;font-weight:600;color:var(--mu2)">View raw image canvas</summary>
@@ -1506,23 +1528,36 @@ function renderOut(o, tid, idx){
     </div>`;
   }
   if(o.type === "carousel"){
-    const slideText = s => [s.headline, s.stat && s.statLabel ? `${s.stat} — ${s.statLabel}` : s.stat, s.sectionLabel, s.body, s.supportingText].filter(Boolean).join("\n");
-    const slides = (o.slides||[]).map((s,si)=>`<div class="cc-slide"><div class="cc-slide-head"><div class="cc-slide-label">Slide ${s.slideNumber} · ${esc(s.type||"")}</div>${s.img?`<button class="btn bo bxs tipbtn" data-tip="Download this slide" title="Download this slide" aria-label="Download slide ${s.slideNumber}" onclick="cpDownloadCard('${tid}',${idx},${si},'slide-${s.slideNumber}.jpg')" style="padding:3px 8px">${I.dl}</button>`:""}</div>${renderCardCanvasEditor(o,tid,idx,si,s,s.img,"4/5")}</div>`).join("");
-    const cp = (o.slides||[]).map(s=>`SLIDE ${s.slideNumber}: ${slideText(s)}`).join("\n\n");
-    const imgs = (o.slides||[]).map(s=>s.img).filter(Boolean);
+    const sIdx = (S.previewSlideIdx && S.previewSlideIdx[prevKey]) || 0;
+    const curSlide = (o.slides||[])[sIdx] || (o.slides||[])[0] || {};
+    const si = sIdx;
+    const s = curSlide;
+    const totalSlides = (o.slides||[]).length;
+    const slideTabs = (o.slides||[]).map((slide, i) => {
+      const on = i === sIdx;
+      return `<button type="button" class="cc-slide-tab${on ? ' on' : ''}" onclick="setPreviewSlide('${prevKey}',${i})">Slide ${slide.slideNumber || (i + 1)}</button>`;
+    }).join("");
+    const slideText = sl => [sl.headline, sl.stat && sl.statLabel ? `${sl.stat} — ${sl.statLabel}` : sl.stat, sl.sectionLabel, sl.body, sl.supportingText].filter(Boolean).join("\n");
+    const cp = (o.slides||[]).map(sl=>`SLIDE ${sl.slideNumber}: ${slideText(sl)}`).join("\n\n");
     const dlAllBtn = o.slides?.length ? `<button class="btn bo bxs tipbtn" data-tip="Download all slide images" title="Download all slides" aria-label="Download all slides" onclick="cpDownloadAll('${tid}',${idx})">${I.dl} All</button>` : "";
     return `<div class="oc">
       <div class="oh">
-        <span class="ol">Carousel · ${o.slides?.length||0} slides · ${esc(o.theme||'modern_dark')}</span>
+        <span class="ol">Carousel · ${totalSlides} slides · ${esc(o.theme||'modern_dark')}</span>
         <div style="display:flex;gap:6px">
           ${dlAllBtn}
           <button class="btn bo bxs tipbtn" data-tip="Copy carousel text" title="Copy carousel text" aria-label="Copy carousel text" onclick="copyTxt(\`${cp.replace(/`/g,"\\`")}\`)">${I.copy}</button>
         </div>
       </div>
       ${mockupHTML}
-      <div class="cc-slides">${slides}</div>
+      <div class="cc-carousel-bar">
+        <span class="cc-carousel-bar-label">Slide ${sIdx + 1} of ${totalSlides}</span>
+        <div class="cc-carousel-tabs" role="tablist" aria-label="Carousel slides">${slideTabs}</div>
+      </div>
+      ${renderCardCanvasEditor(o,tid,idx,si,s,s.img,"4/5", { controlsOnly: true })}
       <details class="cc-copy-details"><summary>View slide text</summary><div class="cc-copy-text">${esc(cp)}</div></details>
       <div class="ofoot">
+        <button class="btn bo bxs tipbtn" data-tip="Download this slide" title="Download this slide" aria-label="Download slide ${curSlide.slideNumber || (sIdx + 1)}" onclick="cpDownloadCard('${tid}',${idx},${sIdx},'slide-${curSlide.slideNumber || (sIdx + 1)}.jpg')">${I.dl} Download Slide ${curSlide.slideNumber || (sIdx + 1)}</button>
+        ${dlAllBtn}
         <button class="btn bp bxs tipbtn" data-tip="Save to library" title="Save to library" aria-label="Save to library" onclick="saveOut('${tid}',${idx})">${I.save} Save</button>
       </div>
     </div>`;
@@ -1732,12 +1767,101 @@ function cpBgMenuHTML(tid, idx, slideIndex) {
   const thumb = (src, label, on, call) => `<button type="button" class="cc-bg-thumb${on ? " active" : ""}" aria-pressed="${on}" aria-label="${esc(label)}" style="${src ? `background-image:url('${esc(src)}')` : ""}" onclick="${call}"><span>${esc(label)}</span></button>`;
   const thumbs = thumb(articleSrc, "Article photo", !cur, `cpUseBackgroundAt('${tid}',${idx},${slideIndex},-1)`)
     + history.map((h, i) => thumb(h.src, h.name || "Upload", cur === h.src, `cpUseBackgroundAt('${tid}',${idx},${slideIndex},${i})`)).join("");
-  return `<div class="cc-bg-title">Background</div>
+  const dimVal = Math.round((sty.dim || 0) * 100);
+  const blurVal = Math.round((((sty.backgroundAdjustments || {}).blur) ?? 0) / 24 * 100);
+  const curColor = (sty.bgColor || "#0a0a0c").toLowerCase();
+  const grad = sty.bgGradient || { color1: "#312e81", color2: "#09090b" };
+  return `<div class="cc-bg-title">Background & Effects</div>
     <div class="cc-bg-thumbs" role="group" aria-label="Choose a background image">${thumbs}</div>
     <div class="cc-bg-row"><label class="btn bo bxs">Upload image<input type="file" accept="image/*" hidden onchange="cpPickCardBackground(this,'${tid}',${idx},${slideIndex})"/></label></div>
-    <label class="cc-bg-row"><span class="cc-style-label">Dimming</span><input type="range" min="0" max="80" value="${Math.round((sty.dim || 0) * 100)}" aria-label="Background dimming" oninput="cpSetCardStyle('${tid}',${idx},${slideIndex},'dim',this.value/100)"/></label>
-    <label class="cc-bg-row"><span class="cc-style-label">Blurring</span><input type="range" min="0" max="24" value="${Math.round((((sty.backgroundAdjustments || {}).blur) ?? 0))}" aria-label="Background blurring" oninput="cpSetCardBackgroundAdjustment('${tid}',${idx},${slideIndex},'blur',Number(this.value))"/></label>`;
+    <label class="cc-bg-row cc-bg-control-row"><span class="cc-style-label">Dimming</span><span class="cc-bg-val" id="dim-val-${tid}-${idx}-${slideIndex}">${dimVal}%</span><input type="range" class="cc-slider" min="0" max="100" value="${dimVal}" aria-label="Background dimming" oninput="cpSetCardStyle('${tid}',${idx},${slideIndex},'dim',this.value/100)"/></label>
+    <div class="cc-bg-ticks">
+      <button type="button" class="cc-bg-tick" onclick="cpSetCardDimVal('${tid}',${idx},${slideIndex},0)">0%</button>
+      <button type="button" class="cc-bg-tick" onclick="cpSetCardDimVal('${tid}',${idx},${slideIndex},25)">25%</button>
+      <button type="button" class="cc-bg-tick" onclick="cpSetCardDimVal('${tid}',${idx},${slideIndex},50)">50%</button>
+      <button type="button" class="cc-bg-tick" onclick="cpSetCardDimVal('${tid}',${idx},${slideIndex},75)">75%</button>
+      <button type="button" class="cc-bg-tick" onclick="cpSetCardDimVal('${tid}',${idx},${slideIndex},100)">100%</button>
+    </div>
+    <label class="cc-bg-row cc-bg-control-row"><span class="cc-style-label">Blurring</span><span class="cc-bg-val" id="blur-val-${tid}-${idx}-${slideIndex}">${blurVal}%</span><input type="range" class="cc-slider" min="0" max="100" value="${blurVal}" aria-label="Background blurring" oninput="cpSetCardBlurPct('${tid}',${idx},${slideIndex},this.value)"/></label>
+    <div class="cc-bg-ticks">
+      <button type="button" class="cc-bg-tick" onclick="cpSetCardBlurPct('${tid}',${idx},${slideIndex},0)">0%</button>
+      <button type="button" class="cc-bg-tick" onclick="cpSetCardBlurPct('${tid}',${idx},${slideIndex},25)">25%</button>
+      <button type="button" class="cc-bg-tick" onclick="cpSetCardBlurPct('${tid}',${idx},${slideIndex},50)">50%</button>
+      <button type="button" class="cc-bg-tick" onclick="cpSetCardBlurPct('${tid}',${idx},${slideIndex},75)">75%</button>
+      <button type="button" class="cc-bg-tick" onclick="cpSetCardBlurPct('${tid}',${idx},${slideIndex},100)">100%</button>
+    </div>
+    <div class="cc-bg-control-row">
+      <div class="cc-bg-control-head"><span class="cc-style-label">Solid Color</span></div>
+      <div class="cc-bg-color-swatches">
+        ${["#000000", "#0f172a", "#1e1b4b", "#064e3b", "#4c0519", "#18181b", "#083344", "#3b0764"].map(c => `
+          <button type="button" class="cc-ctx-swatch${curColor === c ? ' active' : ''}" style="background:${c};width:32px;height:32px" onclick="cpSetCardBgColor('${tid}',${idx},${slideIndex},'${c}')"></button>
+        `).join("")}
+        <label class="cc-ctx-swatch cc-ctx-custom" style="width:32px;height:32px" title="Custom background color">
+          <input type="color" value="${curColor}" oninput="cpSetCardBgColor('${tid}',${idx},${slideIndex},this.value)"/>
+        </label>
+      </div>
+    </div>
+    <div class="cc-bg-control-row">
+      <div class="cc-bg-control-head"><span class="cc-style-label">Two-Color Gradient</span></div>
+      <div class="cc-bg-grad-row">
+        <label class="cc-bg-grad-picker">Color 1: <input type="color" value="${grad.color1 || '#312e81'}" oninput="cpSetCardGradientColor('${tid}',${idx},${slideIndex},1,this.value)"/></label>
+        <label class="cc-bg-grad-picker">Color 2: <input type="color" value="${grad.color2 || '#09090b'}" oninput="cpSetCardGradientColor('${tid}',${idx},${slideIndex},2,this.value)"/></label>
+      </div>
+      <div class="cc-bg-grad-presets" role="group" aria-label="Gradient presets">
+        <button type="button" class="cc-bg-grad-preset" style="background:linear-gradient(135deg,#312e81,#09090b)" onclick="cpApplyGradientPreset('${tid}',${idx},${slideIndex},'#312e81','#09090b')" title="Indigo Night"></button>
+        <button type="button" class="cc-bg-grad-preset" style="background:linear-gradient(135deg,#083344,#164e63)" onclick="cpApplyGradientPreset('${tid}',${idx},${slideIndex},'#083344','#164e63')" title="Cyber Ocean"></button>
+        <button type="button" class="cc-bg-grad-preset" style="background:linear-gradient(135deg,#831843,#1e1b4b)" onclick="cpApplyGradientPreset('${tid}',${idx},${slideIndex},'#831843','#1e1b4b')" title="Sunset Flame"></button>
+        <button type="button" class="cc-bg-grad-preset" style="background:linear-gradient(135deg,#064e3b,#022c22)" onclick="cpApplyGradientPreset('${tid}',${idx},${slideIndex},'#064e3b','#022c22')" title="Emerald Dark"></button>
+        <button type="button" class="cc-bg-grad-preset" style="background:linear-gradient(135deg,#3b0764,#0f172a)" onclick="cpApplyGradientPreset('${tid}',${idx},${slideIndex},'#3b0764','#0f172a')" title="Midnight Violet"></button>
+      </div>
+    </div>`;
 }
+
+window.cpSetCardDimVal = (tid, idx, slideIndex, pct) => {
+  const p = Math.max(0, Math.min(100, Number(pct) || 0));
+  cpSetCardStyle(tid, idx, slideIndex, "dim", p / 100);
+  const input = document.querySelector(`[data-cp-bg="${tid}-${idx}-${slideIndex}"] input[aria-label="Background dimming"]`);
+  if (input) input.value = p;
+  const valEl = document.getElementById(`dim-val-${tid}-${idx}-${slideIndex}`);
+  if (valEl) valEl.textContent = `${Math.round(p)}%`;
+};
+
+window.cpSetCardBlurPct = (tid, idx, slideIndex, pct) => {
+  const p = Math.max(0, Math.min(100, Number(pct) || 0));
+  const px = Math.round(p / 100 * 24);
+  cpSetCardBackgroundAdjustment(tid, idx, slideIndex, "blur", px);
+  const valEl = document.getElementById(`blur-val-${tid}-${idx}-${slideIndex}`);
+  if (valEl) valEl.textContent = `${Math.round(p)}%`;
+  const input = document.querySelector(`[data-cp-bg="${tid}-${idx}-${slideIndex}"] input[aria-label="Background blurring"]`);
+  if (input) input.value = p;
+};
+
+window.cpSetCardBgColor = (tid, idx, slideIndex, color) => {
+  const slide = cpCardSlide(tid, idx, slideIndex); if (!slide) return;
+  slide._style = slide._style || {};
+  slide._style.bgColor = color;
+  delete slide._style.bgGradient;
+  cpUpdateLiveStage(tid, idx, slideIndex);
+  cpRefreshBgMenu();
+};
+
+window.cpSetCardGradientColor = (tid, idx, slideIndex, num, color) => {
+  const slide = cpCardSlide(tid, idx, slideIndex); if (!slide) return;
+  slide._style = slide._style || {};
+  const cur = slide._style.bgGradient || { color1: "#312e81", color2: "#09090b" };
+  slide._style.bgGradient = Object.assign({}, cur, { [`color${num}`]: color });
+  delete slide._style.bgColor;
+  cpUpdateLiveStage(tid, idx, slideIndex);
+};
+
+window.cpApplyGradientPreset = (tid, idx, slideIndex, c1, c2) => {
+  const slide = cpCardSlide(tid, idx, slideIndex); if (!slide) return;
+  slide._style = slide._style || {};
+  slide._style.bgGradient = { color1: c1, color2: c2, angle: 135 };
+  delete slide._style.bgColor;
+  cpUpdateLiveStage(tid, idx, slideIndex);
+  cpRefreshBgMenu();
+};
 
 window.cpAddCardLayer = function(tid, idx, slideIndex, layerKey) {
   const layer = CARD_LAYERS.find(L => L.key === layerKey);
@@ -1797,6 +1921,27 @@ function cpCtxPanelHTML(tid, idx, slideIndex, name, kind) {
     }).join("");
     return `<div class="cc-ctx-list" role="listbox" aria-label="Font">${items}</div>`;
   }
+  if (kind === "size") {
+    const k = Number((sty.layerScale || {})[name]) || 1;
+    const curPct = Math.round(k * 100);
+    return `<div class="cc-ctx-size-panel">
+      <div class="cc-ctx-size-head">
+        <span class="cc-style-label">Text size</span>
+        <span class="cc-bg-val" id="size-val-${tid}-${idx}-${slideIndex}-${name}">${curPct}%</span>
+      </div>
+      <div class="cc-ctx-size-row">
+        <button type="button" class="cc-ctx-size-btn" onclick="cpAdjustLayerScale('${tid}',${idx},${slideIndex},'${name}',-0.1)" title="Smaller">A−</button>
+        <input type="range" class="cc-slider cc-ctx-size-slider" min="50" max="200" value="${curPct}" aria-label="Text size percentage" oninput="cpSetLayerScale('${tid}',${idx},${slideIndex},'${name}',this.value/100)"/>
+        <button type="button" class="cc-ctx-size-btn" onclick="cpAdjustLayerScale('${tid}',${idx},${slideIndex},'${name}',0.1)" title="Larger">A+</button>
+      </div>
+      <div class="cc-ctx-size-presets">
+        <button type="button" class="btn bo bxs" onclick="cpSetLayerScale('${tid}',${idx},${slideIndex},'${name}',0.75)">75%</button>
+        <button type="button" class="btn bo bxs" onclick="cpSetLayerScale('${tid}',${idx},${slideIndex},'${name}',1.0)">100%</button>
+        <button type="button" class="btn bo bxs" onclick="cpSetLayerScale('${tid}',${idx},${slideIndex},'${name}',1.35)">135%</button>
+        <button type="button" class="btn bo bxs" onclick="cpSetLayerScale('${tid}',${idx},${slideIndex},'${name}',1.75)">175%</button>
+      </div>
+    </div>`;
+  }
   const cur = ((sty.layerColors || {})[name] || sty.textColor || "#ffffff").toLowerCase();
   const isPreset = CP_CTX_COLORS.includes(cur);
   const swatches = CP_CTX_COLORS.map(c => {
@@ -1806,6 +1951,27 @@ function cpCtxPanelHTML(tid, idx, slideIndex, name, kind) {
   const customStyle = isPreset ? "" : `background:${cur}`;
   return `<div class="cc-ctx-swatches">${swatches}<label class="cc-ctx-swatch cc-ctx-custom${isPreset ? "" : " active"}" style="${customStyle}" title="Custom color"><input type="color" value="${cur}" aria-label="Custom color" oninput="cpPickLayerColor('${tid}',${idx},${slideIndex},'${name}',this.value,false)"/></label></div>`;
 }
+
+window.cpSetLayerScale = (tid, idx, slideIndex, name, scale) => {
+  const slide = cpCardSlide(tid, idx, slideIndex); if (!slide) return;
+  slide._style = slide._style || {};
+  slide._style.layerScale = Object.assign({}, slide._style.layerScale || {}, { [name]: Number(scale) });
+  const valEl = document.getElementById(`size-val-${tid}-${idx}-${slideIndex}-${name}`);
+  if (valEl) valEl.textContent = `${Math.round(scale * 100)}%`;
+  cpUpdateLiveStage(tid, idx, slideIndex);
+};
+window.cpAdjustLayerScale = (tid, idx, slideIndex, name, delta) => {
+  const slide = cpCardSlide(tid, idx, slideIndex); if (!slide) return;
+  const cur = Number(((slide._style || {}).layerScale || {})[name]) || 1;
+  const next = Math.max(0.5, Math.min(2.0, Math.round((cur + delta) * 10) / 10));
+  cpSetLayerScale(tid, idx, slideIndex, name, next);
+  const slider = document.querySelector(`[data-cp-ctx="${tid}-${idx}-${slideIndex}"] .cc-ctx-size-slider`);
+  if (slider) slider.value = Math.round(next * 100);
+};
+window.cpTriggerTextEdit = (key) => {
+  const block = document.querySelector(`.cp-canvas-block.is-selected[data-canvas-key="${key}"]`) || document.querySelector(`[data-canvas-stage="${key}"] .cp-canvas-block`);
+  if (block) cpStartTextEdit(block);
+};
 
 window.cpToggleCtxPanel = (kind) => {
   cpCtxPanel = cpCtxPanel === kind ? null : kind;
@@ -1956,24 +2122,34 @@ function cpUpdateLiveStage(tid, idx, slideIndex) {
   const plateEl = stage.querySelector(".cc-live-plate");
   if (plateEl) {
     plateEl.dataset.cpPlate = plateKey;
-    const tpl = sty.templateId && window.CPTemplateLibrary?.get(sty.templateId);
-    if (tpl) {
-      const r = tpl.layout.image;
-      Object.assign(plateEl.style, { left: (r.x*100)+"%", top: (r.y*100)+"%", width: (r.width*100)+"%", height: (r.height*100)+"%" });
-      stage.style.background = tpl.palette.background;
-    } else {
-      Object.assign(plateEl.style, { left:"", top:"", width:"", height:"" }); stage.style.background = "";
-    }
+    Object.assign(plateEl.style, { left:"", top:"", width:"", height:"" }); stage.style.background = "";
   }
   let deco = stage.querySelector(".cc-live-decoration");
   if (!deco) { deco=document.createElement("div"); deco.className="cc-live-decoration"; deco.setAttribute("aria-hidden","true"); stage.appendChild(deco); }
-  const liveTemplate = sty.templateId && window.CPTemplateLibrary?.get(sty.templateId);
-  const decoData = liveTemplate && liveTemplate.decorativeElements[0];
-  deco.className = "cc-live-decoration" + (decoData ? " is-"+decoData.type : ""); deco.hidden = !decoData;
-  deco.style.setProperty("--cc-template-accent", liveTemplate ? liveTemplate.palette.accent : "#fff");
+  deco.className = "cc-live-decoration"; deco.hidden = true;
+  deco.style.setProperty("--cc-template-accent", "#fff");
   const dimEl = stage.querySelector(".cc-live-dim");
   if (dimEl) dimEl.style.opacity = String(Math.max(0, Math.min(0.8, Number(sty.dim) || 0)));
-  if (sty.bgImage) {
+  if (sty.bgGradient) {
+    const { color1, color2, angle = 135 } = sty.bgGradient;
+    stage.style.background = `linear-gradient(${angle}deg, ${color1}, ${color2})`;
+    if (plateEl) {
+      plateEl.style.backgroundImage = "none";
+      plateEl.style.background = `linear-gradient(${angle}deg, ${color1}, ${color2})`;
+      plateEl.dataset.cpBgSrc = "gradient";
+    }
+    const status = stage.querySelector(".cc-live-status");
+    if (status) status.textContent = "";
+  } else if (sty.bgColor) {
+    stage.style.background = sty.bgColor;
+    if (plateEl) {
+      plateEl.style.backgroundImage = "none";
+      plateEl.style.background = sty.bgColor;
+      plateEl.dataset.cpBgSrc = "color";
+    }
+    const status = stage.querySelector(".cc-live-status");
+    if (status) status.textContent = "";
+  } else if (sty.bgImage) {
     // A chosen photo appears at once and needs no server render while the user is choosing.
     if (plateEl && plateEl.dataset.cpBgSrc !== sty.bgImage) {
       plateEl.style.backgroundImage = `url("${sty.bgImage}")`;
@@ -2097,13 +2273,11 @@ function cpGetDesignState(tid, idx, si) {
 
   const focal = sty.bgImage && S.focalPoint?.[tid] ? S.focalPoint[tid] : null;
   const aspect = cpExportAspect(o, o.type === "carousel");
-  const template = sty.templateId && window.CPTemplateLibrary?.get(sty.templateId);
-
   return {
-    templateId: template ? template.id : null,
-    templatePalette: template ? template.palette : null,
-    imageLayout: template ? template.layout.image : null,
-    templateDecoration: template ? template.decorativeElements : [],
+    templateId: null,
+    templatePalette: null,
+    imageLayout: null,
+    templateDecoration: [],
     template: o._renderCtx.template || o.template || "impact",
     theme: sty.themeId || o._renderCtx.theme || "dark_editorial",
     colourTheme: sty.colourThemeId || null,
@@ -2118,6 +2292,8 @@ function cpGetDesignState(tid, idx, si) {
     },
     backgroundAdjustments: { ...(sty.backgroundAdjustments || {}) },
     dim: Math.max(0, Math.min(0.8, Number(sty.dim) || 0)),
+    bgColor: sty.bgColor || null,
+    bgGradient: sty.bgGradient || null,
     focal: focal ? [focal.x, focal.y] : null,
     layers,
     headline: slide.headline || "",
@@ -2312,7 +2488,22 @@ async function cpComposeCard(snap) {
   canvas.width = W;
   canvas.height = H;
   const ctx = canvas.getContext("2d");
-  ctx.fillStyle = (state.templatePalette && state.templatePalette.background) || "#1b1b1f";
+  if (state.bgGradient) {
+    const { color1, color2, angle = 135 } = state.bgGradient;
+    const rad = angle * Math.PI / 180;
+    const x1 = Math.cos(rad) < 0 ? W : 0;
+    const y1 = Math.sin(rad) < 0 ? H : 0;
+    const x2 = W - x1;
+    const y2 = H - y1;
+    const grad = ctx.createLinearGradient(x1, y1, x2, y2);
+    grad.addColorStop(0, color1);
+    grad.addColorStop(1, color2);
+    ctx.fillStyle = grad;
+  } else if (state.bgColor) {
+    ctx.fillStyle = state.bgColor;
+  } else {
+    ctx.fillStyle = (state.templatePalette && state.templatePalette.background) || "#1b1b1f";
+  }
   ctx.fillRect(0, 0, W, H);
   if (photo) {
     const [fx, fy] = state.focal ? state.focal.map(v => v / 100) : [0.5, 0.5];
@@ -2512,10 +2703,12 @@ const cardCanvasPointer = (() => {
     const resizing = !!event.target.closest("[data-canvas-resize]");
     const boxRect = block.getBoundingClientRect();
     cpSelectCanvasBlock(stage.dataset.canvasStage, block.dataset.canvasBlock);
-    cpCanvasActive = { block, rect, startX: event.clientX, startY: event.clientY, left: boxRect.left - rect.left, top: boxRect.top - rect.top, width: boxRect.width, height: boxRect.height, resizing, moved: false, editOnRelease: doubleTap };
+    const slide = cpCardSlide(stage.dataset.tid, Number(stage.dataset.idx), Number(stage.dataset.slideIndex));
+    const initScale = Number(((slide?._style || {}).layerScale || {})[block.dataset.canvasBlock]) || 1;
+    cpCanvasActive = { block, rect, startX: event.clientX, startY: event.clientY, left: boxRect.left - rect.left, top: boxRect.top - rect.top, width: boxRect.width, height: boxRect.height, resizing, moved: false, editOnRelease: doubleTap, initScale };
     block.setPointerCapture?.(event.pointerId);
     block.classList.add("is-active");
-    event.preventDefault();
+    if (resizing) event.preventDefault();
   });
   document.addEventListener("pointermove", (event) => {
     const a = cpCanvasActive;
@@ -2529,6 +2722,11 @@ const cardCanvasPointer = (() => {
     const y = resizing ? top : Math.max(0, Math.min(rect.height - height, top + dy));
     block.style.left = `${x / rect.width * 100}%`; block.style.top = `${y / rect.height * 100}%`;
     block.style.width = `${w / rect.width * 100}%`; block.style.height = `${h / rect.height * 100}%`;
+    if (resizing && width > 0) {
+      const scaleRatio = Math.max(0.5, Math.min(2.0, Math.round((w / width * (a.initScale || 1)) * 20) / 20));
+      const stage = block.closest(".cc-live-stage");
+      if (stage) cpSetLayerScale(stage.dataset.tid, Number(stage.dataset.idx), Number(stage.dataset.slideIndex), block.dataset.canvasBlock, scaleRatio);
+    }
   });
   const finish = () => {
     const a = cpCanvasActive;
@@ -3100,19 +3298,7 @@ Return only the ready-to-post spoken text — no labels, no headers, no meta-com
       }
     }
     S.outs[tid] = out;
-    const selectedTemplateId = S.cardTemplate && S.cardTemplate[tid];
-    const selectedTemplate = selectedTemplateId && window.CPTemplateLibrary && window.CPTemplateLibrary.get(selectedTemplateId);
-    if (selectedTemplate) out.forEach(function(output){
-      if (output.type !== "carousel" && !output.isCard) return;
-      const slides = output.type === "carousel" ? (output.slides || []) : [output.editSlide].filter(Boolean);
-      slides.forEach(function(slide){
-        slide._style = slide._style || {};
-        slide._style.templateId = selectedTemplate.id;
-        slide._style.layerFonts = Object.assign({}, slide._style.layerFonts || {}, {headline:selectedTemplate.typography.headline});
-        slide._style.layerColors = Object.assign({}, slide._style.layerColors || {}, {headline:selectedTemplate.palette.text,supportingText:selectedTemplate.palette.text,ctaLine:selectedTemplate.palette.accent});
-        slide.textLayout = Object.assign({}, slide.textLayout || {}, selectedTemplate.layout.elements);
-      });
-    });
+    // Original 5 Instagram and 5 TikTok templates are active without external catalog dependencies
     if(out.length && S.token){
       const today = new Date();
       const sd = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;

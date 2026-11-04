@@ -762,3 +762,34 @@
 .cc-live-decoration.is-stripes:before{content:"";position:absolute;left:-4%;right:-4%;bottom:10%;height:13%;transform:skewY(-8deg);background:repeating-linear-gradient(0deg,var(--cc-template-accent) 0 8px,transparent 8px 14px);opacity:.5}
 .cc-live-decoration.is-corner:before{content:"";position:absolute;left:0;right:0;top:0;height:1.5%;background:var(--cc-template-accent)}
 .cc-live-decoration.is-rule:before{content:"";position:absolute;left:0;right:0;bottom:0;height:1.2%;background:var(--cc-template-accent)}
+
+
+/* Slider & number badge controls for dimming and blurring */
+.cc-bg-control-row{display:flex;flex-direction:column;gap:6px;width:100%;margin-top:4px}
+.cc-bg-control-head{display:flex;align-items:center;justify-content:space-between;width:100%}
+.cc-bg-val{font-size:12px;font-weight:700;color:var(--ac);font-variant-numeric:tabular-nums;background:rgba(255,255,255,.08);padding:2px 8px;border-radius:6px;border:1px solid var(--br)}
+.cc-slider{width:100%;accent-color:var(--ac);height:6px;border-radius:4px;cursor:pointer}
+.cc-bg-ticks{display:flex;justify-content:space-between;gap:4px;width:100%}
+.cc-bg-tick{border:none;background:transparent;color:var(--mu);font-size:10px;font-weight:600;padding:2px 4px;border-radius:4px;cursor:pointer}
+.cc-bg-tick:hover{color:var(--tx);background:rgba(255,255,255,.06)}
+.cc-bg-color-swatches{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.cc-bg-grad-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:4px 0}
+.cc-bg-grad-picker{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:600;color:var(--mu2)}
+.cc-bg-grad-picker input[type=color]{width:30px;height:30px;border-radius:6px;border:1px solid var(--br);background:none;cursor:pointer;padding:0}
+.cc-bg-grad-presets{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px}
+.cc-bg-grad-preset{width:34px;height:34px;border-radius:8px;border:2px solid var(--br);cursor:pointer;flex:0 0 auto}
+.cc-bg-grad-preset:hover{border-color:var(--ac)}
+
+/* Carousel slide tabs right below phone mockup */
+.cc-carousel-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;margin-top:6px;background:var(--sf);border:1px solid var(--br);border-radius:10px}
+.cc-carousel-bar-label{font-size:12px;font-weight:700;color:var(--tx)}
+.cc-carousel-tabs{display:flex;gap:6px;overflow-x:auto}
+.cc-slide-tab{border:1px solid var(--br);background:var(--bg);color:var(--tx);border-radius:8px;padding:6px 12px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap}
+.cc-slide-tab.on{border-color:var(--ac);background:color-mix(in srgb, var(--ac) 15%, transparent);color:var(--ac)}
+
+/* Size tool in context toolbar */
+.cc-ctx-size-panel{display:flex;flex-direction:column;gap:8px;padding:6px}
+.cc-ctx-size-head{display:flex;align-items:center;justify-content:space-between}
+.cc-ctx-size-row{display:flex;align-items:center;gap:10px}
+.cc-ctx-size-btn{border:1px solid var(--br);background:var(--sf);color:var(--tx);border-radius:6px;padding:4px 10px;font-size:13px;font-weight:700;cursor:pointer}
+.cc-ctx-size-presets{display:flex;gap:6px;flex-wrap:wrap}

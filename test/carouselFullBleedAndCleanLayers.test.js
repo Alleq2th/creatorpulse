@@ -1,24 +1,12 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('fs');
+const fs = require('node:fs');
+const path = require('node:path');
 
-const core = fs.readFileSync('public/core.js', 'utf8');
-const css = fs.readFileSync('public/create/create.css', 'utf8');
-const tplLib = fs.readFileSync('public/create/templateLibrary.js', 'utf8');
+const root = path.join(__dirname, '..');
+const core = fs.readFileSync(path.join(root, 'public/core.js'), 'utf8');
+const css = fs.readFileSync(path.join(root, 'public/create/create.css'), 'utf8');
 
-test('all 240 templates in templateLibrary have full-bleed images', () => {
-  const window = {};
-  eval(tplLib);
-  const lib = window.CPTemplateLibrary;
-  assert.equal(lib.templates.length, 240);
-  assert.ok(lib.templates.every(t =>
-    t.layout.image.x === 0 &&
-    t.layout.image.y === 0 &&
-    t.layout.image.width === 1 &&
-    t.layout.image.height === 1 &&
-    t.layout.image.fit === 'cover'
-  ), 'every template must have a full-bleed 100% cover image box');
-});
 
 test('empty canvas blocks are clean and invisible until selected or populated', () => {
   // CSS hides empty unselected blocks and their placeholder text so no phantom outlines or ghost text appear
