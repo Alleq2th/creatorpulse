@@ -27,7 +27,7 @@
    * what makes it read as one journey instead of five cards. */
   function progress(st) {
     var f = F();
-    var isImage = (st.platform === 'instagram' && st.format === 'IG Carousel') || (st.platform === 'tiktok' && /graphic|camera/i.test(st.format || ''));
+    var isImage = (st.platform === 'instagram' && /IG (Single Post|Carousel)/.test(st.format || '')) || (st.platform === 'tiktok' && /graphic|camera/i.test(st.format || ''));
     var stepIcons = {
       source: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5z"/><path d="M8 7h8M8 11h6"/></svg>',
       platform: '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
@@ -236,10 +236,10 @@
 
   function toneStep(st) {
     var f = F();
-    var isImage = (st.platform === 'instagram' && st.format === 'IG Carousel') || (st.platform === 'tiktok' && /graphic|camera/i.test(st.format || ''));
+    var isImage = (st.platform === 'instagram' && /IG (Single Post|Carousel)/.test(st.format || '')) || (st.platform === 'tiktok' && /graphic|camera/i.test(st.format || ''));
     var title = isImage ? 'Template' : 'Tone';
     var lede = isImage
-      ? 'Choose the template style for your ' + (st.platform === 'tiktok' ? 'TikTok post' : 'Instagram carousel') + '.'
+      ? 'Choose the template style for your ' + (st.platform === 'tiktok' ? 'TikTok post' : (st.format === 'IG Single Post' ? 'Instagram post' : 'Instagram carousel')) + '.'
       : 'Optional: a sensible voice is already selected for your script or draft.';
 
     var content = '';

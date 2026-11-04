@@ -793,3 +793,13 @@
 .cc-ctx-size-row{display:flex;align-items:center;gap:10px}
 .cc-ctx-size-btn{border:1px solid var(--br);background:var(--sf);color:var(--tx);border-radius:6px;padding:4px 10px;font-size:13px;font-weight:700;cursor:pointer}
 .cc-ctx-size-presets{display:flex;gap:6px;flex-wrap:wrap}
+
+/* Directional controls for independently moving and resizing canvas text. */
+.cc-live-stage .cp-canvas-resize{z-index:5;display:block!important;opacity:0;pointer-events:none;position:absolute;border:2px solid #101114;border-radius:50%;background:#55d9ff;box-shadow:0 0 0 1px #fff;touch-action:none;padding:0}
+.cc-live-stage .cp-canvas-block.is-selected .cp-canvas-resize{opacity:1;pointer-events:auto}
+.cc-live-stage .cp-resize-corner{right:-7px;bottom:-7px;width:18px;height:18px;cursor:nwse-resize}
+.cc-live-stage .cp-resize-side{right:-8px;top:50%;transform:translateY(-50%);width:16px;height:24px;border-radius:8px;cursor:ew-resize}
+.cc-live-stage .cp-resize-top{left:50%;top:-8px;transform:translateX(-50%);width:24px;height:16px;border-radius:8px;cursor:ns-resize}
+.cc-live-stage .cp-canvas-block.is-selected .cp-resize-top:before,.cc-live-stage .cp-canvas-block.is-selected .cp-resize-side:before{content:"";position:absolute;background:#073447;border-radius:4px}
+.cc-live-stage .cp-canvas-block.is-selected .cp-resize-top:before{left:5px;right:5px;top:5px;height:3px}
+.cc-live-stage .cp-canvas-block.is-selected .cp-resize-side:before{top:5px;bottom:5px;left:5px;width:3px}

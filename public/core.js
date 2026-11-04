@@ -31,7 +31,7 @@ const I = {
 // ─── DATA ───────────────────────────────────────────────────────────────────
 const NICHES = {"Sports":["Football/Soccer","Basketball","Tennis","Cricket","Formula 1","Boxing","MMA/UFC","WWE Wrestling","American Football","Baseball","Ice Hockey","Golf","Rugby","Athletics/Track","Cycling","Swimming","Esports","Volleyball"],"Entertainment":["Celebrity Gossip","Music (Afrobeats)","Music (Hip-Hop)","Music (Pop)","Music (R&B)","Music (K-Pop)","Music (Amapiano)","Movies & TV","Anime","Korean Drama","Bollywood","Pop Culture"],"Gaming":["Console Gaming","PC Gaming","Mobile Gaming","Game Reviews","Twitch Streaming","YouTube Gaming"],"Lifestyle":["Travel","Food & Recipes","Fitness & Gym","Mental Health","Relationships & Dating","Parenting","Minimalism","Home Decor","Pets"],"Fashion & Beauty":["Streetwear","Luxury Fashion","Skincare","Makeup","Haircare"],"Finance":["Personal Finance","Crypto","Stock Market","Side Hustles","Business News","Real Estate Investing","Budgeting"],"Tech":["AI & Tech News","Gadget Reviews","Coding & Dev Life","Startups","Cybersecurity","Space & Science"],"Education":["Science","History","Language Learning","Productivity","Study Tips","Philosophy","Psychology"],"Commentary":["Yapping Videos","Hot Takes","Rants","Storytelling","Political Commentary","True Crime","Mystery & Unexplained"],"Trends":["Viral Dances","Trend Reaction","Challenge Content"],"Creator":["YouTube Growth","Social Media Tips","Brand Deals","Monetization Advice"],"Professional":["Medicine & Health","Law","Marketing","Entrepreneurship","Motivational Speaking"],"Culture":["Faith & Religion","African Culture","Caribbean Culture","Astrology","Self-Development"]};
 const PLATS = [{id:"tiktok",label:"TikTok"},{id:"instagram",label:"Instagram"},{id:"youtube",label:"YouTube"},{id:"twitter",label:"X"},{id:"facebook",label:"Facebook"},{id:"linkedin",label:"LinkedIn"}];
-const PTYPES = {tiktok:["TikTok Script","TikTok No-Face Graphic","TikTok Silent Camera","Caption + Hashtags"],instagram:["IG Reel Script","IG Carousel","Caption + Hashtags"],youtube:["Long Form Script","YouTube Short Script","Title + Description","Thumbnail"],twitter:["Hot Take Tweet","Engagement Tweet","Thread (5 tweets)"],facebook:["Long-Form Post","Engagement Post"],linkedin:["Thought Leadership","Professional Update"]};
+const PTYPES = {tiktok:["TikTok Script","TikTok No-Face Graphic","TikTok Silent Camera","Caption + Hashtags"],instagram:["IG Reel Script","IG Single Post","IG Carousel","Caption + Hashtags"],youtube:["Long Form Script","YouTube Short Script","Title + Description","Thumbnail"],twitter:["Hot Take Tweet","Engagement Tweet","Thread (5 tweets)"],facebook:["Long-Form Post","Engagement Post"],linkedin:["Thought Leadership","Professional Update"]};
 const TONES = [{id:"normal",label:"Neutral"},{id:"funny",label:"Banter"},{id:"educative",label:"Educative"},{id:"hype",label:"Hot Take"},{id:"storytelling",label:"Storytelling"}];
 // Gradient palette options exposed to the user — must match the PALETTE keys
 // in services/statCard.js.
@@ -50,6 +50,16 @@ const CARD_LAYERS = [
   { key: "supportingText", label: "Supporting text", field: "supportingText", multi: true },
   { key: "ctaLine", label: "Call to action", field: "ctaLine", multi: false }
 ];
+// Generated slide formats vary across older and newer responses. Resolve them
+// once so the editor, preview and export show the same supporting copy.
+function cpCardLayerText(slide, layer) {
+  if (!slide || !layer) return "";
+  if (layer.key === "headline") return String(slide.headline || slide.hookHeadline || slide.title || "");
+  if (layer.key === "supportingText") return String(slide.supportingText || slide.body || slide.reaction || slide.stat || slide.sectionLabel || "");
+  if (layer.key === "ctaLine") return String(slide.ctaLine || "");
+  return String(slide[layer.field] || "");
+}
+
 const CARD_TYPOGRAPHIES = [
   { id: "impact", label: "Impact Bold" },
   { id: "modern_sans", label: "Modern Sans" },
@@ -1266,14 +1276,16 @@ function renderTrend(t){
 function renderCardLiveStage(o, tid, idx, slideIndex, slide, aspectRatio) {
   const key = `${tid}-${idx}-${slideIndex}`;
   const live = cpCardSlide(tid, idx, slideIndex) || slide || {};
+  const templateId = live._templateId || live._style?.templateId || o?._renderCtx?.template || o?.template;
+  const template = window.CPTemplateEngine?.get(templateId);
   const layout = live.textLayout || {};
   const box = (name, label, text) => {
-    const pos = layout[name] || CP_LIVE_DEFAULT_BOX[name];
+    const pos = layout[name] || (template && template.layout && template.layout[name]) || CP_LIVE_DEFAULT_BOX[name];
     const sel = !!cpCanvasSel && cpCanvasSel.key === key && cpCanvasSel.name === name;
     const hasText = text !== undefined && text !== null && String(text).trim().length > 0;
-    return `<div class="cp-canvas-block${sel ? " is-selected" : ""}${hasText ? "" : " is-empty"}" data-canvas-key="${key}" data-canvas-block="${name}" tabindex="0" role="slider" aria-label="Drag or resize ${label}" style="left:${pos.x*100}%;top:${pos.y*100}%;width:${pos.width*100}%;height:${pos.height*100}%"><div class="cc-live-text${hasText ? "" : " is-empty"}" data-cp-live="${name}" style="${cpLiveTextStyle(live, name, o, tid)}">${esc(hasText ? text : label)}</div><span class="cp-canvas-label">${label}</span><button type="button" class="cp-canvas-resize" data-canvas-resize="true" aria-label="Resize ${label}"></button></div>`;
+    return `<div class="cp-canvas-block${sel ? " is-selected" : ""}${hasText ? "" : " is-empty"}" data-canvas-key="${key}" data-canvas-block="${name}" tabindex="0" role="slider" aria-label="Drag or resize ${label}" style="left:${pos.x*100}%;top:${pos.y*100}%;width:${pos.width*100}%;height:${pos.height*100}%"><div class="cc-live-text${hasText ? "" : " is-empty"}" data-cp-live="${name}" style="${cpLiveTextStyle(live, name, o, tid)}">${esc(hasText ? text : label)}</div><span class="cp-canvas-label">${label}</span><button type="button" class="cp-canvas-resize cp-resize-corner" data-canvas-resize="true" data-canvas-resize-mode="both" aria-label="Resize ${label} width and height"></button><button type="button" class="cp-canvas-resize cp-resize-side" data-canvas-resize="true" data-canvas-resize-mode="horizontal" aria-label="Resize ${label} width"></button><button type="button" class="cp-canvas-resize cp-resize-top" data-canvas-resize="true" data-canvas-resize-mode="vertical" aria-label="Resize ${label} height"></button></div>`;
   };
-  return `<div class="cp-canvas-stage cc-live-stage" data-canvas-stage="${key}" data-tid="${tid}" data-idx="${idx}" data-slide-index="${slideIndex}" style="aspect-ratio:${aspectRatio}"><div class="cc-live-plate"></div><div class="cc-live-dim"></div><div class="cc-live-status" role="status"></div><div class="cp-canvas-blocks" data-canvas-key="${key}" data-slide-index="${slideIndex}" data-card-key="${tid}-${idx}">${CARD_LAYERS.map(L => box(L.key, L.label, live[L.field])).join("")}</div></div>`;
+  return `<div class="cp-canvas-stage cc-live-stage" data-canvas-stage="${key}" data-tid="${tid}" data-idx="${idx}" data-slide-index="${slideIndex}" style="aspect-ratio:${aspectRatio}"><div class="cc-live-plate"></div><div class="cc-live-dim"></div><div class="cc-live-status" role="status"></div><div class="cp-canvas-blocks" data-canvas-key="${key}" data-slide-index="${slideIndex}" data-card-key="${tid}-${idx}">${CARD_LAYERS.map(L => box(L.key, L.label, cpCardLayerText(live, L))).join("")}</div></div>`;
 }
 
 function renderPlatformMockup(o, tid, idx, curPlat) {
@@ -1460,12 +1472,14 @@ function renderPlatformMockup(o, tid, idx, curPlat) {
 function renderCardCanvasEditor(o, tid, idx, slideIndex, slide, imageUrl, aspectRatio, options = {}) {
   const key = `${tid}-${idx}-${slideIndex}`;
   const live = cpCardSlide(tid, idx, slideIndex) || slide || {};
+  const templateId = live._templateId || live._style?.templateId || o?._renderCtx?.template || o?.template;
+  const template = window.CPTemplateEngine?.get(templateId);
   const layout = live.textLayout || {};
   const box = (name, label, text) => {
-    const pos = layout[name] || CP_LIVE_DEFAULT_BOX[name];
+    const pos = layout[name] || (template && template.layout && template.layout[name]) || CP_LIVE_DEFAULT_BOX[name];
     const sel = !!cpCanvasSel && cpCanvasSel.key === key && cpCanvasSel.name === name;
     const hasText = text !== undefined && text !== null && String(text).trim().length > 0;
-    return `<div class="cp-canvas-block${sel ? " is-selected" : ""}${hasText ? "" : " is-empty"}" data-canvas-key="${key}" data-canvas-block="${name}" tabindex="0" role="slider" aria-label="Drag or resize ${label}" style="left:${pos.x*100}%;top:${pos.y*100}%;width:${pos.width*100}%;height:${pos.height*100}%"><div class="cc-live-text${hasText ? "" : " is-empty"}" data-cp-live="${name}" style="${cpLiveTextStyle(live, name, o, tid)}">${esc(hasText ? text : label)}</div><span class="cp-canvas-label">${label}</span><button type="button" class="cp-canvas-resize" data-canvas-resize="true" aria-label="Resize ${label}"></button></div>`;
+    return `<div class="cp-canvas-block${sel ? " is-selected" : ""}${hasText ? "" : " is-empty"}" data-canvas-key="${key}" data-canvas-block="${name}" tabindex="0" role="slider" aria-label="Drag or resize ${label}" style="left:${pos.x*100}%;top:${pos.y*100}%;width:${pos.width*100}%;height:${pos.height*100}%"><div class="cc-live-text${hasText ? "" : " is-empty"}" data-cp-live="${name}" style="${cpLiveTextStyle(live, name, o, tid)}">${esc(hasText ? text : label)}</div><span class="cp-canvas-label">${label}</span><button type="button" class="cp-canvas-resize cp-resize-corner" data-canvas-resize="true" data-canvas-resize-mode="both" aria-label="Resize ${label} width and height"></button><button type="button" class="cp-canvas-resize cp-resize-side" data-canvas-resize="true" data-canvas-resize-mode="horizontal" aria-label="Resize ${label} width"></button><button type="button" class="cp-canvas-resize cp-resize-top" data-canvas-resize="true" data-canvas-resize-mode="vertical" aria-label="Resize ${label} height"></button></div>`;
   };
   const sty = live._style || {};
   const stage = options && options.controlsOnly ? "" : renderCardLiveStage(o, tid, idx, slideIndex, slide, aspectRatio);
@@ -1725,13 +1739,17 @@ function cpCanvasDragging(block) { return !!cpCanvasActive && cpCanvasActive.blo
 
 function cpLiveTextStyle(slide, name, o, tid) {
   const sty = slide._style || {};
-  const typo = (sty.layerFonts || {})[name] || sty.typography || (o && o._renderCtx && o._renderCtx.typography) || "impact";
+  const templateId = slide._templateId || sty.templateId || o?._renderCtx?.template || o?.template;
+  const template = window.CPTemplateEngine?.get(templateId);
+  const layerSpec = template?.typography?.[name];
+  const typo = (sty.layerFonts || {})[name] || layerSpec?.family || sty.typography || (o && o._renderCtx && o._renderCtx.typography) || "impact";
   const vis = TYPO_VIS[typo] || {};
-  const color = (sty.layerColors || {})[name] || sty.textColor || "#ffffff";
+  const color = (sty.layerColors || {})[name] || (name === "ctaLine" ? template?.palette?.accent : null) || sty.textColor || template?.palette?.text || "#ffffff";
   const k = Math.max(0.5, Math.min(1.6, Number((sty.layerScale || {})[name]) || 1));
-  const upper = name === "ctaLine" ? "uppercase" : "none";
+  const size = layerSpec?.size || CP_LIVE_BASE_SIZE[name];
+  const upper = layerSpec?.transform === "uppercase" || name === "ctaLine" ? "uppercase" : "none";
   const align = (sty.layerAlign || {})[name] || sty.textAlign || "left";
-  return `font-family:${vis.f || "Inter, sans-serif"};font-weight:${vis.w || 700};font-size:${(CP_LIVE_BASE_SIZE[name] * k).toFixed(2)}cqw;color:${color};text-transform:${upper};text-align:${align}`;
+  return `font-family:${vis.f || "Inter, sans-serif"};font-weight:${layerSpec?.weight || vis.w || 700};font-size:${(size * k).toFixed(2)}cqw;line-height:${layerSpec?.lineHeight || 1.05};color:${color};text-transform:${upper};text-align:${align}`;
 }
 
 function cpSelectCanvasBlock(key, name) {
@@ -2118,18 +2136,42 @@ function cpUpdateLiveStage(tid, idx, slideIndex) {
   if (!slide) return;
   const o = S.outs[tid]?.[idx];
   const sty = slide._style || {};
+  const templateId = slide._templateId || sty.templateId || o?._renderCtx?.template || o?.template;
+  const template = window.CPTemplateEngine?.get(templateId);
   const plateKey = cpPlateKey(tid, idx, slideIndex);
   const plateEl = stage.querySelector(".cc-live-plate");
   if (plateEl) {
     plateEl.dataset.cpPlate = plateKey;
-    Object.assign(plateEl.style, { left:"", top:"", width:"", height:"" }); stage.style.background = "";
+    Object.assign(plateEl.style, { left:"", top:"", right:"", bottom:"", width:"", height:"", borderRadius:"" });
+    stage.style.background = "";
   }
   let deco = stage.querySelector(".cc-live-decoration");
   if (!deco) { deco=document.createElement("div"); deco.className="cc-live-decoration"; deco.setAttribute("aria-hidden","true"); stage.appendChild(deco); }
   deco.className = "cc-live-decoration"; deco.hidden = true;
   deco.style.setProperty("--cc-template-accent", "#fff");
   const dimEl = stage.querySelector(".cc-live-dim");
-  if (dimEl) dimEl.style.opacity = String(Math.max(0, Math.min(0.8, Number(sty.dim) || 0)));
+  if (template) {
+    stage.style.backgroundColor = template.palette.bg;
+    const imageLayout = template.image || {};
+    if (plateEl && imageLayout.mode === "panel") Object.assign(plateEl.style, { left: "8%", top: "6%", right: "8%", bottom: "auto", width: "84%", height: "42%", borderRadius: "12px" });
+    else if (plateEl && imageLayout.mode === "split") Object.assign(plateEl.style, { left: "52%", top: "10%", right: "8%", bottom: "18%", width: "40%", height: "72%", borderRadius: "10px" });
+    else if (plateEl) Object.assign(plateEl.style, { left: "0", top: "0", right: "0", bottom: "0", width: "100%", height: "100%", borderRadius: "0" });
+    if (plateEl) plateEl.style.backgroundPosition = imageLayout.focal === "subject" ? "center 38%" : "center";
+    if (dimEl) dimEl.style.background = template.palette.gradient || "#000";
+    const decoSpec = template.decoration || { type: "none" };
+    deco.hidden = decoSpec.type === "none";
+    deco.textContent = decoSpec.type === "badge" ? (decoSpec.text || "FEATURE") : "";
+    deco.style.cssText = "position:absolute;z-index:2;pointer-events:none;";
+    deco.style.color = template.palette.text;
+    if (decoSpec.type === "badge") Object.assign(deco.style, { left: "8%", top: "8%", padding: "1.4% 3%", borderRadius: "999px", background: decoSpec.accent || template.palette.accent, color: template.palette.bg, font: "800 2.6cqw/1 Inter, sans-serif", letterSpacing: ".08em" });
+    else if (decoSpec.type === "rule") Object.assign(deco.style, { left: "8%", top: "8%", width: "24%", height: "1%", background: decoSpec.accent || template.palette.accent });
+    else if (decoSpec.type === "frame") Object.assign(deco.style, { inset: "3%", border: "1px solid rgba(255,255,255,.25)" });
+    else if (decoSpec.type === "orb") Object.assign(deco.style, { right: "5%", top: "3%", width: "30%", height: "24%", background: "radial-gradient(circle,rgba(129,140,248,.28),transparent 70%)" });
+    else if (decoSpec.type === "stripes") Object.assign(deco.style, { left: "0", right: "0", bottom: "18%", height: "5%", background: `repeating-linear-gradient(0deg,${decoSpec.accent},${decoSpec.accent} 2px,transparent 2px,transparent 12px)`, opacity: ".42" });
+    else if (decoSpec.type === "corner") Object.assign(deco.style, { left: "0", top: "0", width: "100%", height: "1.2%", background: decoSpec.accent || template.palette.accent });
+    else Object.assign(deco.style, { left: "0", bottom: "0", width: "100%", height: "1%", background: template.palette.accent });
+  }
+  if (dimEl) dimEl.style.opacity = String(Math.max(0, Math.min(0.8, Number(sty.dim ?? template?.palette?.dim) || 0)));
   if (sty.bgGradient) {
     const { color1, color2, angle = 135 } = sty.bgGradient;
     stage.style.background = `linear-gradient(${angle}deg, ${color1}, ${color2})`;
@@ -2186,7 +2228,7 @@ function cpUpdateLiveStage(tid, idx, slideIndex) {
     const block = stage.querySelector(`[data-canvas-block="${L.key}"]`);
     if (!block) return;
     const txt = block.querySelector(".cc-live-text");
-    const val = slide[L.field] || "";
+    const val = cpCardLayerText(slide, L);
     if (txt) {
       const typing = txt === document.activeElement;
       if (!typing) txt.textContent = val || L.label;
@@ -2196,7 +2238,9 @@ function cpUpdateLiveStage(tid, idx, slideIndex) {
       txt.style.cssText = cpLiveTextStyle(slide, L.key, o, tid);
     }
     if (cpCanvasDragging(block)) return; // the pointer owns the box while dragging
-    const pos = (slide.textLayout || {})[L.key] || CP_LIVE_DEFAULT_BOX[L.key];
+    const templateId = slide._templateId || sty.templateId || o?._renderCtx?.template || o?.template;
+    const template = window.CPTemplateEngine?.get(templateId);
+    const pos = (slide.textLayout || {})[L.key] || (template && template.layout && template.layout[L.key]) || CP_LIVE_DEFAULT_BOX[L.key];
     block.style.left = `${pos.x * 100}%`;
     block.style.top = `${pos.y * 100}%`;
     block.style.width = `${pos.width * 100}%`;
@@ -2206,10 +2250,9 @@ function cpUpdateLiveStage(tid, idx, slideIndex) {
   cpScheduleExport(tid, idx, slideIndex);
 }
 
-// ── Export: the saved image is drawn from the same card state as the live preview ──
-// The photo (or chosen background), the dimming and each text box are drawn on a
-// 1080-wide canvas with the same box positions, fonts, sizes and colours the editor
-// uses. Nothing is sent to the server, so downloads and saves match the preview.
+// ── Export: the saved image is drawn from the shared live design state ──
+// The photo, image crop, template style, dimming and text boxes all come from
+// cpGetDesignState, the same data the interactive editor reads.
 const CP_EXPORT_W = 1080;
 const cpExportTimers = new Map();
 const cpExportSigs = new Map();
@@ -2218,7 +2261,7 @@ const cpExportKey = (tid, idx, si) => `${tid}-${idx}-${si}`;
 
 // The shape of the exported image, from the same format rules the preview uses.
 function cpExportAspect(o, isSlide) {
-  if (isSlide) return [4, 5];
+  if (isSlide || o.aspect === "instagram" || o.aspect === "instagram_feed") return [4, 5];
   if (o.aspect === "reel" || o.aspect === "tiktok") return [9, 16];
   if (o.aspect === "youtube") return [16, 9];
   return [1, 1];
@@ -2248,10 +2291,13 @@ function cpGetDesignState(tid, idx, si) {
     plateId = "server:" + plateKey;
   }
 
+  const templateId = slide._templateId || sty.templateId || o._renderCtx.template || o.template;
+  const template = window.CPTemplateEngine?.get(templateId);
   const typo = o._renderCtx.typography;
   const layers = CARD_LAYERS.map(L => {
-    const text = String(slide[L.field] || "");
-    const face = (sty.layerFonts || {})[L.key] || sty.typography || typo || "impact";
+    const text = cpCardLayerText(slide, L);
+    const layerSpec = template?.typography?.[L.key];
+    const face = (sty.layerFonts || {})[L.key] || layerSpec?.family || sty.typography || typo || "impact";
     const vis = TYPO_VIS[face] || {};
     const k = Math.max(0.5, Math.min(1.6, Number((sty.layerScale || {})[L.key]) || 1));
     const align = (sty.layerAlign || {})[L.key] || sty.textAlign || "left";
@@ -2263,22 +2309,22 @@ function cpGetDesignState(tid, idx, si) {
       family: vis.f || "Inter, sans-serif",
       fontFamilyName: face,
       weight: vis.w || 700,
-      size: CP_LIVE_BASE_SIZE[L.key] * k / 100,
+      size: (layerSpec?.size || CP_LIVE_BASE_SIZE[L.key]) * k / 100,
       scale: k,
-      color: (sty.layerColors || {})[L.key] || sty.textColor || "#ffffff",
+      color: (sty.layerColors || {})[L.key] || (L.key === "ctaLine" ? template?.palette?.accent : null) || sty.textColor || template?.palette?.text || "#ffffff",
       align,
-      box: (slide.textLayout || {})[L.key] || CP_LIVE_DEFAULT_BOX[L.key]
+      box: (slide.textLayout || {})[L.key] || (template && template.layout && template.layout[L.key]) || CP_LIVE_DEFAULT_BOX[L.key]
     };
   });
 
   const focal = sty.bgImage && S.focalPoint?.[tid] ? S.focalPoint[tid] : null;
   const aspect = cpExportAspect(o, o.type === "carousel");
   return {
-    templateId: null,
-    templatePalette: null,
-    imageLayout: null,
-    templateDecoration: [],
-    template: o._renderCtx.template || o.template || "impact",
+    templateId: templateId || null,
+    templatePalette: template ? template.palette : null,
+    imageLayout: template ? template.image : null,
+    templateDecoration: template ? [template.decoration] : [],
+    template: templateId || "impact",
     theme: sty.themeId || o._renderCtx.theme || "dark_editorial",
     colourTheme: sty.colourThemeId || null,
     aspect,
@@ -2302,7 +2348,7 @@ function cpGetDesignState(tid, idx, si) {
     decorative: {
       accentColor: (sty.layerColors || {})["ctaLine"] || (template && template.palette.accent) || "#ffffff",
       overlay: !!sty.dim,
-      elements: template ? template.decorativeElements : (Array.isArray(sty.decorativeElements) ? sty.decorativeElements : [])
+      elements: template ? template.decoration : (Array.isArray(sty.decorativeElements) ? sty.decorativeElements : [])
     }
   };
 }
@@ -2501,10 +2547,18 @@ async function cpComposeCard(snap) {
     ctx.fillStyle = grad;
   } else if (state.bgColor) {
     ctx.fillStyle = state.bgColor;
+  } else if (state.templatePalette?.bg) {
+    ctx.fillStyle = state.templatePalette.bg;
   } else {
     ctx.fillStyle = (state.templatePalette && state.templatePalette.background) || "#1b1b1f";
   }
   ctx.fillRect(0, 0, W, H);
+  if (!photo && state.templatePalette?.gradient && state.templatePalette.gradient.startsWith("linear-gradient")) {
+    const grad = ctx.createLinearGradient(0, 0, W, H);
+    grad.addColorStop(0, state.templatePalette.bg || "#08090b");
+    grad.addColorStop(1, state.templatePalette.accent || "#20202a");
+    ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
+  }
   if (photo) {
     const [fx, fy] = state.focal ? state.focal.map(v => v / 100) : [0.5, 0.5];
     const adj = state.backgroundAdjustments || {};
@@ -2512,7 +2566,8 @@ async function cpComposeCard(snap) {
     const contrast = Math.max(0, Math.min(2, Number(adj.contrast ?? 1)));
     const saturation = Math.max(0, Math.min(2, Number(adj.saturation ?? 1)));
     const blur = Math.max(0, Math.min(24, Number(adj.blur ?? 0)));
-    const r = state.imageLayout || { x: 0, y: 0, width: 1, height: 1 };
+    const imageMode = state.imageLayout?.mode;
+    const r = imageMode === "panel" ? { x: .08, y: .06, width: .84, height: .42 } : imageMode === "split" ? { x: .52, y: .10, width: .40, height: .72 } : { x: 0, y: 0, width: 1, height: 1 };
     const x = r.x * W, y = r.y * H, rw = r.width * W, rh = r.height * H;
     const scale = Math.max(rw / photo.naturalWidth, rh / photo.naturalHeight);
     const dw = photo.naturalWidth * scale, dh = photo.naturalHeight * scale;
@@ -2523,7 +2578,15 @@ async function cpComposeCard(snap) {
     ctx.restore();
   }
   if (state.dim > 0) {
-    ctx.fillStyle = `rgba(0,0,0,${state.dim})`;
+    const overlayGradient = state.templatePalette?.gradient;
+    if (overlayGradient && overlayGradient.startsWith("linear-gradient")) {
+      const overlay = ctx.createLinearGradient(0, 0, 0, H);
+      overlay.addColorStop(0, "rgba(0,0,0,0.28)");
+      overlay.addColorStop(1, `rgba(0,0,0,${Math.min(.95, state.dim + .35)})`);
+      ctx.fillStyle = overlay;
+    } else {
+      ctx.fillStyle = `rgba(0,0,0,${state.dim})`;
+    }
     ctx.fillRect(0, 0, W, H);
   }
   (state.templateDecoration || []).forEach(el => cpDrawTemplateDecoration(ctx, el, state.templatePalette && state.templatePalette.accent, W, H));
@@ -2700,12 +2763,14 @@ const cardCanvasPointer = (() => {
     lastTap = doubleTap ? null : { key, name, time: now };
     if (doubleTap) cpSelectCanvasBlock(key, name);
     const rect = stage.getBoundingClientRect();
-    const resizing = !!event.target.closest("[data-canvas-resize]");
+    const resizeControl = event.target.closest("[data-canvas-resize]");
+    const resizing = !!resizeControl;
+    const resizeMode = resizeControl?.dataset.canvasResizeMode || "both";
     const boxRect = block.getBoundingClientRect();
     cpSelectCanvasBlock(stage.dataset.canvasStage, block.dataset.canvasBlock);
     const slide = cpCardSlide(stage.dataset.tid, Number(stage.dataset.idx), Number(stage.dataset.slideIndex));
     const initScale = Number(((slide?._style || {}).layerScale || {})[block.dataset.canvasBlock]) || 1;
-    cpCanvasActive = { block, rect, startX: event.clientX, startY: event.clientY, left: boxRect.left - rect.left, top: boxRect.top - rect.top, width: boxRect.width, height: boxRect.height, resizing, moved: false, editOnRelease: doubleTap, initScale };
+    cpCanvasActive = { block, rect, startX: event.clientX, startY: event.clientY, left: boxRect.left - rect.left, top: boxRect.top - rect.top, width: boxRect.width, height: boxRect.height, resizing, resizeMode, moved: false, editOnRelease: doubleTap, initScale };
     block.setPointerCapture?.(event.pointerId);
     block.classList.add("is-active");
     if (resizing) event.preventDefault();
@@ -2716,13 +2781,13 @@ const cardCanvasPointer = (() => {
     const dx = event.clientX - a.startX, dy = event.clientY - a.startY;
     if (!a.moved) { if (Math.hypot(dx, dy) < 4) return; a.moved = true; }
     const { block, rect, left, top, width, height, resizing } = a;
-    const w = resizing ? Math.max(44, Math.min(rect.width - left, width + dx)) : width;
-    const h = resizing ? Math.max(36, Math.min(rect.height - top, height + dy)) : height;
+    const w = resizing && resizeMode !== "vertical" ? Math.max(44, Math.min(rect.width - left, width + dx)) : width;
+    const h = resizing && resizeMode !== "horizontal" ? Math.max(36, Math.min(rect.height - top, height + dy)) : height;
     const x = resizing ? left : Math.max(0, Math.min(rect.width - width, left + dx));
     const y = resizing ? top : Math.max(0, Math.min(rect.height - height, top + dy));
     block.style.left = `${x / rect.width * 100}%`; block.style.top = `${y / rect.height * 100}%`;
     block.style.width = `${w / rect.width * 100}%`; block.style.height = `${h / rect.height * 100}%`;
-    if (resizing && width > 0) {
+    if (resizing && width > 0 && resizeMode === "both") {
       const scaleRatio = Math.max(0.5, Math.min(2.0, Math.round((w / width * (a.initScale || 1)) * 20) / 20));
       const stage = block.closest(".cc-live-stage");
       if (stage) cpSetLayerScale(stage.dataset.tid, Number(stage.dataset.idx), Number(stage.dataset.slideIndex), block.dataset.canvasBlock, scaleRatio);
@@ -3045,18 +3110,14 @@ window.gen = async (tid, all) => {
     const out = [];
     let articleImage = t.image || null;
     for(const c of types){
-      if(c === "IG Carousel" || c === "TikTok No-Face Graphic" || c === "TikTok Silent Camera" || c === "Thumbnail"){
+      if(c === "IG Single Post" || c === "IG Carousel" || c === "TikTok No-Face Graphic" || c === "TikTok Silent Camera" || c === "Thumbnail"){
         const category = nicheToCategory(t.niche);
-        if (!articleImage) {
-          try {
-            const photoResult = await api(`/api/stock-photo?query=${encodeURIComponent((t.headline || "") + " " + (t.niche || ""))}&count=1`);
-            articleImage = photoResult.photos?.[0]?.url || null;
-          } catch (e) { console.warn("Story photo lookup failed", e); }
-        }
         const isSilentCamera = c === "TikTok Silent Camera";
         const isThumbnail = c === "Thumbnail";
-        const isSingle = c === "TikTok No-Face Graphic" || isSilentCamera || isThumbnail;
-        const cardFormat = isSilentCamera ? "tiktok_silent" : isThumbnail ? "youtube_thumbnail" : isSingle ? "tiktok" : plat;
+        const isInstagramSingle = c === "IG Single Post";
+        const photoLookup = !articleImage ? api(`/api/stock-photo?query=${encodeURIComponent((t.headline || "") + " " + (t.niche || ""))}&count=1`).then(photoResult => { articleImage = photoResult.photos?.[0]?.url || null; }).catch(e => { console.warn("Story photo lookup failed", e); }) : Promise.resolve();
+        const isSingle = isInstagramSingle || c === "TikTok No-Face Graphic" || isSilentCamera || isThumbnail;
+        const cardFormat = isSilentCamera ? "tiktok_silent" : isThumbnail ? "youtube_thumbnail" : isInstagramSingle ? "instagram" : isSingle ? "tiktok" : plat;
         const requestedCount = isSingle ? 1 : (S.slideCount[tid] || 4);
         // Only 6+ slides earns a dedicated CTA slide — below that, there's
         // too little actual story to justify spending a whole slide on
@@ -3121,18 +3182,31 @@ window.gen = async (tid, all) => {
           const hookSlide = { type: "hook", headline: parsed.hookHeadline || t.headline, supportingText: parsed.hookTease || sourceText.split(/(?<=[.!?])\s/).slice(0,2).join(" "), emphasisLine: 1, sourceLabel: t.source || null };
           slideArr = [hookSlide, ...bodySlides, ctaOutroSlide(t.niche)];
         }
+        // Photo retrieval overlaps the structured copy request instead of
+        // adding a full network round-trip before any content is generated.
+        await photoLookup;
+        slideArr.forEach(slide => { if (articleImage && !slide.imageUrl) slide.imageUrl = articleImage; });
         // Real cards (actual text, actual numbers) — not AI-generated art, which
         // can't reliably render legible text. See services/statCard.js.
+        // Apply the selected platform-specific design system to every slide
+        // before either local/server rendering. This is composition data, not
+        // a palette-only theme: it supplies layout, typography, image treatment,
+        // spacing and decoration for TikTok 9:16 or Instagram 4:5.
+        const selectedTemplate = (S.cardTemplate && S.cardTemplate[tid]) || (templateEngine && templateEngine.resolve(null, plat).id) || null;
+        const templateEngine = window.CPTemplateEngine;
+        if (templateEngine && selectedTemplate) {
+          slideArr.forEach((slide, slideIndex) => templateEngine.apply(slide, selectedTemplate, slideIndex, slideArr.length));
+        }
         let cardImgs = [];
         try {
-          const cd = await generateCardsWithRetry({slides: slideArr, category, palette: S.palette[tid] || "noir_orange", format: cardFormat, imageUrl: articleImage, theme: S.cardTheme[tid] || "modern_dark", typography: S.cardTypography[tid] || "impact", density: S.cardDensity[tid] || "balanced", focalPoint: S.focalPoint[tid] ? {x:S.focalPoint[tid].x/100,y:S.focalPoint[tid].y/100} : null, brand: BRAND_PRESETS[S.brandPreset[tid] || "creator"]});
+          const cd = await generateCardsWithRetry({slides: slideArr, category, palette: S.palette[tid] || "noir_orange", format: cardFormat, imageUrl: articleImage, templateId: selectedTemplate, theme: S.cardTheme[tid] || "modern_dark", typography: S.cardTypography[tid] || "impact", density: S.cardDensity[tid] || "balanced", focalPoint: S.focalPoint[tid] ? {x:S.focalPoint[tid].x/100,y:S.focalPoint[tid].y/100} : null, brand: BRAND_PRESETS[S.brandPreset[tid] || "creator"]});
           cardImgs = (cd.images || []).map(u => (u && !/^(https?:|data:|blob:)/.test(u)) ? API + (u.startsWith('/')?'':'/') + u : u);
         } catch(e){ console.warn("generate-cards failed, using local cards", e); }
         const imageDataUrl = articleImage ? await localCardPhotoData(articleImage) : null;
-        const localOpts = { palette: S.palette[tid] || "noir_orange", theme: S.cardTheme[tid] || "modern_dark", typography: S.cardTypography[tid] || "impact", density: S.cardDensity[tid] || "balanced", format: cardFormat, total: slideArr.length, imageDataUrl };
+        const localOpts = { palette: S.palette[tid] || "noir_orange", theme: S.cardTheme[tid] || "modern_dark", typography: S.cardTypography[tid] || "impact", density: S.cardDensity[tid] || "balanced", format: cardFormat, total: slideArr.length, imageDataUrl, templateId: selectedTemplate };
         slideArr.forEach((s,i)=>{ s.slideNumber = i+1; if (articleImage && !s.customImage) s.imageUrl = articleImage; s.localImg = localCardImage({...s,imageDataUrl:s.customImage||imageDataUrl}, localOpts); s.img = cardImgs[i] || s.localImg; });
         const imgsFinal = slideArr.map(s=>s.img);
-        out.push(isSingle ? {type:"image", img: imgsFinal[0], fallbackImg: slideArr[0].localImg, aspect: isThumbnail ? "youtube" : isSilentCamera ? "tiktok" : "tiktok", isCard:true, editSlide:slideArr[0], silentCamera:isSilentCamera, sourceLabel:t.source||"Article photo", _renderCtx:{category,palette:localOpts.palette,format:cardFormat,imageUrl:articleImage,theme:localOpts.theme,typography:localOpts.typography,density:localOpts.density}} : {type:"carousel", slides: slideArr, images: imgsFinal, _renderCtx: { category, palette: localOpts.palette, format: cardFormat, imageUrl: articleImage, theme: localOpts.theme, typography: localOpts.typography, density: localOpts.density }});
+        out.push(isSingle ? {type:"image", img: imgsFinal[0], fallbackImg: slideArr[0].localImg, aspect: isThumbnail ? "youtube" : isInstagramSingle ? "instagram" : "tiktok", isCard:true, editSlide:slideArr[0], silentCamera:isSilentCamera, sourceLabel:t.source||"Article photo", _renderCtx:{category,palette:localOpts.palette,format:cardFormat,imageUrl:articleImage,template:selectedTemplate,theme:localOpts.theme,typography:localOpts.typography,density:localOpts.density}} : {type:"carousel", slides: slideArr, images: imgsFinal, _renderCtx: { category, palette: localOpts.palette, format: cardFormat, imageUrl: articleImage, template:selectedTemplate, theme: localOpts.theme, typography: localOpts.typography, density: localOpts.density }});
       } else if(/image/i.test(c)){
         const aspect = aspectForContent(plat, c);
         if(t.image){

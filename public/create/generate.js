@@ -103,11 +103,11 @@
       S.cardTemplate = S.cardTemplate || {};
       S.cardTemplate[trend.id] = st.template;
       if (st.template === 'editorial' || st.template === 'minimal_noir') S.cardTypography[trend.id] = 'editorial_serif';
-      else if (st.template === 'stat_split' || st.template === 'viral_hook') S.cardTypography[trend.id] = 'condensed_sans';
+      else if (st.template === 'stat_split' || st.template === 'viral_hook' || st.template === 'quote_punch') S.cardTypography[trend.id] = 'condensed_sans';
       else if (st.template === 'neon_noir') S.cardTypography[trend.id] = 'code_mono';
       else S.cardTypography[trend.id] = 'impact';
 
-      if (st.template === 'dark_gradient' || st.template === 'high_retention') S.cardTheme[trend.id] = 'gradient';
+      if (st.template === 'dark_gradient' || st.template === 'high_retention' || st.template === 'minimal_noir') S.cardTheme[trend.id] = 'gradient';
       else if (st.template === 'neon_noir') S.cardTheme[trend.id] = 'bold_accent';
       else S.cardTheme[trend.id] = 'modern_dark';
     }
