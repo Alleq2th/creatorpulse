@@ -682,6 +682,8 @@
 .cc-live-status:empty{display:none}
 .cc-live-stage .cp-canvas-blocks{z-index:1}
 .cc-live-stage .cp-canvas-block{background:transparent;border:1px dashed rgba(255,255,255,.3)}
+.cc-live-stage .cp-canvas-block.is-empty:not(.is-selected){border-color:transparent;pointer-events:none}
+.cc-live-stage .cp-canvas-block.is-empty:not(.is-selected) .cc-live-text{display:none}
 .cc-live-stage .cp-canvas-block.is-selected{border:2px solid #44d7ff;background:rgba(68,215,255,.08);z-index:3}
 .cc-live-stage .cp-canvas-block:not(.is-selected) .cp-canvas-resize{display:none}
 .cc-live-stage .cp-canvas-label{display:none}

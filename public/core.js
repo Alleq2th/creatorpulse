@@ -1443,7 +1443,8 @@ function renderCardCanvasEditor(o, tid, idx, slideIndex, slide, imageUrl, aspect
   const box = (name, label, text) => {
     const pos = layout[name] || CP_LIVE_DEFAULT_BOX[name];
     const sel = !!cpCanvasSel && cpCanvasSel.key === key && cpCanvasSel.name === name;
-    return `<div class="cp-canvas-block${sel ? " is-selected" : ""}" data-canvas-key="${key}" data-canvas-block="${name}" tabindex="0" role="slider" aria-label="Drag or resize ${label}" style="left:${pos.x*100}%;top:${pos.y*100}%;width:${pos.width*100}%;height:${pos.height*100}%"><div class="cc-live-text${text ? "" : " is-empty"}" data-cp-live="${name}" style="${cpLiveTextStyle(live, name, o, tid)}">${esc(text || label)}</div><span class="cp-canvas-label">${label}</span><button type="button" class="cp-canvas-resize" data-canvas-resize="true" aria-label="Resize ${label}"></button></div>`;
+    const hasText = text !== undefined && text !== null && String(text).trim().length > 0;
+    return `<div class="cp-canvas-block${sel ? " is-selected" : ""}${hasText ? "" : " is-empty"}" data-canvas-key="${key}" data-canvas-block="${name}" tabindex="0" role="slider" aria-label="Drag or resize ${label}" style="left:${pos.x*100}%;top:${pos.y*100}%;width:${pos.width*100}%;height:${pos.height*100}%"><div class="cc-live-text${hasText ? "" : " is-empty"}" data-cp-live="${name}" style="${cpLiveTextStyle(live, name, o, tid)}">${esc(hasText ? text : label)}</div><span class="cp-canvas-label">${label}</span><button type="button" class="cp-canvas-resize" data-canvas-resize="true" aria-label="Resize ${label}"></button></div>`;
   };
   const sty = live._style || {};
   const stage = `<div class="cp-canvas-stage cc-live-stage" data-canvas-stage="${key}" data-tid="${tid}" data-idx="${idx}" data-slide-index="${slideIndex}" style="aspect-ratio:${aspectRatio}"><div class="cc-live-plate"></div><div class="cc-live-dim"></div><div class="cc-live-status" role="status"></div><div class="cp-canvas-blocks" data-canvas-key="${key}" data-slide-index="${slideIndex}" data-card-key="${tid}-${idx}">${CARD_LAYERS.map(L => box(L.key, L.label, live[L.field])).join("")}</div></div>`;
@@ -1462,6 +1463,7 @@ function renderCardCanvasEditor(o, tid, idx, slideIndex, slide, imageUrl, aspect
     <div class="cc-tools">
       <button type="button" class="btn bp bxs cc-th-open" onclick="cpOpenThemes('${tid}',${idx},${slideIndex})">Themes</button>
       <span class="cc-style-hint cc-th-hint">${esc(themeLabel)}</span>
+      ${CARD_LAYERS.filter(L => !(live[L.field] && String(live[L.field]).trim())).map(L => `<button type="button" class="btn bo bxs" style="font-size:11px;padding:3px 8px;margin-left:4px" onclick="cpAddCardLayer('${tid}',${idx},${slideIndex},'${L.key}')">+ ${esc(L.label)}</button>`).join("")}
     </div>
     <details class="cc-post-details"><summary>Post details</summary>
       ${mockRow("handle", "Name", mt.handle || "", defHandle)}
@@ -1737,6 +1739,14 @@ function cpBgMenuHTML(tid, idx, slideIndex) {
     <label class="cc-bg-row"><span class="cc-style-label">Blurring</span><input type="range" min="0" max="24" value="${Math.round((((sty.backgroundAdjustments || {}).blur) ?? 0))}" aria-label="Background blurring" oninput="cpSetCardBackgroundAdjustment('${tid}',${idx},${slideIndex},'blur',Number(this.value))"/></label>`;
 }
 
+window.cpAddCardLayer = function(tid, idx, slideIndex, layerKey) {
+  const layer = CARD_LAYERS.find(L => L.key === layerKey);
+  if (!layer) return;
+  const defVal = layerKey === "ctaLine" ? "FOLLOW FOR MORE →" : layerKey === "supportingText" ? "Add supporting text" : "Headline";
+  cpSetSlideText(tid, idx, slideIndex, layer.field, defVal);
+  cpSelectCanvasBlock(`${tid}-${idx}-${slideIndex}`, layerKey);
+};
+
 window.cpSetCardBackgroundAdjustment = (tid, idx, slideIndex, key, value) => {
   const slide = cpCardSlide(tid, idx, slideIndex); if (!slide) return;
   slide._style = slide._style || {};
@@ -2004,7 +2014,9 @@ function cpUpdateLiveStage(tid, idx, slideIndex) {
     if (txt) {
       const typing = txt === document.activeElement;
       if (!typing) txt.textContent = val || L.label;
-      txt.classList.toggle("is-empty", !val && !typing);
+      const empty = !val && !typing;
+      txt.classList.toggle("is-empty", empty);
+      block.classList.toggle("is-empty", empty);
       txt.style.cssText = cpLiveTextStyle(slide, L.key, o, tid);
     }
     if (cpCanvasDragging(block)) return; // the pointer owns the box while dragging
