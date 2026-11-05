@@ -40,6 +40,6 @@ test('a failed preview has an accessible explicit retry control and retry bypass
 });
 
 test('preview changes refresh the cached core and service worker assets', () => {
-  assert.match(html, /core\.js\?v=58/);
-  assert.match(sw, /creatorpulse-v38/);
+  assert.match(html, /core\.js\?v=61/);
+  assert.match(sw, /creatorpulse-v40/);
 });

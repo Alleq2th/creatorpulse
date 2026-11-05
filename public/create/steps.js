@@ -234,6 +234,42 @@
     { id: 'high_retention', label: 'High-Retention Alert', sub: 'Attention-grabbing badge and stacked punchlines', preview: 'background:#1e1b4b;color:#a855f7;font-weight:800;' }
   ];
 
+  // A template tile is a miniature of the real template, not a flat colour with
+  // a label. It is built from the same shared layout the card and the export
+  // use (public/lib/cardLayout.js), so the colours, the font, the badge and the
+  // text placement are the template's own. Falls back to the flat preview only
+  // if that module is unavailable.
+  function templateThumb(tmpl, platform) {
+    var L = window.CPCardLayout;
+    if (!L) return '<div class="cc-template-thumb" style="' + tmpl.preview + '"><span>' + E(tmpl.label) + '</span></div>';
+    var sample = {
+      type: 'hook',
+      headline: tmpl.label,
+      supportingText: tmpl.sub,
+      ctaLine: 'FOLLOW FOR MORE',
+      slideNumber: 1, totalSlides: 1
+    };
+    var design = L.resolve({ templateId: tmpl.id, platform: platform, slide: sample, index: 0, total: 1, style: {} });
+    if (!design) return '<div class="cc-template-thumb" style="' + tmpl.preview + '"><span>' + E(tmpl.label) + '</span></div>';
+    var scrim = design.scrim.stops.map(function (s) { return s.color + ' ' + Math.round(s.offset * 100) + '%'; }).join(',');
+    var layers = design.layers.filter(function (l) { return !l.empty; }).map(function (l) {
+      return '<span class="cc-template-layer" style="left:' + (l.box.x * 100).toFixed(1) + '%;top:' + (l.box.y * 100).toFixed(1) + '%;width:' + (l.box.width * 100).toFixed(1) + '%;height:' + (l.box.height * 100).toFixed(1) + '%;' + L.layerCss(l) + '">' + E(l.displayText) + '</span>';
+    }).join('');
+    var deco = design.decoration;
+    var decoHtml = '';
+    if (deco.type === 'badge') {
+      decoHtml = '<span class="cc-template-badge-pill" style="left:' + (deco.x / design.canvas.width * 100).toFixed(1) + '%;top:' + (deco.y / design.canvas.height * 100).toFixed(1) + '%;width:' + (deco.width / design.canvas.width * 100).toFixed(1) + '%;height:' + (deco.height / design.canvas.height * 100).toFixed(1) + '%;background:' + deco.bg + ';color:' + design.palette.bg + '">' + E(deco.text) + '</span>';
+    } else if (deco.type === 'corner') {
+      decoHtml = '<span class="cc-template-rule" style="left:0;top:0;width:100%;height:' + (deco.height / design.canvas.height * 100).toFixed(1) + '%;background:' + deco.bg + '"></span>';
+    } else if (deco.type === 'rule') {
+      decoHtml = '<span class="cc-template-rule" style="left:' + (deco.x / design.canvas.width * 100).toFixed(1) + '%;top:' + (deco.y / design.canvas.height * 100).toFixed(1) + '%;width:' + (deco.width / design.canvas.width * 100).toFixed(1) + '%;height:' + (deco.height / design.canvas.height * 100).toFixed(1) + '%;background:' + deco.bg + '"></span>';
+    }
+    return '<div class="cc-template-thumb cc-template-thumb-live" style="background:' + design.palette.bg + '">' +
+      '<span class="cc-template-scrim" style="background:linear-gradient(180deg,' + scrim + ')"></span>' +
+      decoHtml + layers +
+    '</div>';
+  }
+
   function toneStep(st) {
     var f = F();
     var isImage = (st.platform === 'instagram' && /IG (Single Post|Carousel)/.test(st.format || '')) || (st.platform === 'tiktok' && /graphic|camera/i.test(st.format || ''));
@@ -249,9 +285,7 @@
         var on = (st.template || tmpls[0].id) === tmpl.id;
         return '<button class="cc-template-card ' + (on ? 'on' : '') + '" type="button" ' +
           'onclick="cpCreateSetTemplate(\'' + tmpl.id + '\')" role="radio" aria-checked="' + (on ? 'true' : 'false') + '" aria-pressed="' + (on ? 'true' : 'false') + '">' +
-          '<div class="cc-template-thumb" style="' + tmpl.preview + '">' +
-          '<span>' + E(tmpl.label) + '</span>' +
-          '</div>' +
+          templateThumb(tmpl, st.platform) +
           '<div class="cc-template-meta">' +
           '<span class="cc-template-title">' + E(tmpl.label) + '</span>' +
           '<span class="cc-template-sub">' + E(tmpl.sub) + '</span>' +
@@ -307,6 +341,7 @@
   window.cpFilterCreateTemplates = window.cpFilterCreateTemplates || function () {};
   window.cpSearchCreateTemplates = window.cpSearchCreateTemplates || function () {};
   window.CPCreateSteps = {
+    templateThumb: templateThumb,
     sourceStep: sourceStep,
     platformStep: platformStep,
     formatStep: formatStep,

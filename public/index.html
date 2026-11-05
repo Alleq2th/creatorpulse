@@ -25,7 +25,7 @@
 <link rel="stylesheet" href="studio.css?v=30">
 <!-- Create flow styles. Everything is scoped under .cc-* so it cannot collide
      with the Studio's .sv-* classes or the rest of the app. -->
-<link rel="stylesheet" href="create/create.css?v=43">
+<link rel="stylesheet" href="create/create.css?v=50">
 <link rel="stylesheet" href="create/carouselPages.css?v=1">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -1906,18 +1906,37 @@ body{padding-bottom:calc(var(--tab-h) + env(safe-area-inset-bottom));letter-spac
   .mock-ig-caption b { color: #fff; font-weight: 600; margin-right: 4px; }
   .mock-ig-more { color: #888; cursor: pointer; }
 
-  /* TikTok Mockup */
+  /* TikTok Mockup
+     ROOT CAUSE of "card at half height, pinned to the top": the shell was a
+     column flexbox with justify-content:space-between, and the card stage was a
+     normal flex child with only an aspect-ratio. A flex child with no flex-grow
+     shrinks to its content, so the card rendered at roughly half the frame and
+     the leftover space stayed black. The stage is now absolutely positioned to
+     fill the frame, and the TikTok chrome (top tabs, caption, action rail) is
+     layered on top of it instead of pushing it around. */
   .mock-tt-shell {
     aspect-ratio: 9/16;
     max-height: 480px;
     position: relative;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
+    display: block;
     background: #050505;
     overflow: hidden;
   }
+  .mock-tt-shell > .cc-live-stage,
+  .mock-tt-shell > .cp-canvas-stage {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    margin: 0;
+    border-radius: 0;
+    box-shadow: none;
+    z-index: 1;
+  }
   .mock-tt-top {
+    position: absolute;
+    top: 0; left: 0; right: 0;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1926,17 +1945,20 @@ body{padding-bottom:calc(var(--tab-h) + env(safe-area-inset-bottom));letter-spac
     font-size: 12px;
     font-weight: 600;
     color: #888;
-    z-index: 2;
+    z-index: 3;
+    pointer-events: none;
   }
   .mock-tt-top .active { color: #fff; border-bottom: 2px solid #fff; padding-bottom: 1px; }
   .mock-tt-overlay {
-    position: relative;
-    z-index: 2;
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    z-index: 3;
     display: flex;
     justify-content: space-between;
     align-items: flex-end;
     padding: 12px 10px;
     background: linear-gradient(to top, rgba(0,0,0,0.88) 0%, transparent 100%);
+    pointer-events: none;
   }
   .mock-tt-info { flex: 1; padding-right: 10px; }
   .mock-tt-user { font-size: 12px; font-weight: 700; color: #fff; margin-bottom: 3px; }
@@ -2152,7 +2174,32 @@ body{padding-bottom:calc(var(--tab-h) + env(safe-area-inset-bottom));letter-spac
 <style id="cp-canvas-editor-styles">
 .cp-canvas-editor{margin:0 10px 10px;padding:8px 12px;border:1px solid var(--br);border-radius:8px;background:var(--sf)}
 .cp-canvas-editor>summary{cursor:pointer;font-size:12px;font-weight:700;color:var(--mu2);list-style:none}.cp-canvas-editor>summary::-webkit-details-marker{display:none}.cp-canvas-editor>summary:after{content:"＋";float:right;color:var(--mu)}
-.cp-canvas-instructions{font-size:10px;color:var(--mu);padding:7px 0}.cp-canvas-stage{position:relative;width:min(100%,360px);margin:0 auto;background:#111;overflow:hidden;touch-action:none;user-select:none;border-radius:8px;box-shadow:0 4px 18px #0004}.cp-canvas-stage>img{position:absolute;inset:0;width:100%;height:100%;object-fit:fill;pointer-events:none}.cp-canvas-blocks{position:absolute;inset:0}.cp-canvas-block{position:absolute;border:1px dashed rgba(255,255,255,.84);background:rgba(20,20,24,.18);border-radius:5px;touch-action:none;cursor:move;color:#fff;box-sizing:border-box}.cp-canvas-block.is-active{border:2px solid #44d7ff;background:rgba(68,215,255,.12);z-index:3}.cp-canvas-label{position:absolute;left:4px;top:4px;padding:2px 5px;border-radius:4px;background:#08090cdd;color:#fff;font-size:9px;font-weight:700;line-height:1.2;pointer-events:none}.cp-canvas-resize{position:absolute;right:-5px;bottom:-5px;width:18px;height:18px;border:2px solid #101114;border-radius:50%;background:#55d9ff;box-shadow:0 0 0 1px white;cursor:nwse-resize;touch-action:none}.cp-canvas-actions{display:flex;justify-content:space-between;gap:8px;max-width:360px;margin:9px auto 0}.cp-canvas-actions button{font-size:10px}
+.cp-canvas-instructions{font-size:10px;color:var(--mu);padding:7px 0}.cp-canvas-stage{position:relative;width:min(100%,360px);margin:0 auto;background:#111;overflow:hidden;touch-action:none;user-select:none;border-radius:8px;box-shadow:0 4px 18px #0004;container-type:inline-size}.cp-canvas-stage>img{position:absolute;inset:0;width:100%;height:100%;object-fit:fill;pointer-events:none}.cp-canvas-blocks{position:absolute;inset:0}.cp-canvas-block{position:absolute;border:1px dashed rgba(255,255,255,.84);background:rgba(20,20,24,.18);border-radius:5px;touch-action:none;cursor:move;color:#fff;box-sizing:border-box}.cp-canvas-block.is-active{border:2px solid #44d7ff;background:rgba(68,215,255,.12);z-index:3}.cp-canvas-label{position:absolute;left:4px;top:4px;padding:2px 5px;border-radius:4px;background:#08090cdd;color:#fff;font-size:9px;font-weight:700;line-height:1.2;pointer-events:none}.cp-canvas-resize{position:absolute;right:-5px;bottom:-5px;width:18px;height:18px;border:2px solid #101114;border-radius:50%;background:#55d9ff;box-shadow:0 0 0 1px white;cursor:nwse-resize;touch-action:none}.cp-canvas-actions{display:flex;justify-content:space-between;gap:8px;max-width:360px;margin:9px auto 0}.cp-canvas-actions button{font-size:10px}
+/* ── Live card preview: read-only presentation ────────────────────────────────
+   The mockup is a PREVIEW, not the editor. Dashed outlines, resize handles and
+   layer labels belong to edit mode only, so they are hidden here and shown only
+   when the stage carries .is-editing (the canvas editor adds it). This is why a
+   dashed box no longer appears in a mockup or in an exported image. */
+.cc-live-stage .cp-canvas-block{border:0;background:transparent;cursor:default}
+.cc-live-stage .cp-canvas-label,
+.cc-live-stage .cp-canvas-resize{display:none}
+.cc-live-stage.is-editing .cp-canvas-block{border:1px dashed rgba(255,255,255,.84);background:rgba(20,20,24,.18);cursor:move}
+.cc-live-stage.is-editing .cp-canvas-label,
+.cc-live-stage.is-editing .cp-canvas-resize{display:block}
+/* An empty slot is invisible in the preview: no outline, no placeholder text. */
+.cc-live-stage .cp-canvas-block.is-empty{display:none}
+.cc-live-stage.is-editing .cp-canvas-block.is-empty{display:block}
+.cc-live-stage .cc-live-text.is-empty{display:none}
+.cc-live-stage.is-editing .cc-live-text.is-empty{display:block;opacity:.55}
+/* The scrim sits above the photo and below the text, so a headline stays
+   readable over any image. */
+.cc-live-scrim{position:absolute;inset:0;z-index:1;pointer-events:none}
+.cc-live-plate,.cc-live-dim{z-index:0}
+.cc-live-status{z-index:4}
+/* Text keeps clear of the carousel nav arrows. The clearance is applied in the
+   shared layout (safe zones), not as padding here, so the export gets the same
+   margin and the two stay identical. */
+.cc-live-stage .cp-canvas-block{max-width:100%}
 </style>
 
 <style id="cp-splash-styles">
@@ -2395,17 +2442,23 @@ body{padding-bottom:calc(var(--tab-h) + env(safe-area-inset-bottom));letter-spac
 <script src="create/cardThemes.js?v=2"></script>
 <script src="create/templateEngine.js?v=2"></script>
 <script src="lib/designSystem.js?v=1"></script>
+<!-- Shared card layout + DOM painters. ONE source of truth for font, size,
+     position, wrapping and decoration, used by both the live preview and the
+     exported image. Loaded before core.js, which reads them. -->
+<script src="lib/cardLayout.js?v=2"></script>
+<script src="lib/cardPaint.js?v=2"></script>
+<script src="lib/themePreview.js?v=1"></script>
 <script src="lib/generationBudget.js?v=1"></script>
 <script src="create/slidePlan.js?v=1"></script>
 <script src="create/textBoxGestures.js?v=1"></script>
-<script src="core.js?v=58"></script>
+<script src="core.js?v=61"></script>
 <!-- Create flow (spec PART 6). Order matters: flow.js defines the rules,
      steps/review render from it, generate.js wires to the existing pipeline,
      and index.js exposes the handlers the markup calls. All of them load
      after core.js (they use its PLATS/PTYPES/esc/renderOut). -->
 <script src="create/env.js?v=45"></script>
 <script src="create/flow.js?v=45"></script>
-<script src="create/steps.js?v=46"></script>
+<script src="create/steps.js?v=48"></script>
 <script src="create/generate.js?v=45"></script>
 <script src="create/review.js?v=46"></script>
 <script src="create/index.js?v=46"></script>
