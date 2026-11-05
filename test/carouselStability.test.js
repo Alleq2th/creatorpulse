@@ -35,10 +35,16 @@ test('server plate rendering exits before preparing any text or brand layers', (
 
 test('carousel card renders await one slide at a time and preserve slide order', () => {
   const body = fnBody(renderer, 'renderCardSet');
-  assert.match(body, /for \(let i = 0; i < total; i\+\+\)/);
-  assert.match(body, /buffers\[i\] = await renderStatCard/);
-  assert.doesNotMatch(body, /Promise\.all/);
+  // Slides now render through a BOUNDED concurrency pool instead of strictly
+  // one at a time. The guarantee that matters is unchanged: results come back
+  // in slide order, and the number of slides in flight is capped so a small
+  // Render instance cannot be pushed into an out-of-memory restart.
+  assert.match(body, /mapWithConcurrency\(slides, limit/);
   assert.match(body, /slideNumber: i \+ 1, totalSlides: total/);
+  assert.doesNotMatch(body, /Promise\.all\(slides\.map/, 'slides must not all render at once');
+  const pool = fnBody(renderer, 'mapWithConcurrency');
+  assert.match(pool, /out\[i\] = await worker\(items\[i\], i\)/, 'results must be written back by index');
+  assert.match(pool, /Math\.min\(limit, items\.length\)/, 'the pool size must be bounded by the limit');
 });
 
 test('editor plate requests are serialized per carousel output', () => {
@@ -62,6 +68,6 @@ test('carousel theme gallery explains it applies across all slides', () => {
 });
 
 test('mobile clients refresh the updated editor and offline cache', () => {
-  assert.match(html, /core\.js\?v=57/);
-  assert.match(sw, /creatorpulse-v37/);
+  assert.match(html, /core\.js\?v=58/);
+  assert.match(sw, /creatorpulse-v38/);
 });
