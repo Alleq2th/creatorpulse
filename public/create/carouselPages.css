@@ -1,0 +1,49 @@
+/* CreatorPulse · Numbered page chips under the Instagram carousel.
+ *
+ * The user asked for small page numbers (1, 2, 3, 4, 5) under the carousel so
+ * a viewer can see how many slides there are and swipe through them. Kept in
+ * its own file rather than appended to create.css so the carousel indicator is
+ * one self-contained, single-purpose piece of styling.
+ *
+ * The markup is produced by core.js from CPCreateSlidePlan.pageNumbers(), so
+ * the number of chips can never disagree with the number of slides rendered.
+ */
+
+.cc-carousel-pages {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 0 2px;
+  flex-wrap: wrap;
+}
+
+.cc-carousel-page {
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 15px;
+  border: 1px solid var(--br, #2a2a35);
+  background: var(--sf, #15151f);
+  color: var(--tx, #ffffff);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform .12s ease, border-color .12s ease;
+}
+
+.cc-carousel-page:hover {
+  border-color: var(--ac, #4ade80);
+}
+
+/* The slide currently on screen. */
+.cc-carousel-page.on {
+  border-color: var(--ac, #4ade80);
+  background: var(--ac, #4ade80);
+  color: #0a0a0c;
+  transform: scale(1.08);
+}
