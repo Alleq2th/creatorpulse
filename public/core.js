@@ -3192,8 +3192,8 @@ window.gen = async (tid, all) => {
         // before either local/server rendering. This is composition data, not
         // a palette-only theme: it supplies layout, typography, image treatment,
         // spacing and decoration for TikTok 9:16 or Instagram 4:5.
-        const selectedTemplate = (S.cardTemplate && S.cardTemplate[tid]) || (templateEngine && templateEngine.resolve(null, plat).id) || null;
-        const templateEngine = window.CPTemplateEngine;
+        const templateEngine = (typeof window !== "undefined" && window.CPTemplateEngine) || (typeof globalThis !== "undefined" && globalThis.CPTemplateEngine) || null;
+        const selectedTemplate = (S.cardTemplate && S.cardTemplate[tid]) || (templateEngine && templateEngine.resolve(null, plat)?.id) || null;
         if (templateEngine && selectedTemplate) {
           slideArr.forEach((slide, slideIndex) => templateEngine.apply(slide, selectedTemplate, slideIndex, slideArr.length));
         }

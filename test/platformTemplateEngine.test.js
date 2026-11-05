@@ -28,3 +28,14 @@ test('template resolution never crosses platform collections', () => {
   assert.equal(engine.resolve('impact', 'tiktok').id, 'viral_hook');
   assert.equal(engine.resolve('viral_hook', 'instagram').id, 'impact');
 });
+
+test('core.js declares templateEngine before evaluating selectedTemplate', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const coreJs = fs.readFileSync(path.join(__dirname, '../public/core.js'), 'utf8');
+  const declIdx = coreJs.indexOf('const templateEngine =');
+  const useIdx = coreJs.indexOf('templateEngine.resolve(null, plat)');
+  assert.ok(declIdx !== -1, 'templateEngine must be declared');
+  assert.ok(useIdx !== -1, 'templateEngine.resolve must be invoked');
+  assert.ok(declIdx < useIdx, 'templateEngine declaration must precede its usage to avoid TDZ ReferenceError');
+});
