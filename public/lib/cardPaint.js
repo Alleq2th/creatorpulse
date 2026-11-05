@@ -107,7 +107,11 @@
    * top of the safe zone to the bottom of the card, so a headline stays readable
    * over a busy photo (a source image's own logo block, for example). */
   function paintScrim(el, design) {
-    if (!el || !design || !design.scrim) return;
+    if (!el) return;
+    // A treatment with no scrim (split panel, inset frame, blurred backdrop)
+    // must CLEAR any scrim a previous template left behind, or the old gradient
+    // stays painted over the new card.
+    if (!design || !design.scrim) { el.style.background = "none"; el.style.opacity = "0"; return; }
     var s = design.scrim;
     var stops = s.stops.map(function (st) {
       return st.color + ' ' + Math.round(st.offset * 100) + '%';

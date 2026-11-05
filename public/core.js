@@ -1301,9 +1301,14 @@ function renderCardLiveStage(o, tid, idx, slideIndex, slide, aspectRatio) {
     // An empty slot is not drawn at all in the preview: no dashed outline, no
     // "Add supporting text" placeholder. It only appears once it is selected in
     // the editor, which is the only place a placeholder is useful.
-    return `<div class="cp-canvas-block${sel ? " is-selected" : ""}${hasText ? "" : " is-empty"}" data-canvas-key="${key}" data-canvas-block="${name}" tabindex="0" role="slider" aria-label="Drag or resize ${label}" style="left:${pos.x*100}%;top:${pos.y*100}%;width:${pos.width*100}%;height:${pos.height*100}%"><div class="cc-live-text${hasText ? "" : " is-empty"}" data-cp-live="${name}" style="${cpLiveTextStyle(live, name, o, tid)}">${esc(hasText ? text : label)}</div><span class="cp-canvas-label">${label}</span><button type="button" class="cp-canvas-resize cp-resize-corner" data-canvas-resize="true" data-canvas-resize-mode="both" aria-label="Resize ${label} width and height"></button><button type="button" class="cp-canvas-resize cp-resize-side" data-canvas-resize="true" data-canvas-resize-mode="horizontal" aria-label="Resize ${label} width"></button><button type="button" class="cp-canvas-resize cp-resize-top" data-canvas-resize="true" data-canvas-resize-mode="vertical" aria-label="Resize ${label} height"></button></div>`;
+    // The preview renders the engine's OWN wrapped lines, so the DOM cannot
+    // re-wrap into more lines than the box was fitted for. That is what keeps
+    // the preview and the export identical and stops a late font swap from
+    // pushing text out of its box.
+    const shown = hasText ? ((layer && layer.lines && layer.lines.length) ? layer.lines.join("\n") : text) : label;
+    return `<div class="cp-canvas-block${sel ? " is-selected" : ""}${hasText ? "" : " is-empty"}" data-canvas-key="${key}" data-canvas-block="${name}" tabindex="0" role="slider" aria-label="Drag or resize ${label}" style="left:${pos.x*100}%;top:${pos.y*100}%;width:${pos.width*100}%;height:${pos.height*100}%"><div class="cc-live-text${hasText ? "" : " is-empty"}" data-cp-live="${name}" style="${cpLiveTextStyle(live, name, o, tid)}">${esc(shown)}</div><span class="cp-canvas-label">${label}</span><button type="button" class="cp-canvas-resize cp-resize-corner" data-canvas-resize="true" data-canvas-resize-mode="both" aria-label="Resize ${label} width and height"></button><button type="button" class="cp-canvas-resize cp-resize-side" data-canvas-resize="true" data-canvas-resize-mode="horizontal" aria-label="Resize ${label} width"></button><button type="button" class="cp-canvas-resize cp-resize-top" data-canvas-resize="true" data-canvas-resize-mode="vertical" aria-label="Resize ${label} height"></button></div>`;
   };
-  return `<div class="cp-canvas-stage cc-live-stage" data-canvas-stage="${key}" data-tid="${tid}" data-idx="${idx}" data-slide-index="${slideIndex}" style="aspect-ratio:${aspectRatio}"><div class="cc-live-plate"></div><div class="cc-live-dim"></div><div class="cc-live-scrim" aria-hidden="true"></div><div class="cc-live-status" role="status"></div><div class="cp-canvas-blocks" data-canvas-key="${key}" data-slide-index="${slideIndex}" data-card-key="${tid}-${idx}">${CARD_LAYERS.map(L => box(L.key, L.label, cpCardLayerText(live, L))).join("")}</div></div>`;
+  return `<div class="cp-canvas-stage cc-live-stage" data-canvas-stage="${key}" data-tid="${tid}" data-idx="${idx}" data-slide-index="${slideIndex}" style="aspect-ratio:${aspectRatio}"><div class="cc-live-backdrop" aria-hidden="true"></div><div class="cc-live-plate"></div><div class="cc-live-tint" aria-hidden="true"></div><div class="cc-live-dim"></div><div class="cc-live-scrim" aria-hidden="true"></div><div class="cc-live-rule" aria-hidden="true"></div><div class="cc-live-status" role="status"></div><div class="cp-canvas-blocks" data-canvas-key="${key}" data-slide-index="${slideIndex}" data-card-key="${tid}-${idx}">${CARD_LAYERS.map(L => box(L.key, L.label, cpCardLayerText(live, L))).join("")}</div></div>`;
 }
 
 function renderPlatformMockup(o, tid, idx, curPlat) {
@@ -1453,7 +1458,7 @@ function renderPlatformMockup(o, tid, idx, curPlat) {
     const slideImg = curSlide?.img || o.img || "";
     const slideFb = curSlide?.localImg || o.fallbackImg || "";
     const mediaEl = isCardGraphic
-      ? `<div class="mock-x-media">${renderCardLiveStage(o, tid, idx, exportSi, activeSlideObj, "16/9")}</div>`
+      ? `<div class="mock-x-media">${renderCardLiveStage(o, tid, idx, exportSi, activeSlideObj, "1/1")}</div>`
       : (slideImg
         ? `<div class="mock-x-media"><img loading="lazy" decoding="async" data-cp-export="${tid}-${idx}-${exportSi}" onload="this.dataset.loaded='true'" src="${slideImg}" onerror="cardImgFail(this, this.dataset.fb)" data-fb="${slideFb}" style="width:100%;aspect-ratio:16/9;object-fit:cover;display:block"/></div>`
         : "");
@@ -1516,6 +1521,7 @@ function renderCardCanvasEditor(o, tid, idx, slideIndex, slide, imageUrl, aspect
     ${stage}${ctxBar}${bgBar}
     <div class="cc-tools">
       <button type="button" class="btn bp bxs cc-th-open" onclick="cpOpenThemes('${tid}',${idx},${slideIndex})">Themes</button>
+      <button type="button" class="btn bo bxs cc-ed-open" onclick="cpOpenCardEditor('${tid}',${idx},${slideIndex})">Edit</button>
       <span class="cc-style-hint cc-th-hint">${esc(themeLabel)}</span>
       ${CARD_LAYERS.filter(L => !(live[L.field] && String(live[L.field]).trim())).map(L => `<button type="button" class="btn bo bxs" style="font-size:11px;padding:3px 8px;margin-left:4px" onclick="cpAddCardLayer('${tid}',${idx},${slideIndex},'${L.key}')">+ ${esc(L.label)}</button>`).join("")}
     </div>
@@ -2137,6 +2143,8 @@ function cpPaintPlate(plateKey) {
     const stage = el.closest(".cc-live-stage");
     if (stage) stage.dataset.loading = String(!!(entry && entry.pending));
     el.style.backgroundImage = entry && entry.src ? `url("${entry.src}")` : "";
+    const bd = el.parentElement && el.parentElement.querySelector(".cc-live-backdrop");
+    if (bd) bd.style.backgroundImage = el.style.backgroundImage;
     const status = el.parentElement.querySelector(".cc-live-status");
     if (status) {
       status.replaceChildren();
@@ -2164,6 +2172,51 @@ function cpPaintPlate(plateKey) {
     const st = el.closest(".cc-live-stage");
     if (st) cpScheduleExport(st.dataset.tid, Number(st.dataset.idx), Number(st.dataset.slideIndex));
   });
+}
+
+// Paints the template's photo treatment (public/lib/photoTreatments.js) into the
+// live stage: where the photo sits, how it is graded, the blurred backdrop, the
+// accent tint and the accent rule. The export reads the SAME descriptor, so the
+// preview and the download cannot disagree about the photo.
+function cpApplyPhotoTreatment(stage, plateEl, design) {
+  if (!stage || !design) return;
+  const t = design.treatment || {};
+  const f = t.frame || { x: 0, y: 0, width: 1, height: 1, radius: 0 };
+  const pct = (n) => (Number(n) * 100).toFixed(3) + "%";
+  const backdrop = stage.querySelector(".cc-live-backdrop");
+  const tint = stage.querySelector(".cc-live-tint");
+  const rule = stage.querySelector(".cc-live-rule");
+  if (plateEl) {
+    Object.assign(plateEl.style, {
+      left: pct(f.x), top: pct(f.y), width: pct(f.width), height: pct(f.height),
+      right: "auto", bottom: "auto",
+      borderRadius: f.radius ? (f.radius * 100).toFixed(2) + "%" : "0"
+    });
+    const fl = t.filter || {};
+    const parts = [];
+    if (fl.brightness != null && fl.brightness !== 1) parts.push(`brightness(${fl.brightness})`);
+    if (fl.contrast != null && fl.contrast !== 1) parts.push(`contrast(${fl.contrast})`);
+    if (fl.saturation != null && fl.saturation !== 1) parts.push(`saturate(${fl.saturation})`);
+    if (fl.grayscale) parts.push(`grayscale(${fl.grayscale})`);
+    if (fl.blur) parts.push(`blur(${fl.blur}px)`);
+    plateEl.dataset.cpTreatmentFilter = parts.join(" ");
+    plateEl.style.filter = parts.join(" ");
+  }
+  if (backdrop) {
+    if (t.backdrop) {
+      backdrop.hidden = false;
+      Object.assign(backdrop.style, { left: "0", top: "0", width: "100%", height: "100%", filter: `blur(${t.backdrop.blur}px)`, opacity: String(Math.max(0, 1 - (t.backdrop.dim || 0))) });
+      if (plateEl && plateEl.style.backgroundImage) backdrop.style.backgroundImage = plateEl.style.backgroundImage;
+    } else { backdrop.hidden = true; backdrop.style.backgroundImage = ""; }
+  }
+  if (tint) {
+    if (t.tint) { tint.hidden = false; tint.style.background = t.tint.color; tint.style.opacity = String(t.tint.alpha); tint.style.mixBlendMode = t.tint.blend || "normal"; }
+    else { tint.hidden = true; tint.style.background = ""; }
+  }
+  if (rule) {
+    if (t.rule) { rule.hidden = false; Object.assign(rule.style, { left: pct(t.rule.x), top: pct(t.rule.y), width: pct(t.rule.width), height: pct(t.rule.height), background: t.rule.color }); }
+    else { rule.hidden = true; rule.style.background = ""; }
+  }
 }
 
 // Writes the shared card state into one live stage: photo, dim, text, fonts, colours and boxes.
@@ -2195,11 +2248,11 @@ function cpUpdateLiveStage(tid, idx, slideIndex) {
   });
   if (template) {
     stage.style.backgroundColor = template.palette.bg;
-    const imageLayout = template.image || {};
-    if (plateEl && imageLayout.mode === "panel") Object.assign(plateEl.style, { left: "8%", top: "6%", right: "8%", bottom: "auto", width: "84%", height: "42%", borderRadius: "12px" });
-    else if (plateEl && imageLayout.mode === "split") Object.assign(plateEl.style, { left: "52%", top: "10%", right: "8%", bottom: "18%", width: "40%", height: "72%", borderRadius: "10px" });
-    else if (plateEl) Object.assign(plateEl.style, { left: "0", top: "0", right: "0", bottom: "0", width: "100%", height: "100%", borderRadius: "0" });
-    if (plateEl) plateEl.style.backgroundPosition = imageLayout.focal === "subject" ? "center 38%" : "center";
+    // The photo treatment (public/lib/photoTreatments.js) decides where the
+    // photo sits, how it is graded and where the accent rule goes. The export
+    // reads the same descriptor, so the two cannot disagree.
+    cpApplyPhotoTreatment(stage, plateEl, design);
+    if (plateEl) plateEl.style.backgroundPosition = "center";
     if (dimEl) dimEl.style.background = template.palette.gradient || "#000";
     // The badge/rule/frame/orb/stripes are painted by the shared painter, which
     // sizes them in card pixels. That is what stops the accent pill from
@@ -2243,7 +2296,7 @@ function cpUpdateLiveStage(tid, idx, slideIndex) {
       const contrast = Math.max(0, Math.min(2, Number(adj.contrast ?? 1)));
       const saturation = Math.max(0, Math.min(2, Number(adj.saturation ?? 1)));
       const blur = Math.max(0, Math.min(24, Number(adj.blur ?? 0)));
-      plateEl.style.filter = `brightness(${brightness}) contrast(${contrast}) saturate(${saturation}) blur(${blur}px)`;
+      plateEl.style.filter = [plateEl.dataset.cpTreatmentFilter, `brightness(${brightness}) contrast(${contrast}) saturate(${saturation}) blur(${blur}px)`].filter(Boolean).join(" ");
     }
     const status = stage.querySelector(".cc-live-status");
     if (status) status.textContent = "";
@@ -2256,9 +2309,9 @@ function cpUpdateLiveStage(tid, idx, slideIndex) {
       const contrast = Math.max(0, Math.min(2, Number(adj.contrast ?? 1)));
       const saturation = Math.max(0, Math.min(2, Number(adj.saturation ?? 1)));
       const blur = Math.max(0, Math.min(24, Number(adj.blur ?? 0)));
-      plateEl.style.filter = (brightness !== 1 || contrast !== 1 || saturation !== 1 || blur > 0)
+      plateEl.style.filter = [plateEl.dataset.cpTreatmentFilter, (brightness !== 1 || contrast !== 1 || saturation !== 1 || blur > 0)
         ? `brightness(${brightness}) contrast(${contrast}) saturate(${saturation}) blur(${blur}px)`
-        : "";
+        : ""].filter(Boolean).join(" ");
     }
     cpEnsurePlate(tid, idx, slideIndex);
     cpPaintPlate(plateKey);
@@ -2682,8 +2735,13 @@ async function cpComposeCard(snap) {
     const contrast = Math.max(0, Math.min(2, Number(adj.contrast ?? 1)));
     const saturation = Math.max(0, Math.min(2, Number(adj.saturation ?? 1)));
     const blur = Math.max(0, Math.min(24, Number(adj.blur ?? 0)));
+    // The photo frame comes from the SAME treatment descriptor the preview
+    // paints from (public/lib/photoTreatments.js), so the exported photo sits
+    // exactly where the mockup shows it. The legacy mode mapping is only a
+    // fallback for a card with no resolved design.
     const imageMode = state.imageLayout?.mode;
-    const r = imageMode === "panel" ? { x: .08, y: .06, width: .84, height: .42 } : imageMode === "split" ? { x: .52, y: .10, width: .40, height: .72 } : { x: 0, y: 0, width: 1, height: 1 };
+    const treatmentFrame = state.design && state.design.treatment && state.design.treatment.frame;
+    const r = treatmentFrame || (imageMode === "panel" ? { x: .08, y: .06, width: .84, height: .42 } : imageMode === "split" ? { x: .52, y: .10, width: .40, height: .72 } : { x: 0, y: 0, width: 1, height: 1 });
     const x = r.x * W, y = r.y * H, rw = r.width * W, rh = r.height * H;
     const scale = Math.max(rw / photo.naturalWidth, rh / photo.naturalHeight);
     const dw = photo.naturalWidth * scale, dh = photo.naturalHeight * scale;
@@ -2692,6 +2750,17 @@ async function cpComposeCard(snap) {
     ctx.filter = `brightness(${brightness}) contrast(${contrast}) saturate(${saturation}) blur(${blur}px)`;
     ctx.drawImage(photo, x + (rw - dw) * fx, y + (rh - dh) * fy, dw, dh);
     ctx.restore();
+    // The treatment's accent tint (duotone) is drawn from the same descriptor
+    // the preview uses, so a duotone card exports duotone.
+    const tint = state.design && state.design.treatment && state.design.treatment.tint;
+    if (tint) {
+      ctx.save();
+      ctx.globalCompositeOperation = "multiply";
+      ctx.globalAlpha = Math.max(0, Math.min(1, Number(tint.alpha) || 0));
+      ctx.fillStyle = tint.color;
+      ctx.fillRect(0, 0, W, H);
+      ctx.restore();
+    }
   }
   if (state.dim > 0) {
     const overlayGradient = state.templatePalette?.gradient;
@@ -3202,6 +3271,27 @@ function cpSyncGalleryPlate(gal) {
   gal.failed = failed;
   cpRenderThemeGallery();
 }
+// Opens the card editor (public/lib/cardEditor.js): template, slide role, photo
+// treatment and the single accent, with a live preview drawn from the same
+// layout result the mockup and the export use. Every change repaints the card
+// through cpUpdateLiveStage, so the preview is never a separate rendering.
+window.cpOpenCardEditor = (tid, idx, slideIndex) => {
+  const o = S.outs[tid]?.[idx];
+  const slide = cpCardSlide(tid, idx, slideIndex);
+  if (!o || !o._renderCtx || !slide) { toast("That graphic is not ready to edit yet."); return; }
+  if (!window.CPCardEditor) { toast("The editor is still loading."); return; }
+  window.CPCardEditor.open({
+    tid, idx, slideIndex,
+    platform: cpLayoutPlatform(o),
+    getSlide: () => cpCardSlide(tid, idx, slideIndex),
+    getPlate: () => {
+      const entry = cpPlateCache.get(cpPlateKey(tid, idx, slideIndex));
+      return (entry && entry.src) || (slide._style && slide._style.bgImage) || "";
+    },
+    onChange: () => cpApplyThemeLive(tid, idx, slideIndex),
+    toast
+  });
+};
 window.cpOpenThemes = (tid, idx, slideIndex) => {
   const o = S.outs[tid]?.[idx];
   const slide = cpCardSlide(tid, idx, slideIndex);

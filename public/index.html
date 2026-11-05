@@ -2194,7 +2194,8 @@ body{padding-bottom:calc(var(--tab-h) + env(safe-area-inset-bottom));letter-spac
 /* The scrim sits above the photo and below the text, so a headline stays
    readable over any image. */
 .cc-live-scrim{position:absolute;inset:0;z-index:1;pointer-events:none}
-.cc-live-plate,.cc-live-dim{z-index:0}
+.cc-live-plate,.cc-live-dim,.cc-live-backdrop{z-index:0}
+.cc-live-tint,.cc-live-rule{z-index:1;pointer-events:none}
 .cc-live-status{z-index:4}
 /* Text keeps clear of the carousel nav arrows. The clearance is applied in the
    shared layout (safe zones), not as padding here, so the export gets the same
@@ -2440,18 +2441,27 @@ body{padding-bottom:calc(var(--tab-h) + env(safe-area-inset-bottom));letter-spac
      so the card's "Create content" button always has its helper available. -->
 <script src="lib/storyToCreate.js?v=45"></script>
 <script src="create/cardThemes.js?v=2"></script>
-<script src="create/templateEngine.js?v=2"></script>
-<script src="lib/designSystem.js?v=1"></script>
+<!-- Card design system. ONE source of truth for the design, loaded in dependency
+     order: typography (type + auto-fit maths) -> template specs (the declarative
+     catalogue) -> photo treatments -> the layout engine that reads them. The
+     preview and the export both consume the engine's single result. -->
+<script src="lib/cardTypography.js?v=1"></script>
+<script src="lib/cardTemplates.js?v=1"></script>
+<script src="lib/photoTreatments.js?v=1"></script>
+<script src="lib/cardLayoutEngine.js?v=1"></script>
+<script src="create/templateEngine.js?v=3"></script>
+<script src="lib/designSystem.js?v=2"></script>
 <!-- Shared card layout + DOM painters. ONE source of truth for font, size,
      position, wrapping and decoration, used by both the live preview and the
      exported image. Loaded before core.js, which reads them. -->
-<script src="lib/cardLayout.js?v=2"></script>
+<script src="lib/cardLayout.js?v=3"></script>
 <script src="lib/cardPaint.js?v=2"></script>
 <script src="lib/themePreview.js?v=1"></script>
+<script src="lib/cardEditor.js?v=1"></script>
 <script src="lib/generationBudget.js?v=1"></script>
 <script src="create/slidePlan.js?v=1"></script>
 <script src="create/textBoxGestures.js?v=1"></script>
-<script src="core.js?v=61"></script>
+<script src="core.js?v=63"></script>
 <!-- Create flow (spec PART 6). Order matters: flow.js defines the rules,
      steps/review render from it, generate.js wires to the existing pipeline,
      and index.js exposes the handlers the markup calls. All of them load

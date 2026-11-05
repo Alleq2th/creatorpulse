@@ -1,38 +1,39 @@
-/* CreatorPulse · Shared graphic design system.
+/* CreatorPulse · Shared graphic design system — adapter over the layout engine.
  *
  * WHY THIS FILE EXISTS
  * --------------------
- * The template catalogue in public/create/templateEngine.js describes what each
- * template is supposed to LOOK like: its palette, gradient, typography scale,
- * per-layer text boxes, image treatment and decoration. Before this file, only
- * the browser preview read any of that. The server renderer
- * (services/statCard.js) never received the template id at all, so it drew
- * every template with the same hardcoded palette + theme + tight 4-line text
- * fit — which is exactly why every template came out looking identical.
+ * The server renderer (services/statCard.js) needs a resolved "design state" for
+ * a template: its palette, background gradient, decoration, image treatment and
+ * per-layer text boxes. That used to be computed here, independently of the
+ * browser preview — a second layout path, which is exactly how the preview and
+ * the export drifted apart.
  *
- * This module turns a template's raw config into a single resolved "design
- * state" that BOTH renderers consume. One description, two painters, so the
- * preview and the exported image cannot drift apart.
+ * This file is now an ADAPTER. It calls the one layout engine
+ * (public/lib/cardLayoutEngine.js, which reads the declarative specs in
+ * public/lib/cardTemplates.js) and maps its result into the shape the export
+ * already consumes. There is ONE layout path; this file adds no layout logic of
+ * its own — it only renames fields and parses the template's CSS gradient into a
+ * descriptor both renderers can execute.
  *
  * Runs in two places, so it uses the repo's UMD pattern:
- *   - Node  : require("../create/templateEngine.js")
- *   - Browser: window.CPTemplateEngine (loaded before this script)
+ *   - Node  : require("./cardLayoutEngine.js")
+ *   - Browser: window.CPCardLayoutEngine (loaded before this script)
  */
 
 (function (root, factory) {
-  var engine;
+  var engine, templates;
   if (typeof module !== 'undefined' && module.exports) {
-    engine = require('../create/templateEngine.js');
+    engine = require('./cardLayoutEngine.js');
+    templates = require('./cardTemplates.js');
   } else {
-    engine = root.CPTemplateEngine;
+    engine = root.CPCardLayoutEngine;
+    templates = root.CPCardTemplates;
   }
-  var api = factory(engine);
+  var api = factory(engine, templates);
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (root) root.CPDesignSystem = api;
-})(typeof window !== 'undefined' ? window : null, function (engine) {
+})(typeof window !== 'undefined' ? window : null, function (engine, templates) {
   'use strict';
-
-  var TEMPLATES = (engine && engine.TEMPLATES) || {};
 
   /* Legacy theme keys written by an earlier Create flow. They are NOT theme
    * names (there is no "gradient" or "bold_accent" theme in services/statCard),
@@ -114,104 +115,6 @@
     return Math.max(baseLines, Math.min(9, lines));
   }
 
-  function layerNames(template) {
-    var layout = (template && template.layout) || {};
-    return Object.keys(layout);
-  }
-
-  /* Resolves one template + slide role into the full design state.
-   *
-   * role is "cover" | "body" | "closing" — matching templateEngine.roleFor, so a
-   * carousel's cover and closing slides genuinely use different compositions
-   * instead of repeating the cover layout on every slide. */
-  function resolve(templateId, opts) {
-    opts = opts || {};
-    var platform = opts.platform || null;
-    var template = (engine && engine.get && engine.get(templateId)) || null;
-    if (!template && engine && engine.resolve) template = engine.resolve(templateId, platform);
-    if (!template) return null;
-
-    var total = Math.max(1, Number(opts.total) || 1);
-    var index = Math.max(0, Number(opts.index) || 0);
-    var role = (engine && engine.roleFor)
-      ? engine.roleFor(opts.slide || {}, index, total)
-      : (index === 0 ? 'cover' : 'body');
-
-    var layoutSource = (template.slideLayouts && template.slideLayouts[role]) || template.layout || {};
-    var layout = {};
-    layerNames(template).forEach(function (name) {
-      layout[name] = Object.assign({}, template.layout[name], layoutSource[name] || {});
-    });
-    // A role layout may introduce a layer the base layout did not have (e.g. a
-    // closing CTA). Include those too.
-    Object.keys(layoutSource).forEach(function (name) {
-      if (!layout[name]) layout[name] = Object.assign({}, layoutSource[name]);
-    });
-
-    var palette = Object.assign({
-      bg: '#0a0a0c', text: '#ffffff', accent: '#ffffff',
-      secondary: '#a1a1aa', dim: 0.4, gradient: ''
-    }, template.palette || {});
-
-    var typography = {};
-    Object.keys(template.typography || {}).forEach(function (name) {
-      var spec = template.typography[name] || {};
-      typography[name] = {
-        family: spec.family || 'modern_sans',
-        weight: Number(spec.weight) || 700,
-        size: Number(spec.size) || 4,
-        lineHeight: Number(spec.lineHeight) || 1.1,
-        transform: spec.transform || 'none'
-      };
-    });
-
-    var image = Object.assign({ mode: 'fullBleed', crop: 'cover', focal: 'center', overlay: 'soft' }, template.image || {});
-
-    // Text boxes as fractions of the stage, plus the line allowance each box
-    // can actually hold. This is what lets a headline run to 6-7 lines inside a
-    // tall template box instead of being chopped at 4.
-    var textBoxes = {};
-    Object.keys(layout).forEach(function (name) {
-      var box = layout[name];
-      var spec = typography[name] || { size: 3.4, lineHeight: 1.2 };
-      textBoxes[name] = {
-        x: Number(box.x) || 0,
-        y: Number(box.y) || 0,
-        width: Number(box.width) || 0.8,
-        height: Number(box.height) || 0.2,
-        // Line height in stage fractions: font size is a percentage of the
-        // stage width, so one line occupies (size/100 * lineHeight) of it.
-        lineFraction: (spec.size / 100) * spec.lineHeight,
-        maxLines: maxLinesForBox(box, 4)
-      };
-    });
-
-    var design = {
-      templateId: template.id,
-      platform: template.platform,
-      name: template.name,
-      canvas: Object.assign({ width: 1080, height: 1350 }, template.canvas || {}),
-      role: role,
-      palette: palette,
-      background: parseGradient(palette.gradient),
-      typography: typography,
-      layout: layout,
-      textBoxes: textBoxes,
-      image: image,
-      decoration: template.decoration || { type: 'none' },
-      safeZones: template.safeZones || null,
-      theme: normalizeTheme(opts.theme, 'modern_dark'),
-      // Image treatment as box fractions, so the DOM preview and the canvas
-      // export position the photo inside the identical region.
-      imageFrame: imageFrameFor(image, designCanvas(template))
-    };
-    return design;
-  }
-
-  function designCanvas(template) {
-    return Object.assign({ width: 1080, height: 1350 }, (template && template.canvas) || {});
-  }
-
   /* Where the photo sits on the card, as fractions of the stage.
    * fullBleed = whole card, panel = top banner, split = right column. */
   var IMAGE_FRAMES = {
@@ -225,6 +128,74 @@
     return Object.assign({}, frame, {
       focalY: image && image.focal === 'subject' ? 0.38 : 0.5
     });
+  }
+
+  /* The six story roles the engine resolves map onto the three the export's
+   * renderers and older callers know: cover / body / closing. */
+  function legacyRole(role) {
+    if (role === 'hook') return 'cover';
+    if (role === 'cta') return 'closing';
+    return 'body';
+  }
+
+  /* Resolves one template + slide into the full design state, by delegating to
+   * the single layout engine and mapping its result into the export's shape. */
+  function resolve(templateId, opts) {
+    opts = opts || {};
+    var platform = opts.platform || null;
+    var slide = opts.slide || {};
+    var design = engine && engine.resolve
+      ? engine.resolve({
+          templateId: templateId,
+          platform: platform,
+          slide: slide,
+          index: opts.index,
+          total: opts.total,
+          style: opts.style || slide._style || {}
+        })
+      : null;
+    if (!design) return null;
+
+    var palette = design.palette;
+    var layout = {};
+    var textBoxes = {};
+    var typography = {};
+    design.layers.forEach(function (l) {
+      layout[l.key] = { x: l.box.x, y: l.box.y, width: l.box.width, height: l.box.height };
+      textBoxes[l.key] = { x: l.box.x, y: l.box.y, width: l.box.width, height: l.box.height, lineFraction: l.sizePct * l.lineHeight, maxLines: l.maxLines };
+      typography[l.key] = { family: l.fontId, weight: l.fontWeight, size: l.sizePct * 100, lineHeight: l.lineHeight, transform: l.uppercase ? 'uppercase' : 'none' };
+    });
+
+    return {
+      templateId: design.templateId,
+      platform: design.platform,
+      name: design.templateName,
+      canvas: design.canvas,
+      role: legacyRole(design.role),
+      storyRole: design.role,
+      palette: palette,
+      background: parseGradient(palette.gradient),
+      typography: typography,
+      layout: layout,
+      textBoxes: textBoxes,
+      image: design.image,
+      decoration: design.decoration,
+      safeZones: design.safeZone,
+      theme: normalizeTheme(opts.theme, 'modern_dark'),
+      imageFrame: design.imageFrame,
+      // The engine's own result, so the export can read the pre-wrapped lines,
+      // the resolved font/size and the photo treatment directly.
+      layers: design.layers,
+      treatment: design.treatment,
+      scrim: design.scrim,
+      accentUse: design.accentUse
+    };
+  }
+
+  function isKnownTemplate(id) { return !!(templates && templates.get && templates.get(id)); }
+
+  function list(platform) {
+    return (templates && templates.list) ? templates.list(platform) : [];
   }
 
   /* The gradient a template uses as its scrim when it has a photo, or as its
@@ -243,14 +214,6 @@
       ] };
     }
     return parsed;
-  }
-
-  function isKnownTemplate(id) { return !!(TEMPLATES[id]); }
-
-  function list(platform) {
-    return Object.keys(TEMPLATES)
-      .map(function (id) { return TEMPLATES[id]; })
-      .filter(function (t) { return !platform || t.platform === platform; });
   }
 
   return {
