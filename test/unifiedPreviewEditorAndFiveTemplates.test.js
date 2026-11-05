@@ -71,6 +71,12 @@ test("background controls support solid colors and two-color gradients with pres
 });
 
 test("resizing block with touch or mouse updates layer scale live", () => {
-  assert.match(core, /const scaleRatio = Math\.max\(0\.5, Math\.min\(2\.0/);
-  assert.match(core, /cpSetLayerScale\(stage\.dataset\.tid, Number\(stage\.dataset\.idx\), Number\(stage\.dataset\.slideIndex\), block\.dataset\.canvasBlock, scaleRatio\)/);
+  // The resize maths now lives in the shared, unit-tested gesture module
+  // (public/create/textBoxGestures.js) and the handler applies its result.
+  // The guarantee is unchanged: a resize gesture must update the layer scale.
+  assert.match(core, /CPTextBoxGestures\.resizeBox\(/);
+  assert.match(core, /cpSetLayerScale\(stage\.dataset\.tid, Number\(stage\.dataset\.idx\), Number\(stage\.dataset\.slideIndex\), a\.block\.dataset\.canvasBlock, a\.scale\)/);
+  const gestures = require("../public/create/textBoxGestures.js");
+  const out = gestures.resizeBox({ left: 0, top: 0, width: 200, height: 100 }, { width: 400, height: 400 }, 0, 50, "vertical", 1);
+  assert.ok(out.scale > 1, "a vertical drag must grow the text scale");
 });

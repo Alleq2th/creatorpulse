@@ -594,7 +594,13 @@ async function generateCardsWithRetry(payload) {
   // automatically instead of showing the user an error for something that
   // resolves itself in a couple seconds.
   for (let attempt = 0; attempt < 2; attempt++) {
-    const cd = await api("/api/generate-cards", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+    // Enforce the generation timing budget on the request itself: 1 image 5s,
+    // up to 5 images 10s, more than 5 images 15s. If the server has not
+    // answered by then the request is aborted and the caller falls back to the
+    // locally-rendered cards, so the user never waits longer than the budget.
+    const n = Array.isArray(payload && payload.slides) ? payload.slides.length : 1;
+    const timeoutMs = window.CPGenerationBudget ? window.CPGenerationBudget.budgetMs(n) : 15000;
+    const cd = await api("/api/generate-cards", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload),timeoutMs});
     if (!cd.error) return cd;
     if (attempt === 0) await new Promise(r => setTimeout(r, 1500));
     else throw new Error(cd.error);
@@ -603,7 +609,11 @@ async function generateCardsWithRetry(payload) {
 
 async function api(path, opts, _isRetry){
   const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), 60000); // 60s — covers Render free-tier cold start
+  // A caller may set its own deadline (the card renderer does, to honour the
+  // generation budget). Otherwise fall back to 60s, which covers a Render
+  // free-tier cold start.
+  const timeoutMs = Number(opts && opts.timeoutMs) || 60000;
+  const timer = setTimeout(() => ctl.abort(), timeoutMs);
   try {
     const r = await fetch(API+path, { ...opts, signal: ctl.signal });
     const text = await r.text();
@@ -1552,6 +1562,13 @@ function renderOut(o, tid, idx){
       return `<button type="button" class="cc-slide-tab${on ? ' on' : ''}" onclick="setPreviewSlide('${prevKey}',${i})">Slide ${slide.slideNumber || (i + 1)}</button>`;
     }).join("");
     const slideText = sl => [sl.headline, sl.stat && sl.statLabel ? `${sl.stat} — ${sl.statLabel}` : sl.stat, sl.sectionLabel, sl.body, sl.supportingText].filter(Boolean).join("\n");
+    // Numbered page chips (1, 2, 3, 4, 5 …) under the carousel, so a viewer can
+    // see how many slides there are and jump straight to one. The numbering
+    // comes from the shared slide-plan module so the count can never disagree
+    // with the number of slides actually rendered.
+    const pageChips = (window.CPCreateSlidePlan ? CPCreateSlidePlan.pageNumbers(totalSlides, sIdx) : [])
+      .map(p => `<button type="button" class="cc-carousel-page${p.active ? " on" : ""}" aria-label="Go to slide ${p.label}" aria-current="${p.active ? "true" : "false"}" onclick="setPreviewSlide('${prevKey}',${p.index})">${p.label}</button>`)
+      .join("");
     const cp = (o.slides||[]).map(sl=>`SLIDE ${sl.slideNumber}: ${slideText(sl)}`).join("\n\n");
     const dlAllBtn = o.slides?.length ? `<button class="btn bo bxs tipbtn" data-tip="Download all slide images" title="Download all slides" aria-label="Download all slides" onclick="cpDownloadAll('${tid}',${idx})">${I.dl} All</button>` : "";
     return `<div class="oc">
@@ -1567,6 +1584,7 @@ function renderOut(o, tid, idx){
         <span class="cc-carousel-bar-label">Slide ${sIdx + 1} of ${totalSlides}</span>
         <div class="cc-carousel-tabs" role="tablist" aria-label="Carousel slides">${slideTabs}</div>
       </div>
+      ${pageChips ? `<div class="cc-carousel-pages" role="group" aria-label="Carousel page numbers">${pageChips}</div>` : ""}
       ${renderCardCanvasEditor(o,tid,idx,si,s,s.img,"4/5", { controlsOnly: true })}
       <details class="cc-copy-details"><summary>View slide text</summary><div class="cc-copy-text">${esc(cp)}</div></details>
       <div class="ofoot">
@@ -2770,8 +2788,16 @@ const cardCanvasPointer = (() => {
     cpSelectCanvasBlock(stage.dataset.canvasStage, block.dataset.canvasBlock);
     const slide = cpCardSlide(stage.dataset.tid, Number(stage.dataset.idx), Number(stage.dataset.slideIndex));
     const initScale = Number(((slide?._style || {}).layerScale || {})[block.dataset.canvasBlock]) || 1;
-    cpCanvasActive = { block, rect, startX: event.clientX, startY: event.clientY, left: boxRect.left - rect.left, top: boxRect.top - rect.top, width: boxRect.width, height: boxRect.height, resizing, resizeMode, moved: false, editOnRelease: doubleTap, initScale };
-    block.setPointerCapture?.(event.pointerId);
+    // The font size the text is currently painted at, in px. Captured once here
+    // so a vertical drag can scale it smoothly without re-rendering the stage.
+    const textEl = block.querySelector(".cc-live-text");
+    const baseFontPx = textEl ? parseFloat(getComputedStyle(textEl).fontSize) || 0 : 0;
+    cpCanvasActive = { block, rect, startX: event.clientX, startY: event.clientY, left: boxRect.left - rect.left, top: boxRect.top - rect.top, width: boxRect.width, height: boxRect.height, resizing, resizeMode, moved: false, editOnRelease: doubleTap, initScale, textEl, baseFontPx, scale: initScale };
+    // Capture keeps the drag alive if the finger leaves the box. It can throw
+    // if the pointer is already gone (a fast tap, or a synthetic event), and an
+    // exception here would abort the whole pointerdown handler — so it is
+    // guarded rather than assumed to succeed.
+    try { block.setPointerCapture?.(event.pointerId); } catch (_) {}
     block.classList.add("is-active");
     if (resizing) event.preventDefault();
   });
@@ -2779,25 +2805,47 @@ const cardCanvasPointer = (() => {
     const a = cpCanvasActive;
     if (!a) return;
     const dx = event.clientX - a.startX, dy = event.clientY - a.startY;
-    if (!a.moved) { if (Math.hypot(dx, dy) < 4) return; a.moved = true; }
-    const { block, rect, left, top, width, height, resizing } = a;
-    const w = resizing && resizeMode !== "vertical" ? Math.max(44, Math.min(rect.width - left, width + dx)) : width;
-    const h = resizing && resizeMode !== "horizontal" ? Math.max(36, Math.min(rect.height - top, height + dy)) : height;
-    const x = resizing ? left : Math.max(0, Math.min(rect.width - width, left + dx));
-    const y = resizing ? top : Math.max(0, Math.min(rect.height - height, top + dy));
-    block.style.left = `${x / rect.width * 100}%`; block.style.top = `${y / rect.height * 100}%`;
-    block.style.width = `${w / rect.width * 100}%`; block.style.height = `${h / rect.height * 100}%`;
-    if (resizing && width > 0 && resizeMode === "both") {
-      const scaleRatio = Math.max(0.5, Math.min(2.0, Math.round((w / width * (a.initScale || 1)) * 20) / 20));
-      const stage = block.closest(".cc-live-stage");
-      if (stage) cpSetLayerScale(stage.dataset.tid, Number(stage.dataset.idx), Number(stage.dataset.slideIndex), block.dataset.canvasBlock, scaleRatio);
+    if (!a.moved) { if (!CPTextBoxGestures.isDrag(dx, dy)) return; a.moved = true; }
+    const { block, rect, resizing } = a;
+    const bounds = { width: rect.width, height: rect.height };
+    const start = { left: a.left, top: a.top, width: a.width, height: a.height };
+
+    if (!resizing) {
+      // Dragging the body of the box moves it; the size is untouched.
+      const moved = CPTextBoxGestures.moveBox(start, bounds, dx, dy);
+      block.style.left = `${moved.left / rect.width * 100}%`;
+      block.style.top = `${moved.top / rect.height * 100}%`;
+      return;
+    }
+
+    // Resizing. The gesture module owns the arithmetic, so the two handles mean
+    // exactly what they look like: the side dot stretches the box horizontally,
+    // the bottom bar grows/shrinks it vertically (and scales the text with it).
+    const next = CPTextBoxGestures.resizeBox(start, bounds, dx, dy, a.resizeMode, a.initScale);
+    block.style.left = `${next.left / rect.width * 100}%`;
+    block.style.top = `${next.top / rect.height * 100}%`;
+    block.style.width = `${next.width / rect.width * 100}%`;
+    block.style.height = `${next.height / rect.height * 100}%`;
+    a.scale = next.scale;
+    // Paint the new font size directly on the text node. Deliberately NOT
+    // cpSetLayerScale here: that re-renders the whole stage, which would
+    // replace the very element being dragged and kill the gesture mid-move.
+    if (a.textEl && a.baseFontPx > 0 && next.scale !== a.initScale) {
+      a.textEl.style.fontSize = `${(a.baseFontPx * (next.scale / (a.initScale || 1))).toFixed(2)}px`;
     }
   });
   const finish = () => {
     const a = cpCanvasActive;
     if (!a) return;
     a.block.classList.remove("is-active");
-    if (a.moved) cpCommitBlockLayout(a.block);
+    if (a.moved) {
+      cpCommitBlockLayout(a.block);
+      // Persist the font scale the drag produced, once, on release.
+      if (a.resizing && a.scale !== a.initScale) {
+        const stage = a.block.closest(".cc-live-stage");
+        if (stage) cpSetLayerScale(stage.dataset.tid, Number(stage.dataset.idx), Number(stage.dataset.slideIndex), a.block.dataset.canvasBlock, a.scale);
+      }
+    }
     else if (a.editOnRelease) cpStartTextEdit(a.block); // a double tap that did not move opens the words
     cpCanvasActive = null;
   };
@@ -3138,13 +3186,22 @@ window.gen = async (tid, all) => {
         // instruction recovers most of these instead of silently shipping
         // a shorter carousel than what was selected.
         async function generateSlidesWithCount(prompt, ctx, tone, wantCount) {
+          // Keep the LONGEST response seen across attempts. The old code
+          // returned whatever the final attempt produced, so a short response
+          // won the retry and the carousel collapsed to a single post.
+          let best = { parsed: {}, slides: [] };
           for (let attempt = 0; attempt < 2; attempt++) {
             const p = attempt === 0 ? prompt : prompt + ` CRITICAL: your last response did not contain exactly ${wantCount} items — count them before responding, the "slides" array MUST have exactly ${wantCount} entries, no more, no fewer.`;
             const sr = await generateText(p, ctx, tone);
             const parsed = extractJSON(sr) || {};
             const slides = asArray(parsed.slides);
-            if (slides.length === wantCount || attempt === 1) return { parsed, slides };
+            if (slides.length > best.slides.length) best = { parsed, slides };
+            if (slides.length >= wantCount) return { parsed, slides };
           }
+          // Still short after the retry: hand back the longest response we got.
+          // The caller's slide planner pads it up to the requested count, so a
+          // short model response can no longer shrink the carousel.
+          return best;
         }
 
         let slideArr;
@@ -3157,30 +3214,29 @@ window.gen = async (tid, all) => {
           );
           const single = extractJSON(sr) || {};
           slideArr = [{ type: isSilentCamera || isThumbnail ? "hook" : "body", headline: single.headline || t.headline, supportingText: isSilentCamera ? (single.body || sourceText) : undefined, body: isSilentCamera ? undefined : (single.body || sourceText), tag: single.tag || null, ctaLine: "FOLLOW FOR MORE →", sourceLabel: t.source || null, useCover: isSingle, silentCamera: isSilentCamera, imageUrl:articleImage }];
-        } else if(!useDedicatedOutro){
-          // 2-5 slides: CTA folded onto the last body slide instead of
-          // spending a whole separate slide on it. Hook + body slides all
-          // come from ONE call now, so the whole thing reads as one
-          // rewritten story instead of a hardcoded headline stitched to
-          // separately-generated body slides.
-          const bodyCount = requestedCount - 1;
-          const promptStr = `Return ONLY a valid JSON object: {${HOOK_SCHEMA},"slides":[array of exactly ${bodyCount} objects, each shaped like ${BODY_ITEM_SCHEMA}]}. ${REWRITE_RULES}`;
-          const ctxStr = `${category.name} carousel. Raw source headline: "${t.headline}". Full source text: ${sourceText}`;
-          const { parsed, slides: rawSlides } = await generateSlidesWithCount(promptStr, ctxStr, tone, bodyCount);
-          const bodySlides = rawSlides.map(s => ({ ...s, type: "body" }));
-          if(bodySlides.length) bodySlides[bodySlides.length - 1].ctaLine = "FOLLOW FOR MORE →";
-          const hookSlide = { type: "hook", headline: parsed.hookHeadline || t.headline, supportingText: parsed.hookTease || sourceText.split(/(?<=[.!?])\s/).slice(0,2).join(" "), emphasisLine: 1, sourceLabel: t.source || null };
-          slideArr = [hookSlide, ...bodySlides];
         } else {
-          // 6+ slides: there's enough real content that a dedicated CTA
-          // slide at the end doesn't feel like a waste.
-          const bodyCount = requestedCount - 2;
-          const promptStr = `Return ONLY a valid JSON object: {${HOOK_SCHEMA},"slides":[array of exactly ${bodyCount} objects, each shaped like ${BODY_ITEM_SCHEMA}]}. The outro slide is added separately, don't include it. ${REWRITE_RULES}`;
+          // 2+ slides: one call produces the hook plus the body slides, and the
+          // shared slide planner then GUARANTEES the array is exactly as long as
+          // the user asked for.
+          //
+          // This is the fix for "on IG carousel, only one post is created".
+          // generateSlidesWithCount returns whatever the model produced on its
+          // final attempt, so a short response used to be shipped as-is and the
+          // carousel silently collapsed to a single post. The planner pads from
+          // the story's own sentences (never inventing facts) and trims extras,
+          // so the rendered slide count always matches the request.
+          const bodyCount = useDedicatedOutro ? requestedCount - 2 : requestedCount - 1;
+          const promptStr = `Return ONLY a valid JSON object: {${HOOK_SCHEMA},"slides":[array of exactly ${bodyCount} objects, each shaped like ${BODY_ITEM_SCHEMA}]}.${useDedicatedOutro ? " The outro slide is added separately, don't include it." : ""} ${REWRITE_RULES}`;
           const ctxStr = `${category.name} carousel. Raw source headline: "${t.headline}". Full source text: ${sourceText}`;
           const { parsed, slides: rawSlides } = await generateSlidesWithCount(promptStr, ctxStr, tone, bodyCount);
-          const bodySlides = rawSlides.map(s => ({ ...s, type: "body" }));
           const hookSlide = { type: "hook", headline: parsed.hookHeadline || t.headline, supportingText: parsed.hookTease || sourceText.split(/(?<=[.!?])\s/).slice(0,2).join(" "), emphasisLine: 1, sourceLabel: t.source || null };
-          slideArr = [hookSlide, ...bodySlides, ctaOutroSlide(t.niche)];
+          const planned = window.CPCreateSlidePlan
+            ? window.CPCreateSlidePlan.plan(hookSlide, rawSlides, requestedCount, sourceText, () => ctaOutroSlide(t.niche))
+            : { slides: [hookSlide, ...rawSlides.map(s => ({ ...s, type: "body" }))], padded: 0, trimmed: 0, requested: requestedCount };
+          slideArr = planned.slides;
+          if (planned.padded || planned.trimmed) {
+            console.info(`[carousel] slide plan: requested ${planned.requested}, padded ${planned.padded}, trimmed ${planned.trimmed}`);
+          }
         }
         // Photo retrieval overlaps the structured copy request instead of
         // adding a full network round-trip before any content is generated.

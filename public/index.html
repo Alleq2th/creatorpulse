@@ -26,6 +26,7 @@
 <!-- Create flow styles. Everything is scoped under .cc-* so it cannot collide
      with the Studio's .sv-* classes or the rest of the app. -->
 <link rel="stylesheet" href="create/create.css?v=43">
+<link rel="stylesheet" href="create/carouselPages.css?v=1">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -2392,8 +2393,12 @@ body{padding-bottom:calc(var(--tab-h) + env(safe-area-inset-bottom));letter-spac
      so the card's "Create content" button always has its helper available. -->
 <script src="lib/storyToCreate.js?v=45"></script>
 <script src="create/cardThemes.js?v=2"></script>
-<script src="create/templateEngine.js?v=1"></script>
-<script src="core.js?v=57"></script>
+<script src="create/templateEngine.js?v=2"></script>
+<script src="lib/designSystem.js?v=1"></script>
+<script src="lib/generationBudget.js?v=1"></script>
+<script src="create/slidePlan.js?v=1"></script>
+<script src="create/textBoxGestures.js?v=1"></script>
+<script src="core.js?v=58"></script>
 <!-- Create flow (spec PART 6). Order matters: flow.js defines the rules,
      steps/review render from it, generate.js wires to the existing pipeline,
      and index.js exposes the handlers the markup calls. All of them load

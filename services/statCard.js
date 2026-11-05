@@ -22,6 +22,8 @@ try { configureFontconfig(); } catch (e) { console.warn("[fonts] bundled font co
 const fetch = require("node-fetch");
 const fs = require("fs");
 const path = require("path");
+const designSystem = require("../public/lib/designSystem.js");
+const coverCache = require("./coverCache.js");
 
 const FONT_SERIF = "'Anton', 'Archivo Black', Impact, sans-serif"; // hook/body/outro headlines — bold, upright, blocky (not the previous italic serif)
 const FONT_SANS = "Inter, sans-serif";                    // everything else — weight via font-weight
@@ -239,7 +241,14 @@ function withTextColor(p, color) {
 function resolvePalette(key, themeKey) {
   const k = PALETTE_ALIASES[key] || key;
   const p = PALETTE[k] || PALETTE[DEFAULT_PALETTE];
-  const t = THEMES[themeKey] || THEMES.modern_dark;
+  // Legacy theme keys ("gradient", "bold_accent") are not real themes, so they
+  // used to fall through to modern_dark and paint every card identically.
+  // Normalize ONCE and use the normalized key for the branch tests below too —
+  // testing the raw key meant "bold_accent" looked up the cyber_neon theme but
+  // then failed the `themeKey === "cyber_neon"` branch and returned the plain
+  // palette, so the theme was still silently ignored.
+  const themeNorm = designSystem.normalizeTheme(themeKey);
+  const t = THEMES[themeNorm] || THEMES.modern_dark;
 
   if (t.isLight) {
     return {
@@ -255,7 +264,7 @@ function resolvePalette(key, themeKey) {
     };
   }
 
-  if (themeKey === "cyber_neon") {
+  if (themeNorm === "cyber_neon") {
     return {
       ...p,
       name: `${t.name} · ${p.name}`,
@@ -268,7 +277,7 @@ function resolvePalette(key, themeKey) {
     };
   }
 
-  if (themeKey === "editorial_warm") {
+  if (themeNorm === "editorial_warm") {
     return {
       ...p,
       name: `${t.name} · ${p.name}`,
@@ -384,6 +393,68 @@ function gradientDefs(p, w, h) {
   </linearGradient>`;
 }
 
+// Renders a template's own background gradient as SVG defs.
+//
+// The template catalogue describes backgrounds as CSS gradient strings, and
+// several templates (dark_gradient, neon_noir) use radial-gradient. The canvas
+// exporter only understood linear-gradient, so those templates silently lost
+// their signature glow on export while the browser preview showed it — the
+// preview and the exported image disagreed. designSystem.parseGradient turns
+// the CSS into a structured descriptor both renderers can execute.
+function templateGradientDefs(design, w, h) {
+  const g = design && design.background;
+  if (!g || !g.stops || !g.stops.length) return null;
+  const stops = g.stops.map(s =>
+    `<stop offset="${Math.round(s.offset * 100)}%" stop-color="${s.color}"/>`
+  ).join("");
+  if (g.kind === "radial") {
+    return `<radialGradient id="tplGrad" cx="50%" cy="30%" r="72%">${stops}</radialGradient>`;
+  }
+  const rad = (Number(g.angle) || 180) * Math.PI / 180;
+  const x1 = 0.5 - Math.sin(rad) / 2, y1 = 0.5 + Math.cos(rad) / 2;
+  const x2 = 0.5 + Math.sin(rad) / 2, y2 = 0.5 - Math.cos(rad) / 2;
+  return `<linearGradient id="tplGrad" x1="${x1.toFixed(3)}" y1="${y1.toFixed(3)}" x2="${x2.toFixed(3)}" y2="${y2.toFixed(3)}">${stops}</linearGradient>`;
+}
+
+// The template's own decoration, drawn as SVG. Each template declares a
+// decoration type in the catalogue (badge / corner / rule / frame / split /
+// orb / stripes) and this is what actually draws it — previously the server
+// ignored the field entirely, which is a large part of why every template
+// came out looking like the same card.
+function templateDecoration(design, p, f) {
+  const type = (design && design.decoration && design.decoration.type) || "none";
+  const m = f.margin;
+  switch (type) {
+    case "rule":
+      return `<rect x="${m}" y="${Math.round(f.h * 0.135)}" width="${Math.round(f.w * 0.16)}" height="6" rx="3" fill="${p.accent}"/>`;
+    case "frame":
+      return `<rect x="${m * 0.6}" y="${m * 0.6}" width="${f.w - m * 1.2}" height="${f.h - m * 1.2}" rx="18" fill="none" stroke="${p.accent}" stroke-opacity="0.22" stroke-width="2"/>`;
+    case "corner":
+      return `<path d="M ${f.w - m - 90} ${m} L ${f.w - m} ${m} L ${f.w - m} ${m + 90}" fill="none" stroke="${p.accent}" stroke-width="5" stroke-linecap="round"/>`;
+    case "badge":
+      return `<rect x="${f.w - m - 150}" y="${m - 6}" width="150" height="44" rx="22" fill="${p.accent}" fill-opacity="0.16" stroke="${p.accent}" stroke-opacity="0.6" stroke-width="2"/>`;
+    case "split":
+      return `<rect x="${Math.round(f.w * 0.5)}" y="0" width="2" height="${f.h}" fill="${p.accent}" fill-opacity="0.28"/>`;
+    case "orb":
+      return `<defs><radialGradient id="tplOrb" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="${p.accent}" stop-opacity="0.30"/><stop offset="100%" stop-color="${p.accent}" stop-opacity="0"/></radialGradient></defs><circle cx="${Math.round(f.w * 0.78)}" cy="${Math.round(f.h * 0.2)}" r="${Math.round(f.w * 0.34)}" fill="url(#tplOrb)"/>`;
+    case "stripes":
+      return Array.from({ length: 7 }).map((_, i) =>
+        `<rect x="${Math.round(f.w * 0.06) + i * 26}" y="${Math.round(f.h * 0.86)}" width="10" height="${40 + (i % 3) * 26}" rx="5" fill="${p.accent}" fill-opacity="${(0.5 - i * 0.05).toFixed(2)}"/>`
+      ).join("");
+    default:
+      return "";
+  }
+}
+
+// The template's background when there is no photo: its own gradient plus its
+// own decoration, instead of the generic two-stop gradient every card used to
+// get regardless of which template the user picked.
+function templateBackgroundLayer(design, p, f, slideType) {
+  const defs = templateGradientDefs(design, f.w, f.h);
+  if (!defs) return backgroundLayer(p, f, null, slideType);
+  return `<defs>${defs}</defs><rect width="${f.w}" height="${f.h}" fill="url(#tplGrad)"/>${templateDecoration(design, p, f)}`;
+}
+
 // Legibility scrim for photo backgrounds. `strength` (0-1) scales how dark
 // it gets — driven by the photo's measured brightness so a bright photo
 // gets darkened more than an already-dark one.
@@ -421,8 +492,9 @@ function decorativeTexture(p, f, seed) {
   ${lines}`;
 }
 
-function backgroundLayer(p, f, scrimStrength, slideType) {
+function backgroundLayer(p, f, scrimStrength, slideType, design) {
   if (scrimStrength != null) return `<defs>${scrimDefs(f.w, f.h, scrimStrength)}</defs><rect width="${f.w}" height="${f.h}" fill="url(#scrim)"/>`;
+  if (design) return templateBackgroundLayer(design, p, f, slideType);
   return `<defs>${gradientDefs(p, f.w, f.h)}</defs><rect width="${f.w}" height="${f.h}" fill="url(#bgGrad)"/>${decorativeTexture(p, f, slideType)}`;
 }
 
@@ -566,6 +638,14 @@ function layerScaleFactor(slide, key) {
   return Math.max(0.5, Math.min(1.6, s));
 }
 
+// How many lines a template's own text box can hold. The server used to force
+// a fixed 3-4 line cap on every template, which chopped headlines into short
+// fragments even when the template had reserved a tall box for them.
+function templateMaxLines(design, key, fallback) {
+  const box = design && design.textBoxes && design.textBoxes[key];
+  return box && box.maxLines ? box.maxLines : fallback;
+}
+
 function textLayoutTransform(slide, key, f, base) {
   const k = layerScaleFactor(slide, key);
   const target = slide.textLayout?.[key];
@@ -583,13 +663,13 @@ function textLayoutTransform(slide, key, f, base) {
   return `transform="matrix(${sx} 0 0 ${sy} ${x - sx * base.x} ${y - sy * base.y})"`;
 }
 
-function renderHookSVG(p, f, slide, category, scrimStrength, typo) {
+function renderHookSVG(p, f, slide, category, scrimStrength, typo, design) {
   const fontHead = (typo && typo.headline) ? typo.headline : FONT_SERIF;
   const fontBody = (typo && typo.body) ? typo.body : FONT_SANS;
   const m = f.margin;
   const isSingle = (slide.totalSlides || 1) <= 1;
   const isTall = f.h > 1500;
-  const { lines, size } = fitMultilineText(slide.headline, f.hookHeadlineSize, f.hookHeadlineChars, f.hookMaxLines);
+  const { lines, size } = fitMultilineText(slide.headline, f.hookHeadlineSize, f.hookHeadlineChars, templateMaxLines(design, "headline", f.hookMaxLines));
   const lineH = Math.round(f.hookHeadlineLine * (size / f.hookHeadlineSize));
   const startY = Math.max(Math.round(f.h * 0.16), Math.min(Math.round(f.h * 0.76), Math.round(f.h * f.hookHeadlineY) + Number(slide.textOffset || 0)));
   const emphasisIdx = slide.emphasisLine != null ? slide.emphasisLine : (lines.length >= 3 ? 1 : -1);
@@ -612,7 +692,7 @@ function renderHookSVG(p, f, slide, category, scrimStrength, typo) {
 
   return `
   <svg width="${f.w}" height="${f.h}" viewBox="0 0 ${f.w} ${f.h}" xmlns="http://www.w3.org/2000/svg">
-    ${backgroundLayer(p, f, scrimStrength, "hook")}
+    ${backgroundLayer(p, f, scrimStrength, "hook", design)}
     ${pillHeader(p, f, category.displayName, category.slug, slide.slideNumber, slide.totalSlides, typo)}
     <g ${textLayoutTransform(slide, "headline", f, { x: m, y: startY - size, width: f.w - 2*m, height: Math.max(lineH, lines.length * lineH) })}><text x="${m}" y="${startY}" font-family="${layerFont(slide, "headline", fontHead)}" font-size="${size}" font-weight="700">${tspansEmphasis(lines, m, startY, lineH, emphasisIdx, layerColor(slide, "headline") || p.accent, layerColor(slide, "headline") || p.primaryText)}</text></g>
     ${supportLines.length ? `<g ${textLayoutTransform(slide, "supportingText", f, { x: m, y: supportY - f.hookSupportSize, width: f.w - 2*m, height: Math.max(f.hookSupportLine, supportLines.length * f.hookSupportLine) })}><text x="${m}" y="${supportY}" font-family="${layerFont(slide, "supportingText", fontBody)}" font-size="${f.hookSupportSize}" fill="${layerColor(slide, "supportingText") || p.secondaryText}">${tspans(supportLines, m, supportY, f.hookSupportLine)}</text></g>` : ""}
@@ -816,7 +896,7 @@ function renderTimeline(m, f, p, items, rows, startY) {
   return out.join("");
 }
 
-function renderBodySVG(p, f, slide, category, scrimStrength, typo) {
+function renderBodySVG(p, f, slide, category, scrimStrength, typo, design) {
   const fontHead = (typo && typo.headline) ? typo.headline : FONT_SERIF;
   const fontBody = (typo && typo.body) ? typo.body : FONT_SANS;
   const m = f.margin;
@@ -828,7 +908,7 @@ function renderBodySVG(p, f, slide, category, scrimStrength, typo) {
   // headline (large, dominant) → variant-specific middle content → footer.
   // The whole block is vertically CENTERED in the space between header and
   // footer so short content doesn't leave a dead gap above the footer.
-  const { lines: hLines, size: hSize } = fitMultilineText(slide.headline, f.bodyHeadlineSize, f.bodyHeadlineChars, f.bodyHeadlineMaxLines);
+  const { lines: hLines, size: hSize } = fitMultilineText(slide.headline, f.bodyHeadlineSize, f.bodyHeadlineChars, templateMaxLines(design, "headline", f.bodyHeadlineMaxLines));
   const hLineH = Math.round(f.bodyHeadlineLine * (hSize / f.bodyHeadlineSize));
   const { lines: bLines, size: bSize } = ((variant === "standard" || variant === "stat") && slide.body) ? fitMultilineText(slide.body, f.bodyTextSize, f.bodyTextChars, f.bodyTextMaxLines) : { lines: [], size: f.bodyTextSize };
   const bLineH = Math.round(f.bodyTextLine * (bSize / f.bodyTextSize));
@@ -900,7 +980,7 @@ function renderBodySVG(p, f, slide, category, scrimStrength, typo) {
 
   return `
   <svg width="${f.w}" height="${f.h}" viewBox="0 0 ${f.w} ${f.h}" xmlns="http://www.w3.org/2000/svg">
-    ${backgroundLayer(p, f, scrimStrength, "body")}
+    ${backgroundLayer(p, f, scrimStrength, "body", design)}
     ${plainHeader(p, f, category.displayName, category.slug, slide.slideNumber, slide.totalSlides, typo)}
     ${slide.sectionLabel ? `<rect x="${m}" y="${sectionLabelY-20}" width="4" height="24" fill="${p.accent}"/><text x="${m+18}" y="${sectionLabelY}" font-family="${fontBody}" font-size="${f.sectionLabelSize}" font-weight="700" letter-spacing="1.5" fill="${p.accent}">${escXml((slide.sectionLabel||"").toUpperCase())}</text>` : ""}
     <g ${textLayoutTransform(slide, "headline", f, { x: m, y: headlineStartY - hSize, width: f.w - 2*m, height: Math.max(hLineH, hLines.length * hLineH) })}><text x="${m}" y="${headlineStartY}" font-family="${layerFont(slide, "headline", fontHead)}" font-size="${hSize}" font-weight="400" fill="${layerColor(slide, "headline") || p.primaryText}">${tspans(hLines, m, headlineStartY, hLineH)}</text></g>
@@ -912,11 +992,11 @@ function renderBodySVG(p, f, slide, category, scrimStrength, typo) {
   </svg>`;
 }
 
-function renderOutroSVG(p, f, slide, category, scrimStrength, typo) {
+function renderOutroSVG(p, f, slide, category, scrimStrength, typo, design) {
   const fontHead = (typo && typo.headline) ? typo.headline : FONT_SERIF;
   const fontBody = (typo && typo.body) ? typo.body : FONT_SANS;
   const m = f.margin;
-  const { lines, size } = fitMultilineText(slide.headline, f.outroHeadlineSize, f.outroHeadlineChars, f.outroMaxLines);
+  const { lines, size } = fitMultilineText(slide.headline, f.outroHeadlineSize, f.outroHeadlineChars, templateMaxLines(design, "headline", f.outroMaxLines));
   const lineH = Math.round(f.outroHeadlineLine * (size / f.outroHeadlineSize));
   const blockH = lines.length * lineH;
   const startY = Math.round(f.h/2 - blockH/2);
@@ -926,7 +1006,7 @@ function renderOutroSVG(p, f, slide, category, scrimStrength, typo) {
 
   return `
   <svg width="${f.w}" height="${f.h}" viewBox="0 0 ${f.w} ${f.h}" xmlns="http://www.w3.org/2000/svg">
-    ${backgroundLayer(p, f, scrimStrength, "outro")}
+    ${backgroundLayer(p, f, scrimStrength, "outro", design)}
     ${plainHeader(p, f, category.displayName, category.slug, slide.slideNumber, slide.totalSlides, typo)}
     <g ${textLayoutTransform(slide, "headline", f, { x: m, y: startY - size, width: f.w - 2*m, height: Math.max(lineH, lines.length * lineH) })}><text x="${m}" y="${startY}" font-family="${layerFont(slide, "headline", fontHead)}" font-size="${size}" font-weight="700">${tspansEmphasis(lines, m, startY, lineH, emphasisIdx, layerColor(slide, "headline") || p.accent, layerColor(slide, "headline") || p.primaryText)}</text></g>
     ${supportLines.length ? `<g ${textLayoutTransform(slide, "supportingText", f, { x: m, y: supportY - f.hookSupportSize, width: f.w - 2*m, height: Math.max(f.hookSupportLine, supportLines.length * f.hookSupportLine) })}><text x="${m}" y="${supportY}" font-family="${layerFont(slide, "supportingText", fontBody)}" font-size="${f.hookSupportSize}" fill="${layerColor(slide, "supportingText") || p.secondaryText}">${tspans(supportLines, m, supportY, f.hookSupportLine)}</text></g>` : ""}
@@ -1069,15 +1149,43 @@ async function renderYouTubeThumbnail(slide, imageUrl, options = {}) {
 
 // Background only: the cover photo with the requested dim, or a plain palette
 // gradient when there is no photo. Matches the dim used by the full render.
-async function renderPlate(p, f, cover, slide) {
+async function renderPlate(p, f, cover, slide, design) {
   const dim = Number(slide.dim);
   const a = Number.isFinite(dim) && dim > 0 ? Math.min(0.8, dim).toFixed(2) : "0";
   if (cover) {
     const dimSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${f.w}" height="${f.h}"><rect width="${f.w}" height="${f.h}" fill="#000" fill-opacity="${a}"/></svg>`;
     return sharp(cover.buffer).composite([{ input: await sharp(Buffer.from(dimSvg)).png().toBuffer() }]).png().toBuffer();
   }
-  const bg = `<svg xmlns="http://www.w3.org/2000/svg" width="${f.w}" height="${f.h}"><defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${p.backgroundStart}"/><stop offset="1" stop-color="${p.backgroundEnd}"/></linearGradient></defs><rect width="${f.w}" height="${f.h}" fill="url(#g)"/></svg>`;
+  // No photo: use the template's own gradient + decoration so a plate still
+  // carries the template's identity rather than a generic two-stop ramp.
+  const inner = design
+    ? templateBackgroundLayer(design, p, f, "plate")
+    : `<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${p.backgroundStart}"/><stop offset="1" stop-color="${p.backgroundEnd}"/></linearGradient></defs><rect width="${f.w}" height="${f.h}" fill="url(#g)"/>`;
+  const bg = `<svg xmlns="http://www.w3.org/2000/svg" width="${f.w}" height="${f.h}">${inner}</svg>`;
   return sharp(Buffer.from(bg)).png().toBuffer();
+}
+
+// Maps a template's own palette onto the server palette shape.
+//
+// This is the core of the quality fix: before, the server never saw the
+// template id, so every template was painted with the same hardcoded palette
+// and theme. Now the template's declared colours win, and the theme only
+// supplies the background ramp when the template does not declare one.
+function paletteFromDesign(design, base) {
+  if (!design || !design.palette) return base;
+  const t = design.palette;
+  const bg = t.bg || base.backgroundStart;
+  return {
+    ...base,
+    name: `${design.name || design.templateId} · ${base.name}`,
+    backgroundStart: bg,
+    backgroundEnd: t.gradient ? bg : (t.bg || base.backgroundEnd),
+    accent: t.accent || base.accent,
+    primaryText: t.text || base.primaryText,
+    secondaryText: t.secondary || base.secondaryText,
+    muted: t.secondary || base.muted,
+    templateDim: Number.isFinite(Number(t.dim)) ? Number(t.dim) : null
+  };
 }
 
 async function renderStatCard(slide, category, paletteKey, format, imageUrl, options = {}) {
@@ -1088,30 +1196,52 @@ async function renderStatCard(slide, category, paletteKey, format, imageUrl, opt
   const typoKey = options.typography || slide.typography || "impact";
   const densityKey = options.density || slide.density || "balanced";
 
-  const p = withTextColor(resolvePalette(paletteKey, themeKey), slide.textColor);
   const f = resolveFormat(format, densityKey);
   const typo = resolveTypography(typoKey);
   const type = resolveType(slide, (slide.slideNumber || 1) - 1, slide.totalSlides || 1);
   const cat = typeof category === "string" ? { displayName: category, slug: "default" } : (category || { displayName: "", slug: "default" });
+
+  // Resolve the template the user actually picked. This is what makes each
+  // template produce the look it was designed for instead of a generic card.
+  const templateId = options.templateId || slide.templateId || null;
+  const design = templateId
+    ? designSystem.resolve(templateId, {
+        platform: options.platform || slide.platform,
+        index: (slide.slideNumber || 1) - 1,
+        total: slide.totalSlides || 1,
+        slide,
+        theme: themeKey
+      })
+    : null;
+
+  const basePalette = withTextColor(resolvePalette(paletteKey, themeKey), slide.textColor);
+  const p = design ? paletteFromDesign(design, basePalette) : basePalette;
 
   let cover = slide.customImage ? await coverFromBase64(slide.customImage, f.w, f.h, options.focalPoint || slide.focalPoint) : null;
   const isSingle = (slide.totalSlides || 1) <= 1;
   const isFirstSlide = (slide.slideNumber || 1) === 1;
   const wantsCover = type === "hook" || slide.useCover || slide.imageUrl || isFirstSlide || isSingle;
   const photoUrl = slide.imageUrl || (wantsCover ? imageUrl : null);
-  if (!cover && photoUrl) cover = await fetchCoverImage(photoUrl, f.w, f.h, options.focalPoint || slide.focalPoint);
+  // Shared cache: a carousel fetches + crops the same article photo once and
+  // every slide reuses it, instead of each slide re-downloading and re-decoding
+  // it. That is the single biggest win against the timing budget.
+  if (!cover && photoUrl) {
+    cover = await coverCache.loadCover(photoUrl, f.w, f.h, options.focalPoint || slide.focalPoint, {
+      timeoutMs: options.coverTimeoutMs
+    });
+  }
   // Plate mode: clean background photo (dimmed) or palette gradient with no text
   // or chrome. Early return isolates clean plates and skips text layout / SVG processing.
   if (options.plateOnly || slide.plateOnly) {
-    return renderPlate(p, f, cover, slide);
+    return renderPlate(p, f, cover, slide, design);
   }
 
   const hasRequestedArticleImage = !!(slide.imageUrl || imageUrl);
   const scrimStrength = cover ? cover.brightness : null;
 
-  const svg = type === "hook" ? renderHookSVG(p, f, slide, cat, scrimStrength, typo)
-    : type === "outro" ? renderOutroSVG(p, f, slide, cat, scrimStrength, typo)
-    : renderBodySVG(p, f, slide, cat, scrimStrength, typo);
+  const svg = type === "hook" ? renderHookSVG(p, f, slide, cat, scrimStrength, typo, design)
+    : type === "outro" ? renderOutroSVG(p, f, slide, cat, scrimStrength, typo, design)
+    : renderBodySVG(p, f, slide, cat, scrimStrength, typo, design);
 
   const photoUrlForCard = slide.imageUrl || imageUrl;
   const labels = [];
@@ -1151,31 +1281,56 @@ async function renderStatCard(slide, category, paletteKey, format, imageUrl, opt
 // a forced restart. Capping how many run at once bounds peak memory
 // regardless of carousel size, at the cost of a slightly longer total
 // render time — a trade worth making over the service restarting.
-// Render carousel slides sequentially (concurrency 1) rather than in parallel.
-// Each slide with a photo runs a full decode+resize+composite pipeline through
-// sharp — sequential processing ensures peak memory remains bounded to a single
-// slide's buffers, eliminating out-of-memory crashes on memory-constrained servers.
-const CARD_RENDER_CONCURRENCY = 1;
+// Renders slides in bounded concurrent batches.
+//
+// History: this used to be strictly sequential (concurrency 1) because each
+// slide re-downloaded and re-decoded the same article photo, and doing that for
+// several slides at once spiked memory on a small Render instance. Now the
+// photo is fetched and cropped ONCE into services/coverCache and shared, so the
+// per-slide work is just an SVG rasterise + composite — cheap enough to run a
+// few at a time. The cap still bounds peak memory, but it is no longer 1, which
+// is what lets a 6-slide carousel finish inside the 15-second budget.
+const CARD_RENDER_CONCURRENCY = 3;
+
+// Runs `worker` over `items` with at most `limit` in flight, preserving order.
+async function mapWithConcurrency(items, limit, worker) {
+  const out = new Array(items.length);
+  let next = 0;
+  const runners = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
+    while (true) {
+      const i = next++;
+      if (i >= items.length) return;
+      out[i] = await worker(items[i], i);
+    }
+  });
+  await Promise.all(runners);
+  return out;
+}
+
 async function renderCardSet(slides, category, paletteKey, format, imageUrl, options = {}) {
   const total = slides.length;
-  const buffers = new Array(total);
-  for (let i = 0; i < total; i++) {
-    const s = slides[i];
-    buffers[i] = await renderStatCard(
+  const budget = require("../public/lib/generationBudget.js");
+  const limit = options.concurrency || budget.concurrency(total);
+  const buffers = await mapWithConcurrency(slides, limit, (s, i) =>
+    renderStatCard(
       { ...s, slideNumber: i + 1, totalSlides: total },
       category,
       paletteKey,
       format,
       imageUrl,
       options
-    );
-  }
+    )
+  );
   return buffers.map(b => `data:image/png;base64,${b.toString("base64")}`);
 }
 
 module.exports = {
   renderStatCard,
   renderCardSet,
+  mapWithConcurrency,
+  paletteFromDesign,
+  templateGradientDefs,
+  templateDecoration,
   PALETTE,
   DEFAULT_PALETTE,
   THEMES,

@@ -64,6 +64,13 @@ test("services/statCard.js links cover photo to slide 1 and single graphic witho
   assert.match(statCard.renderStatCard.toString(), /wantsCover/);
   assert.match(statCard.renderStatCard.toString(), /photoUrl/);
 
+  // The cover photo is now fetched through the shared cover cache, which does
+  // the same fetch + cover-crop + brightness measurement once per carousel
+  // instead of once per slide. The guarantee is unchanged: renderStatCard must
+  // still resolve a cover image when a photo is provided.
   const hookSvg = statCard.renderStatCard.toString();
-  assert.ok(hookSvg.includes("fetchCoverImage"), "renderStatCard must fetch cover image when photo is provided");
+  assert.ok(
+    hookSvg.includes("coverCache.loadCover") || hookSvg.includes("fetchCoverImage"),
+    "renderStatCard must fetch cover image when photo is provided"
+  );
 });

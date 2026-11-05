@@ -77,7 +77,7 @@ router.post("/generate-cards", async (req, res) => {
   }
   activeGenerations++;
   try {
-    const { slides, category, palette, format, imageUrl, theme, typography, density, focalPoint, brand, plateOnly } = req.body;
+    const { slides, category, palette, format, imageUrl, theme, typography, density, focalPoint, brand, plateOnly, templateId, platform } = req.body;
     if (!Array.isArray(slides) || !slides.length) return res.status(400).json({ error: "slides required" });
     const capped = slides.slice(0, 10);
     let fallbackImageUrl = null;
@@ -93,7 +93,7 @@ router.post("/generate-cards", async (req, res) => {
     }
     {
       const imageUrl = fallbackImageUrl || req.body.imageUrl;
-      const images = await renderCardSet(capped, category, palette, format, imageUrl, { theme, typography, density, focalPoint, brand, plateOnly: plateOnly === true });
+      const images = await renderCardSet(capped, category, palette, format, imageUrl, { theme, typography, density, focalPoint, brand, plateOnly: plateOnly === true, templateId, platform });
       res.json({ images });
     }
   } catch (e) {
@@ -109,7 +109,7 @@ router.post("/pulse-ai-stat-card", async (req, res) => {
   }
   activeGenerations++;
   try {
-    let { topic = "Trending Topic", format = "instagram", palette = "noir_orange", category, slides, imageUrl, niche, theme, typography, density, focalPoint, brand } = req.body || {};
+    let { topic = "Trending Topic", format = "instagram", palette = "noir_orange", category, slides, imageUrl, niche, theme, typography, density, focalPoint, brand, templateId, platform } = req.body || {};
     
     // Resolve live image if not supplied
     let imageInfo = null;
@@ -128,7 +128,7 @@ router.post("/pulse-ai-stat-card", async (req, res) => {
     }
 
     const catObj = typeof category === "string" ? { displayName: category, slug: "default" } : (category || { displayName: topic.slice(0, 24), slug: "default" });
-    const images = await renderCardSet(slides, catObj, palette, format, imageUrl, { theme, typography, density, focalPoint, brand, palette });
+    const images = await renderCardSet(slides, catObj, palette, format, imageUrl, { theme, typography, density, focalPoint, brand, palette, templateId, platform });
 
     res.json({
       success: true,
