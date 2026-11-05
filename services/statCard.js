@@ -646,6 +646,23 @@ function templateMaxLines(design, key, fallback) {
   return box && box.maxLines ? box.maxLines : fallback;
 }
 
+// The layout engine (public/lib/cardLayoutEngine.js) already wrapped each
+// layer's text to fit its box and chose the font size, so the export draws the
+// SAME lines the preview shows instead of re-wrapping with a character count.
+// That is what makes a downloaded slide match the mockup. Falls back to the old
+// character fit only when no design is present.
+function designLayer(design, key) {
+  if (!design || !Array.isArray(design.layers)) return null;
+  return design.layers.find(l => l.key === key) || null;
+}
+function designLines(design, key, f, fallbackText, fallbackSize, fallbackChars, fallbackMaxLines) {
+  const layer = designLayer(design, key);
+  if (layer && !layer.empty && layer.lines && layer.lines.length) {
+    return { lines: layer.lines, size: Math.max(8, Math.round(layer.sizePct * f.w)), layer };
+  }
+  return Object.assign(fitMultilineText(fallbackText, fallbackSize, fallbackChars, fallbackMaxLines), { layer: null });
+}
+
 function textLayoutTransform(slide, key, f, base) {
   const k = layerScaleFactor(slide, key);
   const target = slide.textLayout?.[key];
@@ -669,12 +686,16 @@ function renderHookSVG(p, f, slide, category, scrimStrength, typo, design) {
   const m = f.margin;
   const isSingle = (slide.totalSlides || 1) <= 1;
   const isTall = f.h > 1500;
-  const { lines, size } = fitMultilineText(slide.headline, f.hookHeadlineSize, f.hookHeadlineChars, templateMaxLines(design, "headline", f.hookMaxLines));
+  const head = designLines(design, "headline", f, slide.headline, f.hookHeadlineSize, f.hookHeadlineChars, templateMaxLines(design, "headline", f.hookMaxLines));
+  const lines = head.lines, size = head.size;
   const lineH = Math.round(f.hookHeadlineLine * (size / f.hookHeadlineSize));
   const startY = Math.max(Math.round(f.h * 0.16), Math.min(Math.round(f.h * 0.76), Math.round(f.h * f.hookHeadlineY) + Number(slide.textOffset || 0)));
   const emphasisIdx = slide.emphasisLine != null ? slide.emphasisLine : (lines.length >= 3 ? 1 : -1);
   const supportY = startY + lines.length * lineH + f.hookSupportGap;
-  const supportLines = (slide.supportingText || slide.body) ? fitSupportText(slide.supportingText || slide.body, f.hookSupportChars, f.hookSupportMaxLines) : [];
+  const sup = (slide.supportingText || slide.body) ? designLines(design, "supportingText", f, slide.supportingText || slide.body, f.hookSupportSize, f.hookSupportChars, f.hookSupportMaxLines) : { lines: [], size: f.hookSupportSize, layer: null };
+  const supportLines = sup.lines;
+  const supportSize = sup.size;
+  const supportLineH = Math.round(f.hookSupportLine * (supportSize / f.hookSupportSize));
 
   const footerY = isTall ? f.h - 220 : f.h - 80;
   let footerSVG = "";
@@ -694,8 +715,8 @@ function renderHookSVG(p, f, slide, category, scrimStrength, typo, design) {
   <svg width="${f.w}" height="${f.h}" viewBox="0 0 ${f.w} ${f.h}" xmlns="http://www.w3.org/2000/svg">
     ${backgroundLayer(p, f, scrimStrength, "hook", design)}
     ${pillHeader(p, f, category.displayName, category.slug, slide.slideNumber, slide.totalSlides, typo)}
-    <g ${textLayoutTransform(slide, "headline", f, { x: m, y: startY - size, width: f.w - 2*m, height: Math.max(lineH, lines.length * lineH) })}><text x="${m}" y="${startY}" font-family="${layerFont(slide, "headline", fontHead)}" font-size="${size}" font-weight="700">${tspansEmphasis(lines, m, startY, lineH, emphasisIdx, layerColor(slide, "headline") || p.accent, layerColor(slide, "headline") || p.primaryText)}</text></g>
-    ${supportLines.length ? `<g ${textLayoutTransform(slide, "supportingText", f, { x: m, y: supportY - f.hookSupportSize, width: f.w - 2*m, height: Math.max(f.hookSupportLine, supportLines.length * f.hookSupportLine) })}><text x="${m}" y="${supportY}" font-family="${layerFont(slide, "supportingText", fontBody)}" font-size="${f.hookSupportSize}" fill="${layerColor(slide, "supportingText") || p.secondaryText}">${tspans(supportLines, m, supportY, f.hookSupportLine)}</text></g>` : ""}
+    <g ${textLayoutTransform(slide, "headline", f, { x: m, y: startY - size, width: f.w - 2*m, height: Math.max(lineH, lines.length * lineH) })}><text x="${m}" y="${startY}" font-family="${(head.layer && head.layer.fontFamily) || layerFont(slide, "headline", fontHead)}" font-size="${size}" font-weight="700">${tspansEmphasis(lines, m, startY, lineH, emphasisIdx, layerColor(slide, "headline") || p.accent, (head.layer && head.layer.color) || layerColor(slide, "headline") || p.primaryText)}</text></g>
+    ${supportLines.length ? `<g ${textLayoutTransform(slide, "supportingText", f, { x: m, y: supportY - supportSize, width: f.w - 2*m, height: Math.max(supportLineH, supportLines.length * supportLineH) })}><text x="${m}" y="${supportY}" font-family="${(sup.layer && sup.layer.fontFamily) || layerFont(slide, "supportingText", fontBody)}" font-size="${supportSize}" fill="${(sup.layer && sup.layer.color) || layerColor(slide, "supportingText") || p.secondaryText}">${tspans(supportLines, m, supportY, supportLineH)}</text></g>` : ""}
     ${footerSVG}
   </svg>`;
 }
@@ -908,9 +929,11 @@ function renderBodySVG(p, f, slide, category, scrimStrength, typo, design) {
   // headline (large, dominant) → variant-specific middle content → footer.
   // The whole block is vertically CENTERED in the space between header and
   // footer so short content doesn't leave a dead gap above the footer.
-  const { lines: hLines, size: hSize } = fitMultilineText(slide.headline, f.bodyHeadlineSize, f.bodyHeadlineChars, templateMaxLines(design, "headline", f.bodyHeadlineMaxLines));
+  const head = designLines(design, "headline", f, slide.headline, f.bodyHeadlineSize, f.bodyHeadlineChars, templateMaxLines(design, "headline", f.bodyHeadlineMaxLines));
+  const hLines = head.lines, hSize = head.size;
   const hLineH = Math.round(f.bodyHeadlineLine * (hSize / f.bodyHeadlineSize));
-  const { lines: bLines, size: bSize } = ((variant === "standard" || variant === "stat") && slide.body) ? fitMultilineText(slide.body, f.bodyTextSize, f.bodyTextChars, f.bodyTextMaxLines) : { lines: [], size: f.bodyTextSize };
+  const bodyFit = ((variant === "standard" || variant === "stat") && slide.body) ? designLines(design, "supportingText", f, slide.body, f.bodyTextSize, f.bodyTextChars, f.bodyTextMaxLines) : { lines: [], size: f.bodyTextSize, layer: null };
+  const bLines = bodyFit.lines, bSize = bodyFit.size;
   const bLineH = Math.round(f.bodyTextLine * (bSize / f.bodyTextSize));
 
   let factsData = null, timelineData = null;
@@ -983,7 +1006,7 @@ function renderBodySVG(p, f, slide, category, scrimStrength, typo, design) {
     ${backgroundLayer(p, f, scrimStrength, "body", design)}
     ${plainHeader(p, f, category.displayName, category.slug, slide.slideNumber, slide.totalSlides, typo)}
     ${slide.sectionLabel ? `<rect x="${m}" y="${sectionLabelY-20}" width="4" height="24" fill="${p.accent}"/><text x="${m+18}" y="${sectionLabelY}" font-family="${fontBody}" font-size="${f.sectionLabelSize}" font-weight="700" letter-spacing="1.5" fill="${p.accent}">${escXml((slide.sectionLabel||"").toUpperCase())}</text>` : ""}
-    <g ${textLayoutTransform(slide, "headline", f, { x: m, y: headlineStartY - hSize, width: f.w - 2*m, height: Math.max(hLineH, hLines.length * hLineH) })}><text x="${m}" y="${headlineStartY}" font-family="${layerFont(slide, "headline", fontHead)}" font-size="${hSize}" font-weight="400" fill="${layerColor(slide, "headline") || p.primaryText}">${tspans(hLines, m, headlineStartY, hLineH)}</text></g>
+    <g ${textLayoutTransform(slide, "headline", f, { x: m, y: headlineStartY - hSize, width: f.w - 2*m, height: Math.max(hLineH, hLines.length * hLineH) })}><text x="${m}" y="${headlineStartY}" font-family="${(head.layer && head.layer.fontFamily) || layerFont(slide, "headline", fontHead)}" font-size="${hSize}" font-weight="400" fill="${(head.layer && head.layer.color) || layerColor(slide, "headline") || p.primaryText}">${tspans(hLines, m, headlineStartY, hLineH)}</text></g>
     <g ${textLayoutTransform(slide, "supportingText", f, { x: m, y: afterHeadlineY - 40, width: f.w - 2*m, height: Math.max(180, middleBlockH) })}>${middleSVG}</g>
     ${hasCtaLine ? `<g ${textLayoutTransform(slide, "ctaLine", f, { x: m, y: footerDividerY - 66, width: f.w - 2*m, height: 40 })}><text x="${m}" y="${footerDividerY - 32}" font-family="${layerFont(slide, "ctaLine", fontHead)}" font-size="34" fill="${layerColor(slide, "ctaLine") || p.accent}">${escXml((slide.ctaLine||"").toUpperCase())}</text></g>` : ""}
     <rect x="${m}" y="${footerDividerY}" width="${f.w-2*m}" height="1" fill="${p.muted}" opacity="0.4"/>
@@ -996,11 +1019,15 @@ function renderOutroSVG(p, f, slide, category, scrimStrength, typo, design) {
   const fontHead = (typo && typo.headline) ? typo.headline : FONT_SERIF;
   const fontBody = (typo && typo.body) ? typo.body : FONT_SANS;
   const m = f.margin;
-  const { lines, size } = fitMultilineText(slide.headline, f.outroHeadlineSize, f.outroHeadlineChars, templateMaxLines(design, "headline", f.outroMaxLines));
+  const head = designLines(design, "headline", f, slide.headline, f.outroHeadlineSize, f.outroHeadlineChars, templateMaxLines(design, "headline", f.outroMaxLines));
+  const lines = head.lines, size = head.size;
   const lineH = Math.round(f.outroHeadlineLine * (size / f.outroHeadlineSize));
   const blockH = lines.length * lineH;
   const startY = Math.round(f.h/2 - blockH/2);
-  const supportLines = slide.supportingText ? fitSupportText(slide.supportingText, f.hookSupportChars, f.hookSupportMaxLines) : [];
+  const sup = slide.supportingText ? designLines(design, "supportingText", f, slide.supportingText, f.hookSupportSize, f.hookSupportChars, f.hookSupportMaxLines) : { lines: [], size: f.hookSupportSize, layer: null };
+  const supportLines = sup.lines;
+  const supportSize = sup.size;
+  const supportLineH = Math.round(f.hookSupportLine * (supportSize / f.hookSupportSize));
   const supportY = startY + blockH + 56;
   const emphasisIdx = slide.emphasisLine != null ? slide.emphasisLine : (lines.length >= 2 ? lines.length - 1 : -1);
 
@@ -1008,8 +1035,8 @@ function renderOutroSVG(p, f, slide, category, scrimStrength, typo, design) {
   <svg width="${f.w}" height="${f.h}" viewBox="0 0 ${f.w} ${f.h}" xmlns="http://www.w3.org/2000/svg">
     ${backgroundLayer(p, f, scrimStrength, "outro", design)}
     ${plainHeader(p, f, category.displayName, category.slug, slide.slideNumber, slide.totalSlides, typo)}
-    <g ${textLayoutTransform(slide, "headline", f, { x: m, y: startY - size, width: f.w - 2*m, height: Math.max(lineH, lines.length * lineH) })}><text x="${m}" y="${startY}" font-family="${layerFont(slide, "headline", fontHead)}" font-size="${size}" font-weight="700">${tspansEmphasis(lines, m, startY, lineH, emphasisIdx, layerColor(slide, "headline") || p.accent, layerColor(slide, "headline") || p.primaryText)}</text></g>
-    ${supportLines.length ? `<g ${textLayoutTransform(slide, "supportingText", f, { x: m, y: supportY - f.hookSupportSize, width: f.w - 2*m, height: Math.max(f.hookSupportLine, supportLines.length * f.hookSupportLine) })}><text x="${m}" y="${supportY}" font-family="${layerFont(slide, "supportingText", fontBody)}" font-size="${f.hookSupportSize}" fill="${layerColor(slide, "supportingText") || p.secondaryText}">${tspans(supportLines, m, supportY, f.hookSupportLine)}</text></g>` : ""}
+    <g ${textLayoutTransform(slide, "headline", f, { x: m, y: startY - size, width: f.w - 2*m, height: Math.max(lineH, lines.length * lineH) })}><text x="${m}" y="${startY}" font-family="${(head.layer && head.layer.fontFamily) || layerFont(slide, "headline", fontHead)}" font-size="${size}" font-weight="700">${tspansEmphasis(lines, m, startY, lineH, emphasisIdx, layerColor(slide, "headline") || p.accent, (head.layer && head.layer.color) || layerColor(slide, "headline") || p.primaryText)}</text></g>
+    ${supportLines.length ? `<g ${textLayoutTransform(slide, "supportingText", f, { x: m, y: supportY - supportSize, width: f.w - 2*m, height: Math.max(supportLineH, supportLines.length * supportLineH) })}><text x="${m}" y="${supportY}" font-family="${(sup.layer && sup.layer.fontFamily) || layerFont(slide, "supportingText", fontBody)}" font-size="${supportSize}" fill="${(sup.layer && sup.layer.color) || layerColor(slide, "supportingText") || p.secondaryText}">${tspans(supportLines, m, supportY, supportLineH)}</text></g>` : ""}
     <defs><linearGradient id="fadeLine2" x1="${m}" y1="0" x2="${f.w-m}" y2="0" gradientUnits="userSpaceOnUse">
       <stop offset="0%" stop-color="${p.accent}" stop-opacity="1"/><stop offset="100%" stop-color="${p.accent}" stop-opacity="0"/>
     </linearGradient></defs>
@@ -1327,6 +1354,9 @@ async function renderCardSet(slides, category, paletteKey, format, imageUrl, opt
 module.exports = {
   renderStatCard,
   renderCardSet,
+  // Exposed so a test can prove the export draws the SAME wrapped lines the
+  // layout engine produced (i.e. the download matches the preview).
+  designLines,
   mapWithConcurrency,
   paletteFromDesign,
   templateGradientDefs,
