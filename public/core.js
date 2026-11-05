@@ -1287,15 +1287,23 @@ function renderCardLiveStage(o, tid, idx, slideIndex, slide, aspectRatio) {
   const key = `${tid}-${idx}-${slideIndex}`;
   const live = cpCardSlide(tid, idx, slideIndex) || slide || {};
   const templateId = live._templateId || live._style?.templateId || o?._renderCtx?.template || o?.template;
-  const template = window.CPTemplateEngine?.get(templateId);
-  const layout = live.textLayout || {};
+  // Box geometry comes from the shared layout, so the preview and the export
+  // place every layer in the same spot (and inside the platform safe zone).
+  const design = window.CPCardLayout?.resolve({
+    templateId, platform: cpLayoutPlatform(o), slide: live, index: slideIndex,
+    total: (o?.slides || []).length || 1, style: live._style || {}
+  });
   const box = (name, label, text) => {
-    const pos = layout[name] || (template && template.layout && template.layout[name]) || CP_LIVE_DEFAULT_BOX[name];
+    const layer = design && design.layers.find(l => l.key === name);
+    const pos = (layer && layer.box) || CP_LIVE_DEFAULT_BOX[name];
     const sel = !!cpCanvasSel && cpCanvasSel.key === key && cpCanvasSel.name === name;
     const hasText = text !== undefined && text !== null && String(text).trim().length > 0;
+    // An empty slot is not drawn at all in the preview: no dashed outline, no
+    // "Add supporting text" placeholder. It only appears once it is selected in
+    // the editor, which is the only place a placeholder is useful.
     return `<div class="cp-canvas-block${sel ? " is-selected" : ""}${hasText ? "" : " is-empty"}" data-canvas-key="${key}" data-canvas-block="${name}" tabindex="0" role="slider" aria-label="Drag or resize ${label}" style="left:${pos.x*100}%;top:${pos.y*100}%;width:${pos.width*100}%;height:${pos.height*100}%"><div class="cc-live-text${hasText ? "" : " is-empty"}" data-cp-live="${name}" style="${cpLiveTextStyle(live, name, o, tid)}">${esc(hasText ? text : label)}</div><span class="cp-canvas-label">${label}</span><button type="button" class="cp-canvas-resize cp-resize-corner" data-canvas-resize="true" data-canvas-resize-mode="both" aria-label="Resize ${label} width and height"></button><button type="button" class="cp-canvas-resize cp-resize-side" data-canvas-resize="true" data-canvas-resize-mode="horizontal" aria-label="Resize ${label} width"></button><button type="button" class="cp-canvas-resize cp-resize-top" data-canvas-resize="true" data-canvas-resize-mode="vertical" aria-label="Resize ${label} height"></button></div>`;
   };
-  return `<div class="cp-canvas-stage cc-live-stage" data-canvas-stage="${key}" data-tid="${tid}" data-idx="${idx}" data-slide-index="${slideIndex}" style="aspect-ratio:${aspectRatio}"><div class="cc-live-plate"></div><div class="cc-live-dim"></div><div class="cc-live-status" role="status"></div><div class="cp-canvas-blocks" data-canvas-key="${key}" data-slide-index="${slideIndex}" data-card-key="${tid}-${idx}">${CARD_LAYERS.map(L => box(L.key, L.label, cpCardLayerText(live, L))).join("")}</div></div>`;
+  return `<div class="cp-canvas-stage cc-live-stage" data-canvas-stage="${key}" data-tid="${tid}" data-idx="${idx}" data-slide-index="${slideIndex}" style="aspect-ratio:${aspectRatio}"><div class="cc-live-plate"></div><div class="cc-live-dim"></div><div class="cc-live-scrim" aria-hidden="true"></div><div class="cc-live-status" role="status"></div><div class="cp-canvas-blocks" data-canvas-key="${key}" data-slide-index="${slideIndex}" data-card-key="${tid}-${idx}">${CARD_LAYERS.map(L => box(L.key, L.label, cpCardLayerText(live, L))).join("")}</div></div>`;
 }
 
 function renderPlatformMockup(o, tid, idx, curPlat) {
@@ -1755,19 +1763,31 @@ const cpPlateRequestChains = new Map(); // carousel key -> serial plate render p
 
 function cpCanvasDragging(block) { return !!cpCanvasActive && cpCanvasActive.block === block; }
 
+// The one place the preview asks "how is this text drawn?". It delegates to the
+// shared layout module (public/lib/cardLayout.js) that the export also uses, so
+// font, size, line height, colour and alignment cannot drift between the two.
 function cpLiveTextStyle(slide, name, o, tid) {
   const sty = slide._style || {};
   const templateId = slide._templateId || sty.templateId || o?._renderCtx?.template || o?.template;
-  const template = window.CPTemplateEngine?.get(templateId);
-  const layerSpec = template?.typography?.[name];
-  const typo = (sty.layerFonts || {})[name] || layerSpec?.family || sty.typography || (o && o._renderCtx && o._renderCtx.typography) || "impact";
-  const vis = TYPO_VIS[typo] || {};
-  const color = (sty.layerColors || {})[name] || (name === "ctaLine" ? template?.palette?.accent : null) || sty.textColor || template?.palette?.text || "#ffffff";
-  const k = Math.max(0.5, Math.min(1.6, Number((sty.layerScale || {})[name]) || 1));
-  const size = layerSpec?.size || CP_LIVE_BASE_SIZE[name];
-  const upper = layerSpec?.transform === "uppercase" || name === "ctaLine" ? "uppercase" : "none";
-  const align = (sty.layerAlign || {})[name] || sty.textAlign || "left";
-  return `font-family:${vis.f || "Inter, sans-serif"};font-weight:${layerSpec?.weight || vis.w || 700};font-size:${(size * k).toFixed(2)}cqw;line-height:${layerSpec?.lineHeight || 1.05};color:${color};text-transform:${upper};text-align:${align}`;
+  const platform = cpLayoutPlatform(o);
+  const design = window.CPCardLayout?.resolve({
+    templateId, platform, slide, index: 0, total: 1, style: sty
+  });
+  const layer = design && design.layers.find(l => l.key === name);
+  if (layer) return window.CPCardLayout.layerCss(layer);
+  // Fallback only if the shared module is missing (it is loaded before core.js).
+  const vis = TYPO_VIS.impact;
+  return `font-family:${vis.f};font-weight:${vis.w};font-size:${CP_LIVE_BASE_SIZE[name] || 4}cqw;line-height:1.1;color:#fff;text-transform:none;text-align:left`;
+}
+
+// Which platform's safe zones a card is being previewed in. The mockup tab the
+// user picked wins, then the output's own aspect, then the trend's platform.
+function cpLayoutPlatform(o) {
+  if (!o) return "instagram";
+  if (o.aspect === "reel" || o.aspect === "tiktok") return "tiktok";
+  if (o.aspect === "youtube") return "youtube";
+  if (o.aspect === "twitter") return "twitter";
+  return "instagram";
 }
 
 function cpSelectCanvasBlock(key, name) {
@@ -2168,6 +2188,11 @@ function cpUpdateLiveStage(tid, idx, slideIndex) {
   deco.className = "cc-live-decoration"; deco.hidden = true;
   deco.style.setProperty("--cc-template-accent", "#fff");
   const dimEl = stage.querySelector(".cc-live-dim");
+  // One resolved layout for this card. The decoration, the scrim and every text
+  // layer are painted from it, and the export reads the same object.
+  const design = window.CPCardLayout?.resolve({
+    templateId, platform: cpLayoutPlatform(o), slide, index: slideIndex, total: (o?.slides || []).length || 1, style: sty
+  });
   if (template) {
     stage.style.backgroundColor = template.palette.bg;
     const imageLayout = template.image || {};
@@ -2176,20 +2201,16 @@ function cpUpdateLiveStage(tid, idx, slideIndex) {
     else if (plateEl) Object.assign(plateEl.style, { left: "0", top: "0", right: "0", bottom: "0", width: "100%", height: "100%", borderRadius: "0" });
     if (plateEl) plateEl.style.backgroundPosition = imageLayout.focal === "subject" ? "center 38%" : "center";
     if (dimEl) dimEl.style.background = template.palette.gradient || "#000";
-    const decoSpec = template.decoration || { type: "none" };
-    deco.hidden = decoSpec.type === "none";
-    deco.textContent = decoSpec.type === "badge" ? (decoSpec.text || "FEATURE") : "";
-    deco.style.cssText = "position:absolute;z-index:2;pointer-events:none;";
-    deco.style.color = template.palette.text;
-    if (decoSpec.type === "badge") Object.assign(deco.style, { left: "8%", top: "8%", padding: "1.4% 3%", borderRadius: "999px", background: decoSpec.accent || template.palette.accent, color: template.palette.bg, font: "800 2.6cqw/1 Inter, sans-serif", letterSpacing: ".08em" });
-    else if (decoSpec.type === "rule") Object.assign(deco.style, { left: "8%", top: "8%", width: "24%", height: "1%", background: decoSpec.accent || template.palette.accent });
-    else if (decoSpec.type === "frame") Object.assign(deco.style, { inset: "3%", border: "1px solid rgba(255,255,255,.25)" });
-    else if (decoSpec.type === "orb") Object.assign(deco.style, { right: "5%", top: "3%", width: "30%", height: "24%", background: "radial-gradient(circle,rgba(129,140,248,.28),transparent 70%)" });
-    else if (decoSpec.type === "stripes") Object.assign(deco.style, { left: "0", right: "0", bottom: "18%", height: "5%", background: `repeating-linear-gradient(0deg,${decoSpec.accent},${decoSpec.accent} 2px,transparent 2px,transparent 12px)`, opacity: ".42" });
-    else if (decoSpec.type === "corner") Object.assign(deco.style, { left: "0", top: "0", width: "100%", height: "1.2%", background: decoSpec.accent || template.palette.accent });
-    else Object.assign(deco.style, { left: "0", bottom: "0", width: "100%", height: "1%", background: template.palette.accent });
+    // The badge/rule/frame/orb/stripes are painted by the shared painter, which
+    // sizes them in card pixels. That is what stops the accent pill from
+    // stretching into a full-card blob.
+    if (window.CPCardPaint) window.CPCardPaint.paintDecoration(deco, design);
   }
   if (dimEl) dimEl.style.opacity = String(Math.max(0, Math.min(0.8, Number(sty.dim ?? template?.palette?.dim) || 0)));
+  // A consistent dark gradient behind the text area, so a headline is readable
+  // over any photo. Painted from the same layout the export uses.
+  const scrimEl = stage.querySelector(".cc-live-scrim");
+  if (scrimEl && window.CPCardPaint) window.CPCardPaint.paintScrim(scrimEl, design);
   if (sty.bgGradient) {
     const { color1, color2, angle = 135 } = sty.bgGradient;
     stage.style.background = `linear-gradient(${angle}deg, ${color1}, ${color2})`;
@@ -2256,9 +2277,12 @@ function cpUpdateLiveStage(tid, idx, slideIndex) {
       txt.style.cssText = cpLiveTextStyle(slide, L.key, o, tid);
     }
     if (cpCanvasDragging(block)) return; // the pointer owns the box while dragging
-    const templateId = slide._templateId || sty.templateId || o?._renderCtx?.template || o?.template;
-    const template = window.CPTemplateEngine?.get(templateId);
-    const pos = (slide.textLayout || {})[L.key] || (template && template.layout && template.layout[L.key]) || CP_LIVE_DEFAULT_BOX[L.key];
+    // ROOT CAUSE of "text collides with the nav arrows / sits under the TikTok
+    // caption": this used to read the raw template layout, which is wider than
+    // the TikTok safe zone. It now reads the resolved layer box, which has been
+    // clamped to the safe zone — the same box the export draws into.
+    const layer = design && design.layers.find(l => l.key === L.key);
+    const pos = (layer && layer.box) || (slide.textLayout || {})[L.key] || CP_LIVE_DEFAULT_BOX[L.key];
     block.style.left = `${pos.x * 100}%`;
     block.style.top = `${pos.y * 100}%`;
     block.style.width = `${pos.width * 100}%`;
@@ -2312,8 +2336,34 @@ function cpGetDesignState(tid, idx, si) {
   const templateId = slide._templateId || sty.templateId || o._renderCtx.template || o.template;
   const template = window.CPTemplateEngine?.get(templateId);
   const typo = o._renderCtx.typography;
+  // The export reads the SAME resolved layout the preview paints from. Font,
+  // size, line height, colour, alignment and box all come from one place, which
+  // is what makes a downloaded slide look like the mockup.
+  const design = window.CPCardLayout?.resolve({
+    templateId, platform: cpLayoutPlatform(o), slide, index: si,
+    total: (o.slides || []).length || 1, style: sty
+  });
   const layers = CARD_LAYERS.map(L => {
     const text = cpCardLayerText(slide, L);
+    const resolved = design && design.layers.find(l => l.key === L.key);
+    if (resolved) {
+      return {
+        key: L.key,
+        field: L.field,
+        label: L.label,
+        text: resolved.displayText,
+        family: resolved.fontFamily,
+        fontFamilyName: resolved.fontId,
+        weight: resolved.fontWeight,
+        size: resolved.sizePct,
+        lineHeight: resolved.lineHeight,
+        scale: 1,
+        color: resolved.color,
+        align: resolved.align,
+        box: resolved.box,
+        empty: resolved.empty
+      };
+    }
     const layerSpec = template?.typography?.[L.key];
     const face = (sty.layerFonts || {})[L.key] || layerSpec?.family || sty.typography || typo || "impact";
     const vis = TYPO_VIS[face] || {};
@@ -2398,23 +2448,37 @@ window.cpUpdateGraphicDesignState = cpApplyDesignState;
 
 // ── Font Loading & Pre-rendering Cache ──
 const cpFontReadinessCache = new Map();
+// Makes sure the fonts a card needs are ready before it is drawn.
+//
+// ROOT CAUSE OF "Couldn't prepare this image": this used to THROW when a webfont
+// had not arrived yet. `document.fonts.load()` returns an empty list whenever the
+// face is not downloaded (slow network, offline, a blocked font CDN), and the
+// old code treated that as a fatal error — so every download failed, even though
+// the browser would happily have drawn the card with the fallback face. A font
+// that is late is a cosmetic problem, not a reason to refuse the image.
+//
+// Now: wait for the fonts, log clearly which ones fell back, and carry on.
 async function cpEnsureGraphicFontsLoaded(layers) {
   if (typeof document === "undefined" || !document.fonts || !document.fonts.load) return;
-  const promises = layers.filter(l => l.text).map(l => {
-    const key = `${l.weight} 40px ${l.family}`;
+  const wanted = layers.filter(l => l.text).map(l => `${l.weight} 40px ${l.family}`);
+  const results = await Promise.all(wanted.map(async key => {
     if (cpFontReadinessCache.has(key)) return cpFontReadinessCache.get(key);
-    const p = Promise.resolve(document.fonts.load(key)).then(loaded => {
-      if (!loaded || !loaded.length || !document.fonts.check(key)) throw new Error(`Selected font did not load: ${l.fontFamilyName || l.family}`);
-      return true;
-    }).catch(error => {
-      cpFontReadinessCache.delete(key);
-      throw error;
-    });
+    const p = Promise.resolve(document.fonts.load(key))
+      .then(loaded => {
+        const ok = !!(loaded && loaded.length) || document.fonts.check(key);
+        if (!ok) console.warn("[card export] font fell back to a system face:", key);
+        return { key, ok };
+      })
+      .catch(error => {
+        console.warn("[card export] font load failed, using fallback:", key, error && error.message);
+        return { key, ok: false };
+      });
     cpFontReadinessCache.set(key, p);
     return p;
-  });
-  await Promise.all(promises);
-  await document.fonts.ready;
+  }));
+  const missing = results.filter(r => !r.ok).map(r => r.key);
+  if (missing.length) console.warn("[card export] drawing with fallback fonts:", missing.join(", "));
+  try { await document.fonts.ready; } catch (e) { /* never block an export on this */ }
 }
 
 // Reads everything the image needs in one synchronous step, so an edit made while
@@ -2426,10 +2490,25 @@ function cpExportSnapshot(tid, idx, si) {
   const plateKey = cpPlateKey(tid, idx, si);
   const entry = cpPlateCache.get(plateKey);
   const sty = slide._style || {};
-  if (!sty.bgImage && (!entry || entry.pending)) return null;
+  // ROOT CAUSE of "Couldn't prepare this image": this used to return null
+  // whenever there was no photo plate entry at all — which is the normal state
+  // for a card with a solid/gradient background, and for a card whose photo has
+  // not been requested yet. The export then failed forever with no explanation.
+  // Only a plate that is actively being prepared should block the export; a
+  // missing plate simply means "draw the background colour".
+  if (!sty.bgImage && entry && entry.pending) return null;
 
   const state = cpGetDesignState(tid, idx, si);
   if (!state) return null;
+  // Carry the resolved layout and the raw style into the snapshot, so the
+  // painter draws the scrim and decoration from the same object the preview
+  // used — not from a second, independently computed guess.
+  state.platform = cpLayoutPlatform(o);
+  state.style = sty;
+  state.design = window.CPCardLayout?.resolve({
+    templateId: state.templateId, platform: state.platform, slide, index: si,
+    total: (o.slides || []).length || 1, style: sty
+  }) || null;
   const signatureState = {
     ...state,
     plateSrc: state.plateId,
@@ -2501,14 +2580,20 @@ function cpWrapLines(ctx, text, maxW) {
   return out;
 }
 
-// One text box: clipped to its box like the preview, top-aligned, 1.05 line height, with the same shadow.
-// Never draws selection outlines or editing controls into the exported image.
+// One text box: clipped to its box like the preview, top-aligned, with the SAME
+// line height and the SAME wrapping algorithm the preview uses (both come from
+// public/lib/cardLayout.js). Never draws selection outlines or editing controls
+// into the exported image.
 function cpDrawTextBox(ctx, l, W, H) {
+  if (!l || !l.text || l.empty) return; // an empty slot is not drawn at all
   const px = l.size * W;
-  const lineH = px * 1.05;
+  const lineH = px * (Number(l.lineHeight) || 1.1);
   const left = l.box.x * W, top = l.box.y * H, bw = l.box.width * W, bh = l.box.height * H;
   ctx.font = `${l.weight} ${px}px ${l.family}`;
-  const lines = cpWrapLines(ctx, l.text, bw);
+  // Shared wrapper: identical break points in preview and export.
+  const lines = window.CPCardLayout
+    ? window.CPCardLayout.wrapLines(s => ctx.measureText(s).width, l.text, bw)
+    : cpWrapLines(ctx, l.text, bw);
   const m = ctx.measureText("Hg");
   const asc = m.fontBoundingBoxAscent ?? px * 0.8;
   const desc = m.fontBoundingBoxDescent ?? px * 0.2;
@@ -2527,6 +2612,19 @@ function cpDrawTextBox(ctx, l, W, H) {
   ctx.shadowBlur = 0.035 * W;    // 3.5% of the width
   const xPos = l.align === "center" ? (left + bw / 2) : (l.align === "right" ? (left + bw) : left);
   lines.forEach((ln, i) => ctx.fillText(ln, xPos, firstBaseline + i * lineH));
+  ctx.restore();
+}
+
+// Paints the legibility scrim behind the text area, from the same stops the
+// preview uses. Without it a headline disappears into a busy photo.
+function cpDrawScrim(ctx, design, W, H) {
+  if (!design || !design.scrim) return;
+  const s = design.scrim;
+  const grad = ctx.createLinearGradient(0, s.from * H, 0, s.to * H);
+  s.stops.forEach(st => grad.addColorStop(st.offset, st.color));
+  ctx.save();
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, s.from * H, W, (s.to - s.from) * H);
   ctx.restore();
 }
 
@@ -2607,9 +2705,57 @@ async function cpComposeCard(snap) {
     }
     ctx.fillRect(0, 0, W, H);
   }
-  (state.templateDecoration || []).forEach(el => cpDrawTemplateDecoration(ctx, el, state.templatePalette && state.templatePalette.accent, W, H));
-  state.layers.forEach(l => { if (l.text) cpDrawTextBox(ctx, l, W, H); });
+  // The scrim and the decoration are drawn from the SAME resolved layout the
+  // preview paints from, so the exported image matches the mockup.
+  const design = state.design || (window.CPCardLayout && window.CPCardLayout.resolve({
+    templateId: state.templateId, platform: state.platform || "instagram",
+    slide: { headline: state.headline, supportingText: state.supportingText, ctaLine: state.ctaLine, _style: state.style || {} },
+    index: 0, total: 1, style: state.style || {}
+  }));
+  cpDrawScrim(ctx, design, W, H);
+  if (design && design.decoration && design.decoration.type !== "none") {
+    cpDrawDecoration(ctx, design.decoration, W, H, design.palette);
+  } else {
+    (state.templateDecoration || []).forEach(el => cpDrawTemplateDecoration(ctx, el, state.templatePalette && state.templatePalette.accent, W, H));
+  }
+  state.layers.forEach(l => { if (l.text && !l.empty) cpDrawTextBox(ctx, l, W, H); });
   return canvas.toDataURL("image/jpeg", 0.92);
+}
+
+// Draws the template decoration from the shared geometry (card pixels), so the
+// badge is a pill in the export exactly as it is in the preview.
+function cpDrawDecoration(ctx, d, W, H, palette) {
+  ctx.save();
+  if (d.type === "badge") {
+    const r = Math.min(d.height / 2, d.radius || d.height / 2);
+    ctx.fillStyle = d.bg;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(d.x, d.y, d.width, d.height, r);
+    else ctx.rect(d.x, d.y, d.width, d.height);
+    ctx.fill();
+    ctx.fillStyle = (palette && palette.bg) || "#000";
+    ctx.font = `800 ${d.fontSize}px Inter, Arial, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(String(d.text || ""), d.x + d.width / 2, d.y + d.height / 2 + 1);
+  } else if (d.type === "rule") {
+    ctx.fillStyle = d.bg; ctx.fillRect(d.x, d.y, d.width, d.height);
+  } else if (d.type === "corner") {
+    ctx.fillStyle = d.bg; ctx.fillRect(0, 0, W, d.height);
+  } else if (d.type === "frame") {
+    ctx.strokeStyle = d.stroke; ctx.lineWidth = Math.max(2, W * 0.002);
+    ctx.strokeRect(d.x, d.y, d.width, d.height);
+  } else if (d.type === "orb") {
+    const g = ctx.createRadialGradient(d.cx, d.cy, 0, d.cx, d.cy, d.r);
+    g.addColorStop(0, d.bg + "55"); g.addColorStop(1, "transparent");
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(d.cx, d.cy, d.r, 0, Math.PI * 2); ctx.fill();
+  } else if (d.type === "stripes") {
+    ctx.globalAlpha = 0.42; ctx.fillStyle = d.bg;
+    for (let y = d.y; y < d.y + d.height; y += Math.max(8, W * 0.011)) ctx.fillRect(0, y, W, Math.max(2, W * 0.002));
+  } else if (d.type === "split") {
+    ctx.globalAlpha = 0.28; ctx.fillStyle = d.bg; ctx.fillRect(d.x, 0, d.width, H);
+  }
+  ctx.restore();
 }
 
 function cpCurrentExportImg(tid, idx, si) {
@@ -2661,11 +2807,45 @@ function cpScheduleExport(tid, idx, si) {
 }
 
 // Runs a card's export now, skipping the pause. Used before a download or a save.
-function cpFlushExport(tid, idx, si) {
+//
+// ROOT CAUSE of "Couldn't prepare this image": the snapshot returns null while
+// the card's photo plate is still being prepared, and the download path treated
+// that null as a permanent failure. Tapping Download right after opening a card
+// therefore always failed. Now the flush waits for the plate to settle (with a
+// short ceiling) and only then gives up — and it says why in the console.
+async function cpFlushExport(tid, idx, si) {
   const key = cpExportKey(tid, idx, si);
   clearTimeout(cpExportTimers.get(key));
   cpExportTimers.delete(key);
-  return cpRunExport(tid, idx, si).catch(() => "");
+  await cpWaitForPlate(tid, idx, si);
+  const url = await cpRunExport(tid, idx, si).catch(e => {
+    console.error("[card download] export failed:", tid, idx, si, e && e.message);
+    return "";
+  });
+  if (!url) console.error("[card download] no image produced for", tid, idx, si, "— plate:", JSON.stringify(cpPlateCache.get(cpPlateKey(tid, idx, si)) || null));
+  return url;
+}
+
+// Waits until a card's photo plate is ready (or has failed), so an export never
+// starts from a half-prepared card. Resolves either way; it never rejects.
+function cpWaitForPlate(tid, idx, si, timeoutMs = 4000) {
+  const plateKey = cpPlateKey(tid, idx, si);
+  const slide = cpCardSlide(tid, idx, si);
+  const sty = slide?._style || {};
+  if (sty.bgImage || sty.bgColor || sty.bgGradient) return Promise.resolve();
+  return new Promise(resolve => {
+    const started = Date.now();
+    const tick = () => {
+      const entry = cpPlateCache.get(plateKey);
+      if (entry && !entry.pending) return resolve();
+      if (Date.now() - started > timeoutMs) {
+        console.warn("[card download] photo plate still pending after", timeoutMs, "ms:", plateKey);
+        return resolve();
+      }
+      setTimeout(tick, 60);
+    };
+    tick();
+  });
 }
 
 // True when a card's image already matches its look, so it can be downloaded inside the tap.
@@ -2944,19 +3124,36 @@ function cpThemeTileHTML(gal, kind, t, sty, slide, plateCss) {
   const CT = window.CardThemes;
   const v = CT.preview(kind, t.id, sty);
   const active = kind === "style" ? sty.themeId === t.id : sty.colourThemeId === t.id;
-  const fam = TYPO_VIS[v.typography] || TYPO_VIS.impact;
   const pick = kind === "style" ? "cpPickTheme" : "cpPickColourTheme";
   if (kind === "colour") {
     return `<button type="button" class="cc-th-swatch${active ? " active" : ""}" aria-pressed="${active}" onclick="${pick}('${gal.tid}',${gal.idx},${gal.slideIndex},'${t.id}')">
       <span class="cc-th-dots"><i style="background:${v.textColor}"></i><i style="background:${v.accent}"></i></span><span>${esc(t.name)}</span></button>`;
   }
+  // A tile is a miniature of the REAL card: same photo, same scrim, same layout
+  // and same wrapping as the mockup and the export (public/lib/themePreview.js).
+  // It used to be a black rectangle with centred text and an ellipsis, which is
+  // why a theme could not be judged from it.
+  const o = S.outs[gal.tid]?.[gal.idx];
+  const templateId = slide._templateId || sty.templateId || o?._renderCtx?.template || o?.template;
+  const themedStyle = CT.applyTheme(sty, t.id);
+  const html = window.CPThemePreview?.tileHTML({
+    templateId,
+    platform: cpLayoutPlatform(o),
+    slide,
+    style: themedStyle,
+    plateUrl: gal.plate || "",
+    themeName: t.name,
+    active,
+    onclick: `${pick}('${gal.tid}',${gal.idx},${gal.slideIndex},'${t.id}')`
+  });
+  if (html) return html;
+  // Fallback only if the shared preview module is missing.
+  const fam = TYPO_VIS[v.typography] || TYPO_VIS.impact;
   return `<button type="button" class="cc-th-tile${active ? " active" : ""}" aria-pressed="${active}" onclick="${pick}('${gal.tid}',${gal.idx},${gal.slideIndex},'${t.id}')">
     <span class="cc-th-frame" style="${plateCss}">
       <span class="cc-th-dim" style="background:rgba(0,0,0,${v.dim})"></span>
       <span class="cc-th-copy" style="font-family:${fam.f};font-weight:${fam.w};text-transform:${fam.up ? "uppercase" : "none"};color:${v.textColor}">
         <span class="cc-th-headline">${esc(slide.headline || "")}</span>
-        ${slide.supportingText || slide.body ? `<span class="cc-th-sub">${esc(slide.supportingText || slide.body)}</span>` : ""}
-        ${slide.ctaLine ? `<span class="cc-th-cta" style="color:${v.accent}">${esc(slide.ctaLine)}</span>` : ""}
       </span>
     </span>
     <span class="cc-th-name">${esc(t.name)}</span>

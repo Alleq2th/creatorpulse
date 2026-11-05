@@ -530,6 +530,22 @@
   border: 1px solid rgba(255,255,255,0.1);
   margin-bottom: 8px;
 }
+/* A live template tile is a miniature of the real template: the scrim, the
+   badge and every text layer are placed by the shared layout, in percentages of
+   the tile, with the real font size in cqw. */
+.cc-template-thumb-live {
+  position: relative;
+  display: block;
+  height: 150px;
+  padding: 0;
+  overflow: hidden;
+  container-type: inline-size;
+  text-align: left;
+}
+.cc-template-scrim { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+.cc-template-layer { position: absolute; z-index: 2; display: block; overflow: hidden; overflow-wrap: anywhere; white-space: pre-wrap; }
+.cc-template-badge-pill { position: absolute; z-index: 3; display: flex; align-items: center; justify-content: center; border-radius: 999px; font: 800 2.4cqw/1 Inter, sans-serif; letter-spacing: .08em; overflow: hidden; white-space: nowrap; }
+.cc-template-rule { position: absolute; z-index: 3; }
 .cc-template-meta { flex: 1; min-width: 0; }
 .cc-template-title { display: block; font-size: 12.5px; font-weight: 750; color: var(--tx); }
 .cc-template-sub { display: block; font-size: 10px; line-height: 1.35; color: var(--mu); margin-top: 2px; }
@@ -649,10 +665,15 @@
 .cc-th-body { overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 4px 14px 12px; display: flex; flex-direction: column; gap: 12px; }
 .cc-th-section { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--mu2, #9a9a9a); margin-top: 4px; }
 .cc-th-list { display: flex; flex-direction: column; gap: 14px; }
-.cc-th-tile { display: flex; flex-direction: column; gap: 6px; padding: 6px; background: transparent; border: 2px solid transparent; border-radius: 12px; cursor: pointer; text-align: left; color: inherit; }
+.cc-th-tile { display: flex; flex-direction: column; gap: 6px; width: 132px; flex: 0 0 auto; padding: 6px; background: transparent; border: 2px solid transparent; border-radius: 12px; cursor: pointer; text-align: left; color: inherit; }
 .cc-th-tile.active { border-color: var(--ac, #ff7a1a); }
-.cc-th-frame { position: relative; display: block; width: min(100%, 260px); aspect-ratio: 9 / 16; margin: 0 auto; border-radius: 10px; overflow: hidden; background-size: cover; background-position: center; background-color: #1b1b1f; }
+.cc-th-frame { position: relative; display: block; width: min(100%, 260px); aspect-ratio: 9 / 16; margin: 0 auto; border-radius: 10px; overflow: hidden; background-size: cover; background-position: center; background-color: #1b1b1f; container-type: inline-size; }
 .cc-th-dim { position: absolute; inset: 0; }
+/* A theme tile is a miniature of the real card: the scrim and every text layer
+   are placed by the shared layout (public/lib/themePreview.js), in percentages
+   of the tile, with the real font size in cqw. No ellipsis, no centring. */
+.cc-th-scrim { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+.cc-th-layer { position: absolute; z-index: 2; display: block; overflow: hidden; overflow-wrap: anywhere; white-space: pre-wrap; }
 .cc-th-copy { position: absolute; left: 8%; right: 8%; top: 30%; display: flex; flex-direction: column; gap: 6px; line-height: 1.05; }
 .cc-th-headline { font-size: clamp(14px, 4.6vw, 22px); overflow-wrap: anywhere; }
 .cc-th-sub { font-size: clamp(9px, 2.4vw, 12px); line-height: 1.3; opacity: 0.9; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }

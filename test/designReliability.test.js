@@ -38,12 +38,13 @@ test('image loading reserves space, reports loading, retries recoverable errors 
 });
 
 test('export composition omits editor controls and draws text from design-state layers', () => {
-  assert.match(core, /state\.layers\.forEach\(l => \{ if \(l\.text\) cpDrawTextBox\(ctx, l, W, H\); \}\)/);
-  assert.match(core, /Never draws selection outlines or editing controls into the exported image/);
+  // Empty slots are skipped, so a placeholder can never reach the exported image.
+  assert.match(core, /state\.layers\.forEach\(l => \{ if \(l\.text && !l\.empty\) cpDrawTextBox\(ctx, l, W, H\); \}\)/);
+  assert.match(core, /Never draws selection outlines or editing controls/);
   assert.match(core, /ctx\.filter = `brightness\(\$\{brightness\}\) contrast\(\$\{contrast\}\) saturate\(\$\{saturation\}\) blur\(\$\{blur\}px\)`/);
 });
 
 test('changed scripts are cache-busted for the app and service worker', () => {
-  assert.match(html, /core\.js\?v=58/);
-  assert.match(sw, /creatorpulse-v38/);
+  assert.match(html, /core\.js\?v=61/);
+  assert.match(sw, /creatorpulse-v40/);
 });
