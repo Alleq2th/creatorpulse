@@ -203,6 +203,60 @@ for (const id of Object.keys(await page.evaluate(() => window.CPCardTemplates.TE
   await page.evaluate(() => { const h = document.getElementById("shot-host"); if (h) h.remove(); });
 }
 
+// ── Contact sheet: every template at THUMBNAIL size, for the SAME content ────
+// One image showing all ten templates side by side, so the compositions can be
+// compared at a glance. The same slide content is used for every tile, so any
+// difference on the sheet is a difference in the COMPOSITION, not the copy.
+await page.setViewportSize({ width: 1300, height: 1600 });
+const sheet = await page.evaluate(async () => {
+  const ids = Object.keys(window.CPCardTemplates.TEMPLATES);
+  const host = document.createElement("div");
+  host.id = "sheet-host";
+  host.style.cssText = "position:fixed;left:0;top:0;z-index:99999;background:#0a0a0c;padding:18px;display:grid;grid-template-columns:repeat(5,220px);gap:16px;font-family:Inter,sans-serif";
+  document.body.appendChild(host);
+  const geom = [];
+  for (const id of ids) {
+    const tpl = window.CPCardTemplates.get(id);
+    const plat = tpl.platform === "tiktok" ? "tiktok" : "instagram";
+    const cell = document.createElement("div");
+    cell.style.cssText = "width:220px";
+    const label = document.createElement("div");
+    label.textContent = tpl.name;
+    label.style.cssText = "color:#dedede;font-size:12px;margin-bottom:5px;font-weight:600";
+    const box = document.createElement("div");
+    box.style.cssText = "width:220px;overflow:hidden;border:1px solid #2C2C2C";
+    cell.appendChild(label); cell.appendChild(box);
+    host.appendChild(cell);
+    const s = { headline: "This is a headline that runs long enough to wrap", supportingText: "Supporting text that explains the story in a sentence.", ctaLine: "FOLLOW FOR MORE", role: "hook", slideNumber: 1, totalSlides: 1, stat: "87%" };
+    window.CPTemplateEngine.apply(s, id, 0, 1);
+    s.role = "hook";
+    const o = { type: "image", isCard: true, aspect: plat, img: "", editSlide: s, _renderCtx: { category: "tech", palette: "noir_orange", format: "tiktok", imageUrl: "", template: id, theme: "modern_dark", typography: "impact", density: "balanced" } };
+    S.outs["sheet"] = [o];
+    box.innerHTML = window.renderPlatformMockup(o, "sheet", 0, plat);
+    await new Promise(r => setTimeout(r, 30));
+    try { window.cpSyncLiveStages(); } catch (e) {}
+    await new Promise(r => setTimeout(r, 40));
+    const d = window.CPCardLayout.resolve({ templateId: id, platform: plat, slide: s, index: 0, total: 1, style: {} });
+    const h = d.layers.find(l => l.key === "headline");
+    const sup = d.layers.find(l => l.key === "supportingText");
+    geom.push({
+      id, name: tpl.name, treatment: d.treatment.id, deco: d.decoration.type,
+      headBox: [h.box.x, h.box.y, h.box.width, h.box.height].map(n => +n.toFixed(3)),
+      align: h.align, anchor: h.anchor, lines: h.lines.length, size: +h.sizePct.toFixed(4),
+      keyword: h.keyword || "",
+      supBox: sup && !sup.empty ? [sup.box.x, sup.box.y, sup.box.width, sup.box.height].map(n => +n.toFixed(3)) : null,
+      supLines: sup && !sup.empty ? sup.lines.length : 0
+    });
+  }
+  await new Promise(r => setTimeout(r, 250));
+  const r = host.getBoundingClientRect();
+  return { x: r.left, y: r.top, width: r.width, height: r.height, geom };
+});
+await page.screenshot({ path: `${OUT}/contact-sheet.png`, clip: { x: Math.max(0, sheet.x), y: Math.max(0, sheet.y), width: sheet.width, height: sheet.height } });
+await page.evaluate(() => { const h = document.getElementById("sheet-host"); if (h) h.remove(); });
+fs.writeFileSync("/tmp/probe/geometry.json", JSON.stringify(sheet.geom, null, 2));
+await page.setViewportSize({ width: 390, height: 844 });
+
 // ── Other tabs still respond ─────────────────────────────────────────────────
 // ── Download works for every template: the export endpoint returns a real PNG ─
 // This is the same endpoint the Download button calls. A non-200, a tiny body,

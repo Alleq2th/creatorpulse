@@ -116,6 +116,31 @@
     };
   }
 
+  /* 4b. TALL INSET — the photo is a TALL panel on one side (a portrait crop)
+   *    with a hairline border, and the type owns the other column. This is the
+   *    Editorial Clean composition: a narrow type column beside a tall photo. */
+  function tallInset(ctx) {
+    var side = ctx.side === 'left' ? 'left' : 'right';
+    var frame = side === 'left'
+      ? { x: 0.06, y: 0.08, width: 0.40, height: 0.84, radius: 0.01 }
+      : { x: 0.54, y: 0.08, width: 0.40, height: 0.84, radius: 0.01 };
+    var textZone = side === 'left'
+      ? { x: 0.50, y: 0.10, width: 0.44, height: 0.80 }
+      : { x: 0.06, y: 0.10, width: 0.44, height: 0.80 };
+    return {
+      id: 'tallInset',
+      name: 'Tall inset',
+      frame: frame,
+      filter: { brightness: 1, contrast: 1.02, saturation: 1.02, blur: 0, grayscale: 0 },
+      scrim: null,
+      tint: null,
+      rule: null,
+      border: { color: ctx.accent || '#e4e4e7', alpha: 0.45, width: 0.002 },
+      backdrop: null,
+      textZone: textZone
+    };
+  }
+
   /* 5. BLURRED BACKDROP — a blurred, darkened copy of the photo fills the card
    *    and a sharp copy sits inset on top. The blur is the field the type reads
    *    against, so the sharp photo can stay bright. */
@@ -154,6 +179,7 @@
     duotone: duotone,
     splitPanel: splitPanel,
     insetFrame: insetFrame,
+    tallInset: tallInset,
     blurredBackdrop: blurredBackdrop,
     hardCropRule: hardCropRule
   };
@@ -163,6 +189,7 @@
     duotone: 'Duotone',
     splitPanel: 'Split panel',
     insetFrame: 'Inset frame',
+    tallInset: 'Tall inset',
     blurredBackdrop: 'Blurred backdrop',
     hardCropRule: 'Hard crop + accent rule'
   };

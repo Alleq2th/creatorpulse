@@ -115,9 +115,9 @@ test('the templates are different from each other, not one design in different c
 
 // ── Part 3: photo treatments ─────────────────────────────────────────────────
 
-test('there are six named photo treatments and each template picks exactly one', () => {
+test('there are seven named photo treatments and each template picks exactly one', () => {
   const list = treatments.list();
-  assert.equal(list.length, 6);
+  assert.equal(list.length, 7);
   for (const t of templates.list()) {
     const d = resolve(t.id, t.platform, 'hook');
     assert.ok(treatments.NAMES[d.treatment.id], t.id + ' uses a named treatment');
@@ -153,8 +153,8 @@ test('typography is one source of truth: the engine uses its faces and its auto-
   const head = d.layers.find(l => l.key === 'headline');
   assert.equal(head.fontFamily, typography.face('impact').family);
   const fit = typography.autoFit({
-    text: SLIDE.headline.toUpperCase(), boxW: 0.84 * 0.98, boxH: 0.3 * 0.96, canvasW: 1080, canvasH: 1350,
-    lineHeight: 1.12, maxLines: 4, minPct: 0.022, maxPct: 0.082
+    text: SLIDE.headline.toUpperCase(), boxW: 0.84 * 0.90, boxH: 0.3 * 0.90, canvasW: 1080, canvasH: 1350,
+    lineHeight: 1.12, heightFactor: 1.12, maxLines: 4, minPct: 0.022, maxPct: 0.082
   });
   assert.equal(head.sizePct, fit.sizePct);
   assert.deepEqual(head.lines, fit.lines);

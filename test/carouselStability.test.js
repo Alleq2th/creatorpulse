@@ -68,6 +68,6 @@ test('carousel theme gallery explains it applies across all slides', () => {
 });
 
 test('mobile clients refresh the updated editor and offline cache', () => {
-  assert.match(html, /core\.js\?v=63/);
-  assert.match(sw, /creatorpulse-v42/);
+  assert.match(html, /core\.js\?v=64/);
+  assert.match(sw, /creatorpulse-v43/);
 });

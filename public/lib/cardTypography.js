@@ -99,17 +99,26 @@
     var bw = Math.max(1, (o.boxW || 0.8) * W);
     var bh = Math.max(1, (o.boxH || 0.2) * H);
     var lineHeight = Number(o.lineHeight) || 1.1;
+    // The browser's line box is slightly taller than fontSize * lineHeight
+    // (it uses the font's own ascent + descent), so the height check reserves a
+    // little extra. Without it the DOM text overflowed its box by a few pixels
+    // even though the canvas measure said it fitted.
+    var heightFactor = Number(o.heightFactor) || 1;
     var maxLines = Math.max(1, Number(o.maxLines) || 6);
     var minPct = Number(o.minPct) || 0.02;
     var maxPct = Number(o.maxPct) || 0.12;
-    var size = clamp(Number(o.sizePct) || 0.05, minPct, maxPct);
+    // Start at the LARGEST size the region allows and shrink from there. The
+    // engine passes the region's maxSize as maxPct; starting at a fixed 0.05
+    // instead made every headline render at the same size, so a "huge condensed
+    // headline" template looked no bigger than a caption one.
+    var size = clamp(Number(o.sizePct) || Number(o.maxPct) || 0.05, minPct, maxPct);
     var text = String(o.text == null ? '' : o.text);
     var measureFor = o.measureFor || estimateMeasure;
     var best = null;
     for (var i = 0; i < 48; i++) {
       var px = size * W;
       var lines = wrapLines(measureFor(px), text, bw);
-      var totalH = lines.length * px * lineHeight;
+      var totalH = lines.length * px * lineHeight * heightFactor;
       if (lines.length <= maxLines && totalH <= bh) {
         best = { sizePct: size, lines: lines, lineHeight: lineHeight, fits: true, height: totalH / H };
         break;
@@ -133,6 +142,30 @@
     if (!layer) return 0;
     if (layer.tracking != null) return Number(layer.tracking) || 0;
     return face(layer.fontId).tracking || 0;
+  }
+
+  /* Escapes text for safe insertion into HTML. Every dynamic string that reaches
+   * the DOM or an SVG goes through this (or the app's own escXml), so a headline
+   * can never inject markup. */
+  function escHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  /* Renders a layer's text as HTML, wrapping the ONE keyword in the accent
+   * colour when the template asks for a highlight. The text is escaped first, so
+   * the only markup in the result is the span this function adds. */
+  function keywordHtml(layer) {
+    var text = String((layer && layer.displayText) || '');
+    var kw = String((layer && layer.keyword) || '');
+    if (!kw) return escHtml(text);
+    var idx = text.indexOf(kw);
+    if (idx < 0) return escHtml(text);
+    var color = (layer && layer.keywordColor) || 'inherit';
+    return escHtml(text.slice(0, idx)) +
+      '<span class="cc-kw" style="color:' + escHtml(color) + '">' + escHtml(kw) + '</span>' +
+      escHtml(text.slice(idx + kw.length));
   }
 
   /* CSS for one layer, used by the DOM preview. Sizes are in cqw so the card
@@ -160,6 +193,8 @@
     wrapLines: wrapLines,
     autoFit: autoFit,
     trackingFor: trackingFor,
-    layerCss: layerCss
+    layerCss: layerCss,
+    escHtml: escHtml,
+    keywordHtml: keywordHtml
   };
 });

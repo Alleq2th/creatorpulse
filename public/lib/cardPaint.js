@@ -100,6 +100,41 @@
     }
     if (d.type === 'split') {
       apply({ left: pct(d.x, W), top: '0', width: pct(d.width, W), height: '100%', background: d.bg, opacity: '.28' });
+      return;
+    }
+    if (d.type === 'quote') {
+      // An oversized quote mark, drawn as a glyph in the accent.
+      el.textContent = d.text || '\u201C';
+      apply({
+        left: pct(d.x, W), top: pct(d.y, H),
+        width: pct(d.width || W * 0.4, W), height: pct(d.size, W),
+        color: d.bg,
+        font: '900 ' + (d.size / W * 100).toFixed(3) + 'cqw/0.8 Georgia, serif',
+        lineHeight: '0.8',
+        opacity: '.9'
+      });
+      return;
+    }
+    if (d.type === 'hairline') {
+      apply({ left: pct(d.x, W), top: pct(d.y, H), width: pct(d.width, W), height: pct(d.height, H), background: d.bg });
+      return;
+    }
+    if (d.type === 'caption') {
+      apply({ left: '0', top: pct(d.y, H), width: '100%', height: pct(d.height, H), background: d.bg });
+      return;
+    }
+    if (d.type === 'stat') {
+      // A giant stat number as the hero. It is a decoration, so it never wraps.
+      el.textContent = d.text;
+      apply({
+        left: pct(d.x, W), top: pct(d.y, H),
+        width: pct(d.width, W), height: pct(d.height, H),
+        color: d.bg,
+        font: '900 ' + (d.size / W * 100).toFixed(3) + 'cqw/0.9 Inter, sans-serif',
+        letterSpacing: '-.02em',
+        display: 'flex', alignItems: 'center', justifyContent: 'flex-start',
+        whiteSpace: 'nowrap', overflow: 'hidden'
+      });
     }
   }
 
