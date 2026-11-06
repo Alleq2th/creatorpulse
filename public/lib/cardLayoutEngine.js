@@ -335,6 +335,14 @@
         box = shifted;
       }
       var scale = clamp(Number((style.layerScale || {})[L.key]) || 1, 0.5, 1.6);
+      // BUG FIX (text size S/M/L did nothing): the scale only raised the font's
+      // CEILING, but auto-fit then shrank the text right back to the template's
+      // fixed box, so Large looked the same as Medium. A bigger size needs a
+      // bigger box too, so the box grows with the scale (kept inside the safe
+      // zone). A dragged box (override) keeps the exact geometry the user set.
+      if (scale > 1 && !override) {
+        box = clampToSafeZone(Object.assign({}, box, { width: box.width * scale, height: box.height * scale }), platform, template);
+      }
       // The role's own intent scales the template's ceiling: the hook is the
       // largest type, the CTA a touch calmer. The content type then scales it
       // again, so a stat slide makes room for the number and a quote slide gives
