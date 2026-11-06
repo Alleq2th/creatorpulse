@@ -1313,7 +1313,7 @@ function renderCardLiveStage(o, tid, idx, slideIndex, slide, aspectRatio) {
       : esc(shown);
     return `<div class="cp-canvas-block${sel ? " is-selected" : ""}${hasText ? "" : " is-empty"}" data-canvas-key="${key}" data-canvas-block="${name}" tabindex="0" role="slider" aria-label="Drag or resize ${label}" style="left:${pos.x*100}%;top:${pos.y*100}%;width:${pos.width*100}%;height:${pos.height*100}%"><div class="cc-live-text${hasText ? "" : " is-empty"}" data-cp-live="${name}" style="${cpLiveTextStyle(live, name, o, tid)}">${shownHtml}</div><span class="cp-canvas-label">${label}</span><button type="button" class="cp-canvas-resize cp-resize-corner" data-canvas-resize="true" data-canvas-resize-mode="both" aria-label="Resize ${label} width and height"></button><button type="button" class="cp-canvas-resize cp-resize-side" data-canvas-resize="true" data-canvas-resize-mode="horizontal" aria-label="Resize ${label} width"></button><button type="button" class="cp-canvas-resize cp-resize-top" data-canvas-resize="true" data-canvas-resize-mode="vertical" aria-label="Resize ${label} height"></button></div>`;
   };
-  return `<div class="cp-canvas-stage cc-live-stage" data-canvas-stage="${key}" data-tid="${tid}" data-idx="${idx}" data-slide-index="${slideIndex}" style="aspect-ratio:${aspectRatio}"><div class="cc-live-backdrop" aria-hidden="true"></div><div class="cc-live-plate"></div><div class="cc-live-tint" aria-hidden="true"></div><div class="cc-live-dim"></div><div class="cc-live-scrim" aria-hidden="true"></div><div class="cc-live-rule" aria-hidden="true"></div><div class="cc-live-counter" aria-hidden="true"></div><div class="cc-live-status" role="status"></div><div class="cp-canvas-blocks" data-canvas-key="${key}" data-slide-index="${slideIndex}" data-card-key="${tid}-${idx}">${CARD_LAYERS.map(L => box(L.key, L.label, cpCardLayerText(live, L))).join("")}</div></div>`;
+  return `<div class="cp-canvas-stage cc-live-stage" data-canvas-stage="${key}" data-tid="${tid}" data-idx="${idx}" data-slide-index="${slideIndex}" style="aspect-ratio:${aspectRatio}"><div class="cc-live-backdrop" aria-hidden="true"></div><div class="cc-live-plate"></div><div class="cc-live-tint" aria-hidden="true"></div><div class="cc-live-dim"></div><div class="cc-live-scrim" aria-hidden="true"></div><div class="cc-live-rule" aria-hidden="true"></div><div class="cc-live-counter" aria-hidden="true"></div><div class="cc-live-status" role="status"></div><div class="cc-live-skeleton" aria-hidden="true"></div><div class="cp-canvas-blocks" data-canvas-key="${key}" data-slide-index="${slideIndex}" data-card-key="${tid}-${idx}">${CARD_LAYERS.map(L => box(L.key, L.label, cpCardLayerText(live, L))).join("")}</div></div>`;
 }
 
 function renderPlatformMockup(o, tid, idx, curPlat) {
@@ -2147,6 +2147,14 @@ function cpPaintPlate(plateKey) {
     if (el.dataset.cpPlate !== plateKey) return;
     const stage = el.closest(".cc-live-stage");
     if (stage) stage.dataset.loading = String(!!(entry && entry.pending));
+    // Part 6: a skeleton (not a spinner) while the image generates. It has the
+    // card's own shape, so the layout does not jump when the image arrives.
+    const skel = stage && stage.querySelector(".cc-live-skeleton");
+    if (skel) {
+      const pending = !!(entry && entry.pending);
+      skel.hidden = !pending;
+      if (pending && window.CPCardSkeleton) skel.innerHTML = window.CPCardSkeleton.skeletonHTML({ aspect: (stage.style.aspectRatio || "4/5") });
+    }
     el.style.backgroundImage = entry && entry.src ? `url("${entry.src}")` : "";
     const bd = el.parentElement && el.parentElement.querySelector(".cc-live-backdrop");
     if (bd) bd.style.backgroundImage = el.style.backgroundImage;
@@ -2371,6 +2379,14 @@ function cpUpdateLiveStage(tid, idx, slideIndex) {
     block.style.width = `${pos.width * 100}%`;
     block.style.height = `${pos.height * 100}%`;
   });
+  // Part 6: edit-mode guides (dashed outlines + the safe zone). Drawn ONLY while
+  // the stage is in edit mode, so a preview or an exported image never shows a
+  // guide. The markup comes from the one guide module, behind a single flag.
+  let guidesEl = stage.querySelector(".cc-guides");
+  if (stage.classList.contains("is-editing")) {
+    if (!guidesEl) { guidesEl = document.createElement("div"); guidesEl.className = "cc-guides"; stage.appendChild(guidesEl); }
+    guidesEl.innerHTML = window.CPCardGuides ? (window.CPCardGuides.safeZoneHTML(design) + window.CPCardGuides.layerGuidesHTML(design)) : "";
+  } else if (guidesEl) { guidesEl.remove(); }
   cpSyncStylePanel(tid, idx, slideIndex, slide);
   cpScheduleExport(tid, idx, slideIndex);
 }
@@ -3140,6 +3156,7 @@ function cpCommitBlockLayout(block) {
       height: b.height / rect.height
     }
   };
+  cpPushHistory(stage.dataset.tid, Number(stage.dataset.idx), Number(stage.dataset.slideIndex));
   cpScheduleExport(stage.dataset.tid, Number(stage.dataset.idx), Number(stage.dataset.slideIndex));
 }
 
@@ -3242,7 +3259,7 @@ const cardCanvasPointer = (() => {
     if (!txt) return;
     txt.removeAttribute("contenteditable");
     const t = cpTextTarget(txt);
-    if (t) cpSetSlideText(t.tid, t.idx, t.slideIndex, t.field, cpEditedValue(txt));
+    if (t) { cpSetSlideText(t.tid, t.idx, t.slideIndex, t.field, cpEditedValue(txt)); cpPushHistory(t.tid, t.idx, t.slideIndex); }
   });
   document.addEventListener("keydown", (event) => {
     const txt = event.target.closest?.('.cc-live-text[contenteditable="true"]');
@@ -3285,6 +3302,140 @@ window.cpSetLayerStyle = (tid, idx, slideIndex, group, layerKey, value) => {
   slide._style = slide._style || {};
   slide._style[group] = { ...(slide._style[group] || {}), [layerKey]: value };
   cpUpdateLiveStage(tid, idx, slideIndex);
+};
+
+// ── Part 6: the editing experience ──────────────────────────────────────────
+// Undo / redo, per-slide layout swap, nudge, size, apply-to-all with a per-slide
+// override, reset-slide / restore-original, and the edit-mode guides. Every one
+// of these writes into the slide's shared style and repaints through
+// cpUpdateLiveStage, so the preview and the export stay on the ONE render path.
+
+// One history per slide, seeded with the pre-edit state and pushed after each
+// edit, so undo steps back through the user's own changes.
+const cpEditHistories = new Map();
+function cpHistoryKey(tid, idx, slideIndex) { return `${tid}-${idx}-${slideIndex}`; }
+function cpSnapshotSlide(slide) {
+  if (!slide) return {};
+  return {
+    headline: slide.headline, supportingText: slide.supportingText, ctaLine: slide.ctaLine,
+    role: slide.role, _templateId: slide._templateId,
+    _style: slide._style ? JSON.parse(JSON.stringify(slide._style)) : undefined,
+    textLayout: slide.textLayout ? JSON.parse(JSON.stringify(slide.textLayout)) : undefined
+  };
+}
+function cpSeedHistory(tid, idx, slideIndex) {
+  const key = cpHistoryKey(tid, idx, slideIndex);
+  if (cpEditHistories.has(key)) return;
+  const slide = cpCardSlide(tid, idx, slideIndex);
+  if (!slide || !window.CPCardEditHistory) return;
+  cpEditHistories.set(key, window.CPCardEditHistory.create(cpSnapshotSlide(slide)));
+}
+function cpPushHistory(tid, idx, slideIndex) {
+  const slide = cpCardSlide(tid, idx, slideIndex);
+  if (!slide || !window.CPCardEditHistory) return;
+  const key = cpHistoryKey(tid, idx, slideIndex);
+  let h = cpEditHistories.get(key);
+  if (!h) { h = window.CPCardEditHistory.create(cpSnapshotSlide(slide)); cpEditHistories.set(key, h); return; }
+  h.push(cpSnapshotSlide(slide));
+}
+function cpApplySnapshot(slide, snap) {
+  if (!slide || !snap) return;
+  ["headline", "supportingText", "ctaLine", "role"].forEach(k => {
+    if (snap[k] === undefined) delete slide[k]; else slide[k] = snap[k];
+  });
+  if (snap._style === undefined) delete slide._style; else slide._style = JSON.parse(JSON.stringify(snap._style));
+  if (snap.textLayout === undefined) delete slide.textLayout; else slide.textLayout = JSON.parse(JSON.stringify(snap.textLayout));
+  if (snap._templateId === undefined) delete slide._templateId; else slide._templateId = snap._templateId;
+}
+// Seeds the pre-edit state, applies the change, then records the post-edit state.
+function cpRecordEdit(tid, idx, slideIndex, mutate) {
+  const slide = cpCardSlide(tid, idx, slideIndex); if (!slide) return;
+  cpSeedHistory(tid, idx, slideIndex);
+  mutate(slide);
+  cpPushHistory(tid, idx, slideIndex);
+  cpUpdateLiveStage(tid, idx, slideIndex);
+}
+window.cpUndoSlide = (tid, idx, slideIndex) => {
+  const slide = cpCardSlide(tid, idx, slideIndex); if (!slide) return;
+  const h = cpEditHistories.get(cpHistoryKey(tid, idx, slideIndex));
+  const snap = h && h.undo();
+  if (!snap) { toast("Nothing to undo."); return; }
+  cpApplySnapshot(slide, snap);
+  cpUpdateLiveStage(tid, idx, slideIndex);
+};
+window.cpRedoSlide = (tid, idx, slideIndex) => {
+  const slide = cpCardSlide(tid, idx, slideIndex); if (!slide) return;
+  const h = cpEditHistories.get(cpHistoryKey(tid, idx, slideIndex));
+  const snap = h && h.redo();
+  if (!snap) { toast("Nothing to redo."); return; }
+  cpApplySnapshot(slide, snap);
+  cpUpdateLiveStage(tid, idx, slideIndex);
+};
+window.cpCanUndoSlide = (tid, idx, slideIndex) => {
+  const h = cpEditHistories.get(cpHistoryKey(tid, idx, slideIndex));
+  return !!(h && h.canUndo());
+};
+window.cpCanRedoSlide = (tid, idx, slideIndex) => {
+  const h = cpEditHistories.get(cpHistoryKey(tid, idx, slideIndex));
+  return !!(h && h.canRedo());
+};
+
+// Swap THIS slide's layout variant (its role composition), keeping the template.
+window.cpSetSlideVariant = (tid, idx, slideIndex, role) => cpRecordEdit(tid, idx, slideIndex, s => { s.role = role; });
+
+// Nudge the text block to a position inside the safe zone (top/middle/bottom,
+// left/centre), keeping its size. Writes a per-slide box override.
+window.cpNudgeSlide = (tid, idx, slideIndex, v, h) => cpRecordEdit(tid, idx, slideIndex, s => {
+  const o = S.outs[tid]?.[idx];
+  const design = window.CPCardLayout?.resolve({ templateId: s._templateId || s._style?.templateId, platform: cpLayoutPlatform(o), slide: s, index: slideIndex, total: (o?.slides || []).length || 1, style: s._style || {} });
+  if (!design || !window.CPCardEditControls) return;
+  s.textLayout = s.textLayout || {};
+  design.layers.forEach(l => { if (!l.empty) s.textLayout[l.key] = window.CPCardEditControls.nudgeBox(l.box, design.safeZone, v, h); });
+});
+
+// Change the text size for the whole slide (S / M / L).
+window.cpSetSlideSize = (tid, idx, slideIndex, sizeId) => cpRecordEdit(tid, idx, slideIndex, s => {
+  if (!window.CPCardEditControls) return;
+  const scale = window.CPCardEditControls.sizeScale(sizeId);
+  s._style = s._style || {};
+  s._style.layerScale = { headline: scale, supportingText: scale, ctaLine: scale };
+});
+
+// Apply a change (template / accent / treatment) to EVERY slide, but a slide
+// that carries a per-slide override keeps its own value.
+window.cpApplyToAll = (tid, idx, change) => {
+  const o = S.outs[tid]?.[idx]; if (!o || !window.CPCardEditControls) return;
+  const slides = o.type === "carousel" ? (o.slides || []) : [cpCardSlide(tid, idx, 0)].filter(Boolean);
+  slides.forEach((_, si) => cpSeedHistory(tid, idx, si));
+  const n = window.CPCardEditControls.applyToAll(slides, change);
+  slides.forEach((_, si) => { cpPushHistory(tid, idx, si); cpUpdateLiveStage(tid, idx, si); });
+  toast(n > 1 ? `Applied to ${n} slides.` : "Applied.");
+};
+
+// Mark one slide as carrying a per-slide override, so apply-to-all leaves it.
+window.cpToggleSlideOverride = (tid, idx, slideIndex) => cpRecordEdit(tid, idx, slideIndex, s => {
+  if (!window.CPCardEditControls) return;
+  const on = !(s._style && s._style.override);
+  window.CPCardEditControls.setOverride(s, on);
+});
+
+// Reset ONE slide to the template's own look (keeps the chosen template).
+window.cpResetSlide = (tid, idx, slideIndex) => cpRecordEdit(tid, idx, slideIndex, s => { if (window.CPCardEditControls) window.CPCardEditControls.resetSlide(s); });
+
+// Restore the ORIGINAL look: clears everything, including the template.
+window.cpRestoreOriginal = (tid, idx, slideIndex) => cpRecordEdit(tid, idx, slideIndex, s => { if (window.CPCardEditControls) window.CPCardEditControls.restoreOriginal(s); });
+
+// Edit mode: shows the guides (dashed outlines + safe zone). Preview and export
+// never show them, because the guides are only drawn while this flag is on.
+window.cpToggleEditMode = (tid, idx, slideIndex) => {
+  const stage = document.querySelector(`[data-canvas-stage="${tid}-${idx}-${slideIndex}"]`);
+  if (!stage) return;
+  stage.classList.toggle("is-editing");
+  cpUpdateLiveStage(tid, idx, slideIndex);
+};
+window.cpIsEditMode = (tid, idx, slideIndex) => {
+  const stage = document.querySelector(`[data-canvas-stage="${tid}-${idx}-${slideIndex}"]`);
+  return !!(stage && stage.classList.contains("is-editing"));
 };
 // Phone overlay text (name, caption, hashtags, sound) is plain HTML, so it
 // updates the mockup in place. Keeping the editor open while typing.
@@ -3413,11 +3564,28 @@ window.cpOpenCardEditor = (tid, idx, slideIndex) => {
     tid, idx, slideIndex,
     platform: cpLayoutPlatform(o),
     getSlide: () => cpCardSlide(tid, idx, slideIndex),
+    getSlides: () => (o.type === "carousel" ? (o.slides || []) : [cpCardSlide(tid, idx, 0)].filter(Boolean)),
+    getIndex: () => slideIndex,
+    getTotal: () => (o.slides || []).length || 1,
     getPlate: () => {
       const entry = cpPlateCache.get(cpPlateKey(tid, idx, slideIndex));
       return (entry && entry.src) || (slide._style && slide._style.bgImage) || "";
     },
     onChange: () => cpApplyThemeLive(tid, idx, slideIndex),
+    onEdit: () => cpPushHistory(tid, idx, slideIndex),
+    onUndo: () => window.cpUndoSlide(tid, idx, slideIndex),
+    onRedo: () => window.cpRedoSlide(tid, idx, slideIndex),
+    canUndo: () => window.cpCanUndoSlide(tid, idx, slideIndex),
+    canRedo: () => window.cpCanRedoSlide(tid, idx, slideIndex),
+    onVariant: (role) => window.cpSetSlideVariant(tid, idx, slideIndex, role),
+    onNudge: (v, h) => window.cpNudgeSlide(tid, idx, slideIndex, v, h),
+    onSize: (id) => window.cpSetSlideSize(tid, idx, slideIndex, id),
+    onApplyAll: (change) => window.cpApplyToAll(tid, idx, change),
+    onReset: () => window.cpResetSlide(tid, idx, slideIndex),
+    onRestore: () => window.cpRestoreOriginal(tid, idx, slideIndex),
+    onToggleOverride: () => window.cpToggleSlideOverride(tid, idx, slideIndex),
+    onToggleEditMode: () => window.cpToggleEditMode(tid, idx, slideIndex),
+    isEditMode: () => window.cpIsEditMode(tid, idx, slideIndex),
     toast
   });
 };

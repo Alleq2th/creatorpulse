@@ -241,7 +241,7 @@ test('a radial gradient and rgba stops survive parsing (the export used to drop 
 
 test('the editor offers every template, role, treatment and accent', () => {
   const design = resolve('impact', 'instagram', 'hook');
-  const html = editor.buildSheet({
+  const base = {
     design,
     slide: SLIDE,
     style: {},
@@ -253,12 +253,26 @@ test('the editor offers every template, role, treatment and accent', () => {
     treatments: treatments.list(),
     roles: templates.ROLES,
     accents: editor.ACCENTS
-  });
-  for (const t of templates.list('instagram')) assert.ok(html.includes('data-ed-template="' + t.id + '"'), 'tile for ' + t.id);
-  for (const r of templates.ROLES) assert.ok(html.includes('data-ed-role="' + r + '"'), 'chip for ' + r);
-  for (const tr of treatments.list()) assert.ok(html.includes('data-ed-treatment="' + tr.id + '"'), 'chip for ' + tr.id);
-  assert.ok(html.includes('data-ed-accent="#d94f4f"'), 'the current accent is offered');
-  assert.ok(html.includes('cc-ed-preview'), 'a live preview is shown');
+  };
+  // The Style section carries the template picker and the accent swatches.
+  const styleHtml = editor.buildSheet(Object.assign({}, base, { nav: 'style' }));
+  for (const t of templates.list('instagram')) assert.ok(styleHtml.includes('data-ed-template="' + t.id + '"'), 'tile for ' + t.id);
+  assert.ok(styleHtml.includes('data-ed-accent="#d94f4f"'), 'the current accent is offered');
+  // The Layout section carries the role chips and the layout-variant carousel.
+  const layoutHtml = editor.buildSheet(Object.assign({}, base, { nav: 'layout' }));
+  for (const r of templates.ROLES) assert.ok(layoutHtml.includes('data-ed-role="' + r + '"'), 'chip for ' + r);
+  // The Photo section carries the treatment chips.
+  const photoHtml = editor.buildSheet(Object.assign({}, base, { nav: 'photo' }));
+  for (const tr of treatments.list()) assert.ok(photoHtml.includes('data-ed-treatment="' + tr.id + '"'), 'chip for ' + tr.id);
+  assert.ok(layoutHtml.includes('cc-ed-preview'), 'a live preview is shown');
+});
+
+test('the editor has at most five nav items, each an icon plus a short label', () => {
+  assert.ok(editor.NAV.length <= 5, 'at most five nav items');
+  for (const n of editor.NAV) {
+    assert.ok(n.icon && n.icon.length, n.id + ' has an icon');
+    assert.ok(n.label && n.label.length <= 12, n.id + ' has a short label');
+  }
 });
 
 test('the editor preview is drawn from the same layout result as the card', () => {
