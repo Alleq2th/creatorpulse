@@ -1,0 +1,1424 @@
+// ─────────────────────────────────────────────────────────────────────────
+// Carousel card rendering system.
+//
+// This deliberately does NOT call an image-generation model per slide.
+// Diffusion models can't reliably render legible text — that's a structural
+// limitation, not a prompting problem. Instead: the AI generates structured
+// JSON (see AI_SCHEMA_EXAMPLE below), and this file is a deterministic
+// template renderer — real SVG text nodes composited with sharp — so output
+// is visually consistent at any volume (1 card or 10,000).
+//
+// NOTE ON LOGOS: the spec calls for real league/brand logos (F1, NBA, etc).
+// This file does NOT embed those — shipping trademarked league marks inside
+// a product that mass-generates commercial social content is a real
+// liability regardless of how the logo is sourced. Instead there's a
+// pluggable CATEGORY_ICON system using original geometric glyphs. If you
+// have actual rights to specific league marks, drop the asset URLs into
+// CATEGORY_ICON_OVERRIDES and they'll be used as-is.
+// ─────────────────────────────────────────────────────────────────────────
+const sharp = require("sharp");
+const { configureFontconfig } = require("../scripts/setupFonts");
+try { configureFontconfig(); } catch (e) { console.warn("[fonts] bundled font config skipped:", e.message); }
+const fetch = require("node-fetch");
+const fs = require("fs");
+const path = require("path");
+const designSystem = require("../public/lib/designSystem.js");
+const coverCache = require("./coverCache.js");
+
+const FONT_SERIF = "'Anton', 'Archivo Black', Impact, sans-serif"; // hook/body/outro headlines — bold, upright, blocky (not the previous italic serif)
+const FONT_SANS = "Inter, sans-serif";                    // everything else — weight via font-weight
+
+// ── Formats ────────────────────────────────────────────────────────────
+const FORMATS = {
+  instagram: {
+    w: 1080, h: 1350,
+    margin: 80,
+    headerY: 96, dashY: 132, dashW: owidth => 0,
+    hookHeadlineY: 0.38, hookHeadlineSize: 88, hookHeadlineLine: 96, hookHeadlineChars: 15, hookMaxLines: 4,
+    hookSupportGap: 56, hookSupportSize: 36, hookSupportLine: 48, hookSupportChars: 46, hookSupportMaxLines: 3,
+    statY: 480, statSize: 220, statLabelGap: 46, statLabelSize: 28,
+    bodyHeadlineSize: 72, bodyHeadlineLine: 82, bodyHeadlineChars: 22, bodyHeadlineMaxLines: 3,
+    sectionLabelSize: 26, bodyTextSize: 36, bodyTextLine: 50, bodyTextChars: 42, bodyTextMaxLines: 6,
+    outroHeadlineSize: 80, outroHeadlineLine: 90, outroHeadlineChars: 16, outroMaxLines: 4,
+  },
+  tiktok: {
+    w: 1080, h: 1920,
+    margin: 80,
+    headerY: 104, dashY: 140,
+    hookHeadlineY: 0.36, hookHeadlineSize: 94, hookHeadlineLine: 102, hookHeadlineChars: 14, hookMaxLines: 4,
+    hookSupportGap: 60, hookSupportSize: 38, hookSupportLine: 50, hookSupportChars: 44, hookSupportMaxLines: 3,
+    statY: 630, statSize: 240, statLabelGap: 50, statLabelSize: 30,
+    bodyHeadlineSize: 76, bodyHeadlineLine: 86, bodyHeadlineChars: 20, bodyHeadlineMaxLines: 3,
+    sectionLabelSize: 28, bodyTextSize: 38, bodyTextLine: 52, bodyTextChars: 40, bodyTextMaxLines: 8,
+    outroHeadlineSize: 86, outroHeadlineLine: 96, outroHeadlineChars: 15, outroMaxLines: 4,
+  }
+};
+function resolveFormat(format, densityKey) {
+  const f = String(format || "instagram").toLowerCase();
+  const base = f.includes("youtube_thumbnail") || f.includes("thumbnail")
+    ? { ...FORMATS.instagram, w: 1280, h: 720, margin: 72, hookHeadlineSize: 88, hookHeadlineLine: 96, hookHeadlineChars: 22, hookMaxLines: 3, hookHeadlineY: 0.62, hookSupportGap: 36, hookSupportSize: 30, hookSupportLine: 38, hookSupportChars: 50, hookSupportMaxLines: 2 }
+    : (f.includes("tiktok") || f.includes("reel") || f.includes("story") || f.includes("9:16")) ? FORMATS.tiktok : FORMATS.instagram;
+  const dens = resolveDensity(densityKey);
+  const scale = dens.fontScale;
+  const charsMod = dens.charsMod;
+  const linesMod = dens.maxLinesMod;
+
+  return {
+    ...base,
+    densityScale: scale,
+    hookHeadlineSize: Math.round(base.hookHeadlineSize * scale),
+    hookHeadlineLine: Math.round(base.hookHeadlineLine * scale),
+    hookHeadlineChars: Math.max(10, base.hookHeadlineChars + charsMod),
+    hookMaxLines: Math.max(2, base.hookMaxLines + linesMod),
+
+    bodyHeadlineSize: Math.round(base.bodyHeadlineSize * scale),
+    bodyHeadlineLine: Math.round(base.bodyHeadlineLine * scale),
+    bodyHeadlineChars: Math.max(14, base.bodyHeadlineChars + charsMod),
+    bodyHeadlineMaxLines: Math.max(2, base.bodyHeadlineMaxLines + linesMod),
+
+    bodyTextSize: Math.round(base.bodyTextSize * scale),
+    bodyTextLine: Math.round(base.bodyTextLine * scale),
+    bodyTextChars: Math.max(24, base.bodyTextChars + charsMod),
+    bodyTextMaxLines: Math.max(3, base.bodyTextMaxLines + linesMod),
+
+    statSize: Math.round(base.statSize * dens.statScale),
+    outroHeadlineSize: Math.round(base.outroHeadlineSize * scale),
+    outroHeadlineLine: Math.round(base.outroHeadlineLine * scale),
+    outroHeadlineChars: Math.max(12, base.outroHeadlineChars + charsMod),
+    outroMaxLines: Math.max(2, base.outroMaxLines + linesMod)
+  };
+}
+
+// ── Palettes ───────────────────────────────────────────────────────────
+// Exactly the six requested. Dark, editorial, one accent each.
+const PALETTE = {
+  noir_orange:   { name: "Noir Orange",   backgroundStart: "#08090C", backgroundEnd: "#21140E", accent: "#FF7A1A", primaryText: "#F5F3EF", secondaryText: "#B8B6B2", muted: "#737373" },
+  electric_blue: { name: "Electric Blue", backgroundStart: "#07090D", backgroundEnd: "#0E1E33", accent: "#3DA9FC", primaryText: "#F3F6FA", secondaryText: "#AEB9C4", muted: "#6E7A85" },
+  emerald:       { name: "Emerald",       backgroundStart: "#07100C", backgroundEnd: "#0E2A1E", accent: "#2ECC8F", primaryText: "#F1F7F3", secondaryText: "#AEC2B7", muted: "#6D7E75" },
+  violet:        { name: "Violet",        backgroundStart: "#0A0812", backgroundEnd: "#221130", accent: "#A855F7", primaryText: "#F5F2FA", secondaryText: "#BFB3CC", muted: "#79708A" },
+  crimson:       { name: "Crimson",       backgroundStart: "#0D0708", backgroundEnd: "#2B0F14", accent: "#E5484D", primaryText: "#F7EFEF", secondaryText: "#CBAFAF", muted: "#8A6E6E" },
+  gold:          { name: "Gold",          backgroundStart: "#0B0A06", backgroundEnd: "#241C0B", accent: "#E8B93D", primaryText: "#F7F4EB", secondaryText: "#C7BEA3", muted: "#84795A" },
+  hot_pink:      { name: "Hot Pink",      backgroundStart: "#0D080B", backgroundEnd: "#2B0F20", accent: "#F7368A", primaryText: "#FAF0F5", secondaryText: "#CCADBE", muted: "#877080" },
+  sky_blue:      { name: "Sky Blue",      backgroundStart: "#070B0D", backgroundEnd: "#0D2530", accent: "#38BDF8", primaryText: "#F1F8FB", secondaryText: "#A9C4CE", muted: "#6C848D" },
+  deep_teal:     { name: "Deep Teal",     backgroundStart: "#06100E", backgroundEnd: "#0B2C28", accent: "#14B8A6", primaryText: "#EFFAF8", secondaryText: "#A6C7C1", muted: "#688683" },
+  royal_indigo:  { name: "Royal Indigo",  backgroundStart: "#08080F", backgroundEnd: "#161235", accent: "#6366F1", primaryText: "#F2F2FA", secondaryText: "#B7B7D6", muted: "#75758F" },
+  sunset_coral:  { name: "Sunset Coral",  backgroundStart: "#0D0907", backgroundEnd: "#2E160B", accent: "#FB7A4C", primaryText: "#FAF3EF", secondaryText: "#D0B4A5", muted: "#8C7166" },
+  white_platinum:{ name: "White Platinum",backgroundStart: "#0A0A0B", backgroundEnd: "#1D1D20", accent: "#E5E5EA", primaryText: "#FAFAFA", secondaryText: "#B8B8C0", muted: "#77777E" }
+
+};
+const DEFAULT_PALETTE = "noir_orange";
+// Old palette names from the previous version, mapped forward so existing
+// saved content / in-flight requests don't break.
+const PALETTE_ALIASES = { noir: "noir_orange", ember: "crimson", sunset: "gold", ocean: "electric_blue", forest: "emerald", royal: "violet" };
+
+// ── Themes, Typography, and Density Presets ─────────────────────────────
+const THEMES = {
+  modern_dark: {
+    id: "modern_dark",
+    name: "Modern Dark",
+    backgroundStart: "#08090C",
+    backgroundEnd: "#1A1512",
+    primaryText: "#F5F3EF",
+    secondaryText: "#B8B6B2",
+    muted: "#737373",
+    isLight: false
+  },
+  clean_light: {
+    id: "clean_light",
+    name: "Clean Light",
+    backgroundStart: "#F9F9FB",
+    backgroundEnd: "#ECEEF2",
+    primaryText: "#111216",
+    secondaryText: "#464953",
+    muted: "#8A8D98",
+    isLight: true
+  },
+  cyber_neon: {
+    id: "cyber_neon",
+    name: "Cyber Neon",
+    backgroundStart: "#05070B",
+    backgroundEnd: "#0B1424",
+    primaryText: "#FFFFFF",
+    secondaryText: "#6EE7B7",
+    muted: "#334155",
+    isLight: false,
+    defaultAccent: "#00FF9D"
+  },
+  editorial_warm: {
+    id: "editorial_warm",
+    name: "Editorial Warm",
+    backgroundStart: "#15110E",
+    backgroundEnd: "#2A1F18",
+    primaryText: "#FDFBF7",
+    secondaryText: "#D1BEAF",
+    muted: "#7C6C5E",
+    isLight: false,
+    defaultAccent: "#E59866"
+  }
+};
+
+const TYPOGRAPHIES = {
+  impact: {
+    id: "impact",
+    name: "Impact Bold",
+    headline: "'Anton', 'Archivo Black', Impact, sans-serif",
+    body: "Inter, sans-serif"
+  },
+  modern_sans: {
+    id: "modern_sans",
+    name: "Modern Sans",
+    headline: "'Bricolage Grotesque', 'Space Grotesk', Inter, sans-serif",
+    body: "Inter, sans-serif"
+  },
+  editorial_serif: {
+    id: "editorial_serif",
+    name: "Editorial Serif",
+    headline: "'Playfair Display', 'DM Serif Display', Georgia, serif",
+    body: "'PT Serif', Georgia, serif"
+  },
+  code_mono: {
+    id: "code_mono",
+    name: "Modern Mono",
+    headline: "'IBM Plex Mono', 'Space Mono', monospace",
+    body: "'IBM Plex Mono', monospace"
+  },
+  condensed_sans: {
+    id: "condensed_sans",
+    name: "Condensed Display",
+    headline: "'Arial Narrow', 'Roboto Condensed', Impact, sans-serif",
+    body: "Inter, Arial, sans-serif"
+  },
+  classic_serif: {
+    id: "classic_serif",
+    name: "Classic Editorial",
+    headline: "Georgia, 'Times New Roman', serif",
+    body: "Georgia, 'Times New Roman', serif"
+  }
+};
+
+const DENSITIES = {
+  punchy: {
+    id: "punchy",
+    name: "Punchy",
+    fontScale: 1.15,
+    maxLinesMod: -1,
+    charsMod: -4,
+    statScale: 1.2
+  },
+  balanced: {
+    id: "balanced",
+    name: "Balanced",
+    fontScale: 1.0,
+    maxLinesMod: 0,
+    charsMod: 0,
+    statScale: 1.0
+  },
+  detailed: {
+    id: "detailed",
+    name: "Detailed",
+    fontScale: 0.90,
+    maxLinesMod: 2,
+    charsMod: 8,
+    statScale: 0.9
+  }
+};
+
+function resolveTypography(key) {
+  return TYPOGRAPHIES[key] || TYPOGRAPHIES.impact;
+}
+
+function resolveDensity(key) {
+  return DENSITIES[key] || DENSITIES.balanced;
+}
+
+// A user-chosen text colour replaces the palette's text colours. Anything that
+// is not a 6-digit hex colour is ignored, so bad input can never break a render.
+function withTextColor(p, color) {
+  if (!color || !/^#[0-9a-f]{6}$/i.test(String(color))) return p;
+  return { ...p, primaryText: color, secondaryText: color };
+}
+
+function resolvePalette(key, themeKey) {
+  const k = PALETTE_ALIASES[key] || key;
+  const p = PALETTE[k] || PALETTE[DEFAULT_PALETTE];
+  // Legacy theme keys ("gradient", "bold_accent") are not real themes, so they
+  // used to fall through to modern_dark and paint every card identically.
+  // Normalize ONCE and use the normalized key for the branch tests below too —
+  // testing the raw key meant "bold_accent" looked up the cyber_neon theme but
+  // then failed the `themeKey === "cyber_neon"` branch and returned the plain
+  // palette, so the theme was still silently ignored.
+  const themeNorm = designSystem.normalizeTheme(themeKey);
+  const t = THEMES[themeNorm] || THEMES.modern_dark;
+
+  if (t.isLight) {
+    return {
+      ...p,
+      name: `${t.name} · ${p.name}`,
+      backgroundStart: t.backgroundStart,
+      backgroundEnd: t.backgroundEnd,
+      primaryText: t.primaryText,
+      secondaryText: t.secondaryText,
+      muted: t.muted,
+      isLight: true,
+      accent: p.accent
+    };
+  }
+
+  if (themeNorm === "cyber_neon") {
+    return {
+      ...p,
+      name: `${t.name} · ${p.name}`,
+      backgroundStart: t.backgroundStart,
+      backgroundEnd: t.backgroundEnd,
+      primaryText: t.primaryText,
+      secondaryText: p.secondaryText || t.secondaryText,
+      muted: t.muted,
+      accent: p.accent || t.defaultAccent
+    };
+  }
+
+  if (themeNorm === "editorial_warm") {
+    return {
+      ...p,
+      name: `${t.name} · ${p.name}`,
+      backgroundStart: t.backgroundStart,
+      backgroundEnd: t.backgroundEnd,
+      primaryText: t.primaryText,
+      secondaryText: t.secondaryText,
+      muted: t.muted,
+      accent: p.accent || t.defaultAccent
+    };
+  }
+
+  return p;
+}
+
+// ── Category icons (original glyphs — see note at top of file) ──────────
+// Each is a small self-contained SVG path group, drawn in the accent color,
+// sized to sit inside a ~40x40 box. Falls back to a two-letter monogram for
+// any category not listed here.
+const CATEGORY_ICON_OVERRIDES = {}; // { slug: '<svg .../>' } — drop licensed assets here if you have rights to them
+const CATEGORY_ICON = {
+  football:   `<circle cx="20" cy="20" r="15" fill="none" stroke="currentColor" stroke-width="2.5"/><path d="M20 10 L26 15 L24 22 L16 22 L14 15 Z" fill="currentColor"/>`,
+  basketball: `<circle cx="20" cy="20" r="15" fill="none" stroke="currentColor" stroke-width="2.5"/><path d="M5 20 H35 M20 5 V35 M9 9 Q20 20 9 31 M31 9 Q20 20 31 31" stroke="currentColor" stroke-width="2" fill="none"/>`,
+  formula_1:  `<path d="M6 26 L16 26 L20 14 L26 14 L22 26 L34 26" stroke="currentColor" stroke-width="4" fill="none" stroke-linecap="square"/>`,
+  fitness:    `<rect x="4" y="16" width="6" height="8" rx="1.5" fill="currentColor"/><rect x="30" y="16" width="6" height="8" rx="1.5" fill="currentColor"/><rect x="10" y="18" width="20" height="4" fill="currentColor"/>`,
+  beauty:     `<path d="M20 6 C24 12 30 14 30 21 C30 27 25.5 32 20 32 C14.5 32 10 27 10 21 C10 14 16 12 20 6 Z" fill="none" stroke="currentColor" stroke-width="2.5"/>`,
+  tech:       `<rect x="8" y="8" width="24" height="24" rx="3" fill="none" stroke="currentColor" stroke-width="2.5"/><rect x="16" y="16" width="8" height="8" fill="currentColor"/><path d="M20 4 V8 M20 32 V36 M4 20 H8 M32 20 H36" stroke="currentColor" stroke-width="2"/>`,
+  finance:    `<path d="M6 30 L15 18 L22 24 L34 10" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M26 10 H34 V18" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`,
+  gaming:     `<rect x="4" y="14" width="32" height="16" rx="8" fill="none" stroke="currentColor" stroke-width="2.5"/><path d="M12 18 V26 M8 22 H16" stroke="currentColor" stroke-width="2.5"/><circle cx="27" cy="19" r="2" fill="currentColor"/><circle cx="31" cy="23" r="2" fill="currentColor"/>`,
+  business:   `<rect x="6" y="14" width="28" height="18" rx="2" fill="none" stroke="currentColor" stroke-width="2.5"/><path d="M14 14 V10 Q14 8 16 8 H24 Q26 8 26 10 V14" stroke="currentColor" stroke-width="2.5" fill="none"/>`,
+  entertainment: `<path d="M6 12 L34 12 L30 20 L34 28 L6 28 L10 20 Z" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linejoin="round"/>`,
+  default:    `<circle cx="20" cy="20" r="15" fill="none" stroke="currentColor" stroke-width="2.5"/><circle cx="20" cy="20" r="4" fill="currentColor"/>`
+};
+function categoryIconSVG(slug) {
+  if (CATEGORY_ICON_OVERRIDES[slug]) return CATEGORY_ICON_OVERRIDES[slug];
+  return CATEGORY_ICON[slug] || CATEGORY_ICON.default;
+}
+
+// ── Text helpers ──────────────────────────────────────────────────────
+function escXml(s) {
+  return String(s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+function wrapWords(text, maxCharsPerLine) {
+  const words = String(text || "").split(/\s+/).filter(Boolean);
+  const lines = [];
+  let cur = "";
+  for (const w of words) {
+    const trial = cur ? cur + " " + w : w;
+    if (trial.length > maxCharsPerLine && cur) { lines.push(cur); cur = w; }
+    else cur = trial;
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
+
+// Layout protection: try wrapping at the base size; if it needs more lines
+// than allowed, step the font size down (which effectively allows more
+// characters per line) up to 2 steps before truncating the last line with
+// an ellipsis. Never allows text to overflow past maxLines.
+function fitMultilineText(text, baseSize, baseChars, maxLines) {
+  const steps = [1, 0.88, 0.78];
+  for (const step of steps) {
+    const size = Math.round(baseSize * step);
+    const chars = Math.round(baseChars / step);
+    const lines = wrapWords(text, chars);
+    if (lines.length <= maxLines) return { lines, size };
+    if (step === steps[steps.length - 1]) {
+      const clipped = lines.slice(0, maxLines);
+      const last = clipped[maxLines - 1];
+      clipped[maxLines - 1] = last.length > chars - 1 ? last.slice(0, chars - 1).trimEnd() + "…" : last + "…";
+      return { lines: clipped, size };
+    }
+  }
+}
+
+// Same idea as fitMultilineText but for short single-size supporting text
+// (teases, CTAs) — was previously a naked wrapWords(...).slice(0,2), which
+// silently dropped any words past line 2 with no ellipsis. That produced
+// sentences that just stopped mid-thought with no indication of truncation.
+function fitSupportText(text, chars, maxLines) {
+  const lines = wrapWords(text, chars);
+  if (lines.length <= maxLines) return lines;
+  const clipped = lines.slice(0, maxLines);
+  const last = clipped[maxLines - 1];
+  clipped[maxLines - 1] = last.length > chars - 1 ? last.slice(0, chars - 1).trimEnd() + "…" : last + "…";
+  return clipped;
+}
+
+function tspans(lines, x, startY, lineHeight) {
+  return lines.map((l, i) => `<tspan x="${x}" y="${startY + i * lineHeight}">${escXml(l)}</tspan>`).join("");
+}
+
+// Multi-color hook/outro headline: if `emphasisLine` (0-based index) is
+// given, that wrapped line renders in the accent color; every other line
+// renders in primaryText. This is what produces the "Verstappen's / Horror
+// Crash / Shocks Home Fans" three-tone treatment.
+function tspansEmphasis(lines, x, startY, lineHeight, emphasisLine, accent, normal) {
+  return lines.map((l, i) => `<tspan x="${x}" y="${startY + i * lineHeight}" fill="${i === emphasisLine ? accent : normal}">${escXml(l)}</tspan>`).join("");
+}
+
+// One keyword highlighted in the accent, inside an otherwise normal line. The
+// text is escaped first, so the only markup in the result is the tspan added
+// here. Used by the templates that highlight a keyword (Headline Stack, Neon).
+function tspansKeyword(lines, x, startY, lineHeight, keyword, accent, normal) {
+  const kw = String(keyword || "");
+  return lines.map((l, i) => {
+    const y = startY + i * lineHeight;
+    const idx = kw ? l.indexOf(kw) : -1;
+    if (idx < 0) return `<tspan x="${x}" y="${y}" fill="${normal}">${escXml(l)}</tspan>`;
+    const before = l.slice(0, idx), after = l.slice(idx + kw.length);
+    return `<tspan x="${x}" y="${y}" fill="${normal}">${escXml(before)}<tspan fill="${accent}">${escXml(kw)}</tspan>${escXml(after)}</tspan>`;
+  }).join("");
+}
+
+function fitStatFontSize(text, maxWidth, baseSize) {
+  const estCharWidth = 0.66; // Inter Black digits
+  const estWidth = String(text).length * baseSize * estCharWidth;
+  if (estWidth <= maxWidth) return baseSize;
+  return Math.floor(baseSize * (maxWidth / estWidth));
+}
+
+function gradientDefs(p, w, h) {
+  return `<linearGradient id="bgGrad" x1="0" y1="0" x2="${w}" y2="${h}" gradientUnits="userSpaceOnUse">
+    <stop offset="0%" stop-color="${p.backgroundStart}"/>
+    <stop offset="100%" stop-color="${p.backgroundEnd}"/>
+  </linearGradient>`;
+}
+
+// Renders a template's own background gradient as SVG defs.
+//
+// The template catalogue describes backgrounds as CSS gradient strings, and
+// several templates (dark_gradient, neon_noir) use radial-gradient. The canvas
+// exporter only understood linear-gradient, so those templates silently lost
+// their signature glow on export while the browser preview showed it — the
+// preview and the exported image disagreed. designSystem.parseGradient turns
+// the CSS into a structured descriptor both renderers can execute.
+function templateGradientDefs(design, w, h) {
+  const g = design && design.background;
+  if (!g || !g.stops || !g.stops.length) return null;
+  const stops = g.stops.map(s =>
+    `<stop offset="${Math.round(s.offset * 100)}%" stop-color="${s.color}"/>`
+  ).join("");
+  if (g.kind === "radial") {
+    return `<radialGradient id="tplGrad" cx="50%" cy="30%" r="72%">${stops}</radialGradient>`;
+  }
+  const rad = (Number(g.angle) || 180) * Math.PI / 180;
+  const x1 = 0.5 - Math.sin(rad) / 2, y1 = 0.5 + Math.cos(rad) / 2;
+  const x2 = 0.5 + Math.sin(rad) / 2, y2 = 0.5 - Math.cos(rad) / 2;
+  return `<linearGradient id="tplGrad" x1="${x1.toFixed(3)}" y1="${y1.toFixed(3)}" x2="${x2.toFixed(3)}" y2="${y2.toFixed(3)}">${stops}</linearGradient>`;
+}
+
+// The template's own decoration, drawn as SVG. Each template declares a
+// decoration type in the catalogue (badge / corner / rule / frame / split /
+// orb / stripes) and this is what actually draws it — previously the server
+// ignored the field entirely, which is a large part of why every template
+// came out looking like the same card.
+function templateDecoration(design, p, f) {
+  const type = (design && design.decoration && design.decoration.type) || "none";
+  const m = f.margin;
+  switch (type) {
+    case "rule":
+      return `<rect x="${m}" y="${Math.round(f.h * 0.135)}" width="${Math.round(f.w * 0.16)}" height="6" rx="3" fill="${p.accent}"/>`;
+    case "frame":
+      return `<rect x="${m * 0.6}" y="${m * 0.6}" width="${f.w - m * 1.2}" height="${f.h - m * 1.2}" rx="18" fill="none" stroke="${p.accent}" stroke-opacity="0.22" stroke-width="2"/>`;
+    case "corner":
+      return `<path d="M ${f.w - m - 90} ${m} L ${f.w - m} ${m} L ${f.w - m} ${m + 90}" fill="none" stroke="${p.accent}" stroke-width="5" stroke-linecap="round"/>`;
+    case "badge": {
+      // A tag pinned to the TOP-LEFT (Breaking Alert's "BREAKING").
+      const label = String((design.decoration && design.decoration.text) || "").toUpperCase();
+      const bw = Math.max(120, 26 + label.length * 15);
+      return `<rect x="${m}" y="${m - 6}" width="${bw}" height="44" rx="22" fill="${p.accent}" fill-opacity="0.16" stroke="${p.accent}" stroke-opacity="0.6" stroke-width="2"/><text x="${m + bw / 2}" y="${m + 24}" font-family="${FONT_SANS}" font-size="22" font-weight="800" letter-spacing="1.5" fill="${p.accent}" text-anchor="middle">${escXml(label)}</text>`;
+    }
+    case "split":
+      return `<rect x="${Math.round(f.w * 0.5)}" y="0" width="2" height="${f.h}" fill="${p.accent}" fill-opacity="0.28"/>`;
+    case "quote":
+      // An oversized quote mark in the accent (Quote Card).
+      return `<text x="${m}" y="${Math.round(f.h * 0.30)}" font-family="${FONT_SERIF}" font-size="${Math.round(f.w * 0.30)}" font-weight="900" fill="${p.accent}" fill-opacity="0.9">\u201C</text>`;
+    case "hairline":
+      // A thin hairline rule (Editorial Clean) — a rule, not a bar.
+      return `<rect x="${m}" y="${Math.round(f.h * 0.10)}" width="${Math.round(f.w * 0.10)}" height="3" fill="${p.accent}"/>`;
+    case "caption":
+      // A single caption bar pinned to the bottom (Minimal Caption).
+      return `<rect x="0" y="${Math.round(f.h * 0.80)}" width="${f.w}" height="${Math.round(f.h * 0.20)}" fill="#161616" fill-opacity="0.72"/>`;
+    case "stat": {
+      // A giant stat number as the hero (Data & Stat Split). Hidden when empty.
+      const v = String((design.decoration && design.decoration.value) || "").trim();
+      if (!v) return "";
+      return `<text x="${m}" y="${Math.round(f.h * 0.45)}" font-family="${FONT_SANS}" font-size="${Math.round(f.w * 0.20)}" font-weight="900" fill="${p.accent}" letter-spacing="-2">${escXml(v)}</text>`;
+    }
+    case "orb":
+      return `<defs><radialGradient id="tplOrb" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="${p.accent}" stop-opacity="0.30"/><stop offset="100%" stop-color="${p.accent}" stop-opacity="0"/></radialGradient></defs><circle cx="${Math.round(f.w * 0.78)}" cy="${Math.round(f.h * 0.2)}" r="${Math.round(f.w * 0.34)}" fill="url(#tplOrb)"/>`;
+    case "stripes":
+      return Array.from({ length: 7 }).map((_, i) =>
+        `<rect x="${Math.round(f.w * 0.06) + i * 26}" y="${Math.round(f.h * 0.86)}" width="10" height="${40 + (i % 3) * 26}" rx="5" fill="${p.accent}" fill-opacity="${(0.5 - i * 0.05).toFixed(2)}"/>`
+      ).join("");
+    default:
+      return "";
+  }
+}
+
+// The template's background when there is no photo: its own gradient plus its
+// own decoration, instead of the generic two-stop gradient every card used to
+// get regardless of which template the user picked.
+function templateBackgroundLayer(design, p, f, slideType) {
+  const defs = templateGradientDefs(design, f.w, f.h);
+  if (!defs) return backgroundLayer(p, f, null, slideType);
+  return `<defs>${defs}</defs><rect width="${f.w}" height="${f.h}" fill="url(#tplGrad)"/>${templateDecoration(design, p, f)}`;
+}
+
+// Legibility scrim for photo backgrounds. `strength` (0-1) scales how dark
+// it gets — driven by the photo's measured brightness so a bright photo
+// gets darkened more than an already-dark one.
+function scrimDefs(w, h, strength) {
+  const top = 0.25 + strength * 0.25;
+  const bot = 0.65 + strength * 0.3;
+  return `<linearGradient id="scrim" x1="0" y1="0" x2="0" y2="${h}" gradientUnits="userSpaceOnUse">
+    <stop offset="0%" stop-color="#000000" stop-opacity="${top.toFixed(2)}"/>
+    <stop offset="100%" stop-color="#000000" stop-opacity="${Math.min(bot,0.92).toFixed(2)}"/>
+  </linearGradient>`;
+}
+
+// Decorative texture for slides using the flat gradient (no photo) — a large
+// soft accent-color glow plus a few thin diagonal lines. This is what was
+// missing on body/outro slides: they had zero visual interest besides flat
+// color, which is why short stories read as "empty" no matter how centered
+// the text was. Seeded by slide type so hook/body/outro don't look identical.
+function decorativeTexture(p, f, seed) {
+  const cx = seed === "outro" ? f.w * 0.82 : f.w * 0.15;
+  const cy = seed === "outro" ? f.h * 0.12 : f.h * 0.88;
+  const lines = Array.from({length: 5}).map((_, i) => {
+    const off = i * 90;
+    return `<line x1="${-200+off}" y1="${f.h}" x2="${200+off}" y2="0" stroke="${p.accent}" stroke-width="2" opacity="0.05"/>`;
+  }).join("");
+  const border = `<rect x="28" y="28" width="${f.w - 56}" height="${f.h - 56}" rx="20" fill="none" stroke="${p.accent}" stroke-width="1.5" opacity="0.14"/>`;
+  return `
+  <defs>
+    <radialGradient id="glow" cx="${cx}" cy="${cy}" r="${f.w*0.65}" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="${p.accent}" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="${p.accent}" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="${f.w}" height="${f.h}" fill="url(#glow)"/>
+  ${border}
+  ${lines}`;
+}
+
+function backgroundLayer(p, f, scrimStrength, slideType, design) {
+  if (scrimStrength != null) return `<defs>${scrimDefs(f.w, f.h, scrimStrength)}</defs><rect width="${f.w}" height="${f.h}" fill="url(#scrim)"/>`;
+  if (design) return templateBackgroundLayer(design, p, f, slideType);
+  return `<defs>${gradientDefs(p, f.w, f.h)}</defs><rect width="${f.w}" height="${f.h}" fill="url(#bgGrad)"/>${decorativeTexture(p, f, slideType)}`;
+}
+
+// Polished no-source-image treatment: intentional editorial canvas with a
+// clearly labeled source-photo fallback, instead of a blank/dark placeholder.
+function photoMissingLayer(p, f, typo) {
+  const font = (typo && typo.body) ? typo.body : FONT_SANS;
+  const labelY = Math.round(f.h * 0.62);
+  const cx = f.w - f.margin - 82;
+  const cy = labelY - 6;
+  return `<defs>
+    ${gradientDefs(p, f.w, f.h)}
+    <radialGradient id="fallbackGlow" cx="${cx}" cy="${cy}" r="${Math.max(f.w, f.h) * 0.58}" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="${p.accent}" stop-opacity="0.23"/><stop offset="100%" stop-color="${p.accent}" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="fallbackGrid" width="64" height="64" patternUnits="userSpaceOnUse">
+      <path d="M 64 0 L 0 0 0 64" fill="none" stroke="${p.accent}" stroke-width="1" stroke-opacity="0.055"/>
+    </pattern>
+  </defs>
+  <rect width="${f.w}" height="${f.h}" fill="url(#bgGrad)"/>
+  <rect width="${f.w}" height="${f.h}" fill="url(#fallbackGlow)"/>
+  <rect width="${f.w}" height="${f.h}" fill="url(#fallbackGrid)"/>
+  <rect x="${f.margin}" y="${f.margin}" width="${f.w-2*f.margin}" height="${f.h-2*f.margin}" rx="26" fill="none" stroke="${p.accent}" stroke-opacity="0.18" stroke-width="2"/>
+  <g transform="translate(${cx},${cy-32})" fill="none" stroke="${p.accent}" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" opacity="0.9">
+    <rect x="-32" y="-24" width="64" height="48" rx="8"/><circle cx="-12" cy="-8" r="5"/><path d="m-28 16 17-16 11 10 8-7 20 17"/>
+  </g>
+  <text x="${cx}" y="${labelY+45}" text-anchor="middle" font-family="${font}" font-size="22" font-weight="700" letter-spacing="2" fill="${p.secondaryText}">SOURCE PHOTO UNAVAILABLE</text>`;
+}
+
+// Compose a photo as a deliberate editorial feature: portrait-first crop,
+// rounded frame, subtle accent border and gradient treatment on the full
+// canvas. This keeps the article photo visible while leaving designed space
+// for the headline and supporting copy.
+async function buildEditorialPhotoCover(source, p, f, typo, type) {
+  if (!source) return null;
+  try {
+    const tall = f.h > 1500;
+    const photoW = f.w - 2 * f.margin;
+    const photoH = Math.round(f.h * (tall ? 0.43 : 0.39));
+    const photoTop = Math.round(f.h * (tall ? 0.29 : 0.27));
+    const radius = Math.round(f.w * 0.022);
+    let photo = await sharp(source.buffer)
+      .resize(photoW, photoH, { fit: "cover", position: sharp.strategy.attention, withoutEnlargement: false })
+      .modulate({ saturation: 1.04 })
+      .jpeg({ quality: 92, mozjpeg: true })
+      .toBuffer();
+    const mask = Buffer.from(`<svg width="${photoW}" height="${photoH}" xmlns="http://www.w3.org/2000/svg"><rect width="${photoW}" height="${photoH}" rx="${radius}" fill="#fff"/></svg>`);
+    photo = await sharp(photo).composite([{ input: mask, blend: "dest-in" }]).png().toBuffer();
+    const baseSvg = `<svg width="${f.w}" height="${f.h}" xmlns="http://www.w3.org/2000/svg">${photoMissingLayer(p, f, typo).replace(/SOURCE PHOTO UNAVAILABLE/g, "")}</svg>`;
+    const accent = Buffer.from(`<svg width="${f.w}" height="${f.h}" xmlns="http://www.w3.org/2000/svg"><rect x="${f.margin}" y="${photoTop}" width="${photoW}" height="${photoH}" rx="${radius}" fill="none" stroke="${p.accent}" stroke-opacity="0.72" stroke-width="3"/><rect x="${f.margin+8}" y="${photoTop+8}" width="${photoW-16}" height="${photoH-16}" rx="${Math.max(2,radius-8)}" fill="none" stroke="#ffffff" stroke-opacity="0.14" stroke-width="1"/></svg>`);
+    const base = await sharp(Buffer.from(baseSvg)).png().toBuffer();
+    return await sharp(base).composite([
+      { input: photo, left: f.margin, top: photoTop },
+      { input: accent }
+    ]).png().toBuffer();
+  } catch (e) {
+    return null;
+  }
+}
+
+// ── Header ────────────────────────────────────────────────────────────
+// Plain variant (body/outro slides): [icon] CATEGORY | divider ... counter,
+// with a segmented progress-dash row underneath.
+function plainHeader(p, f, categoryName, slug, slideNum, totalSlides, typo) {
+  const fontHead = (typo && typo.headline) ? typo.headline : FONT_SERIF;
+  const fontBody = (typo && typo.body) ? typo.body : FONT_SANS;
+  const m = f.margin;
+  const icon = categoryIconSVG(slug);
+  const isSinglePost = (totalSlides || 1) <= 1;
+  // A carousel-style "1 / 1" counter and progress-dash row read as broken
+  // chrome on a genuinely single post (that's part of what was making the
+  // TikTok single graphic look "weird" — it visually implied a carousel
+  // that never advances). Skip both when there's nothing to progress through.
+  const dashCount = Math.max(totalSlides || 1, 1);
+  const dashW = 26, dashGap = 6, dashH = 4;
+  const dashes = isSinglePost ? "" : Array.from({ length: dashCount }).map((_, i) =>
+    `<rect x="${m + i * (dashW + dashGap)}" y="${f.dashY}" width="${dashW}" height="${dashH}" rx="2" fill="${i < (slideNum||1) ? p.accent : p.muted}" opacity="${i < (slideNum||1) ? 1 : 0.4}"/>`
+  ).join("");
+  return `
+    <g transform="translate(${m},${f.headerY - 20})" color="${p.accent}">${icon}</g>
+    <text x="${m + 50}" y="${f.headerY}" font-family="${fontBody}" font-size="26" font-weight="700" fill="${p.primaryText}" letter-spacing="1.5">${escXml((categoryName||"").toUpperCase())}</text>
+    ${isSinglePost ? "" : `<text x="${f.w - m}" y="${f.headerY}" font-family="${fontBody}" font-size="26" font-weight="700" fill="${p.secondaryText}" text-anchor="end">${slideNum||1} / ${totalSlides||1}</text>`}
+    ${dashes}`;
+}
+
+// Pill variant (hook slide): outlined badge around [icon] CATEGORY.
+function pillHeader(p, f, categoryName, slug, slideNum, totalSlides, typo) {
+  const fontHead = (typo && typo.headline) ? typo.headline : FONT_SERIF;
+  const fontBody = (typo && typo.body) ? typo.body : FONT_SANS;
+  const m = f.margin;
+  const label = (categoryName||"").toUpperCase();
+  const pillW = 84 + label.length * 19;
+  const icon = categoryIconSVG(slug);
+  const isSingle = (totalSlides || 1) <= 1;
+  return `
+    <rect x="${m}" y="${f.headerY-34}" width="${pillW}" height="52" rx="26" fill="none" stroke="${p.accent}" stroke-width="2"/>
+    <g transform="translate(${m+20},${f.headerY-16})" color="${p.accent}">${icon}</g>
+    <text x="${m+58}" y="${f.headerY}" font-family="${fontBody}" font-size="26" font-weight="700" fill="${p.primaryText}" letter-spacing="1.5">${escXml(label)}</text>
+    ${isSingle ? "" : `<text x="${f.w - m}" y="${f.headerY}" font-family="${fontBody}" font-size="26" font-weight="700" fill="${p.secondaryText}" text-anchor="end">${slideNum||1} / ${totalSlides||1}</text>`}`;
+}
+
+// Fading accent line + swipe cue, used at the foot of hook slides.
+function swipeFooter(p, f, typo) {
+  const fontBody = (typo && typo.body) ? typo.body : FONT_SANS;
+  const m = f.margin, y = f.h - 60, lineY = f.h - 34;
+  const textEndX = f.w - m - 46; // leave room for the two chevrons after the text
+  return `
+    <text x="${textEndX}" y="${y}" font-family="${fontBody}" font-size="24" font-weight="700" letter-spacing="2" fill="${p.primaryText}" text-anchor="end">SWIPE TO CONTINUE</text>
+    <path d="M ${textEndX+12} ${y-8} L ${textEndX+22} ${y} L ${textEndX+12} ${y+8}" stroke="${p.accent}" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M ${textEndX+22} ${y-8} L ${textEndX+32} ${y} L ${textEndX+22} ${y+8}" stroke="${p.accent}" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.6"/>
+    <defs><linearGradient id="fadeLine" x1="${m}" y1="0" x2="${f.w-m}" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="${p.accent}" stop-opacity="1"/><stop offset="100%" stop-color="${p.accent}" stop-opacity="0"/>
+    </linearGradient></defs>
+    <rect x="${m}" y="${lineY}" width="${f.w-2*m}" height="3" fill="url(#fadeLine)"/>`;
+}
+
+function swipeArrow(p, f, x, y, typo) {
+  const fontBody = (typo && typo.body) ? typo.body : FONT_SANS;
+  return `<text x="${x}" y="${y}" font-family="${fontBody}" font-size="24" font-weight="700" letter-spacing="2" fill="${p.accent}" text-anchor="end">SWIPE</text>
+    <path d="M ${x+14} ${y-8} L ${x+26} ${y} L ${x+14} ${y+8}" stroke="${p.accent}" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
+}
+
+// ── Slides ────────────────────────────────────────────────────────────
+
+// ── Per-layer styling (set by the card editor) ─────────────────────────
+// Each text layer can have its own font, colour and size. Anything invalid is
+// ignored, so bad input falls back to the card's normal look.
+function layerFont(slide, key, fallback) {
+  const id = slide.layerFonts && slide.layerFonts[key];
+  const t = id && TYPOGRAPHIES[id];
+  if (!t) return fallback;
+  return key === "supportingText" ? t.body : t.headline;
+}
+function layerColor(slide, key) {
+  const c = slide.layerColors && slide.layerColors[key];
+  return /^#[0-9a-f]{6}$/i.test(String(c || "")) ? c : null;
+}
+function layerScaleFactor(slide, key) {
+  const s = Number(slide.layerScale && slide.layerScale[key]);
+  if (!Number.isFinite(s) || s <= 0) return 1;
+  return Math.max(0.5, Math.min(1.6, s));
+}
+
+// How many lines a template's own text box can hold. The server used to force
+// a fixed 3-4 line cap on every template, which chopped headlines into short
+// fragments even when the template had reserved a tall box for them.
+function templateMaxLines(design, key, fallback) {
+  const box = design && design.textBoxes && design.textBoxes[key];
+  return box && box.maxLines ? box.maxLines : fallback;
+}
+
+// The layout engine (public/lib/cardLayoutEngine.js) already wrapped each
+// layer's text to fit its box and chose the font size, so the export draws the
+// SAME lines the preview shows instead of re-wrapping with a character count.
+// That is what makes a downloaded slide match the mockup. Falls back to the old
+// character fit only when no design is present.
+function designLayer(design, key) {
+  if (!design || !Array.isArray(design.layers)) return null;
+  return design.layers.find(l => l.key === key) || null;
+}
+function designLines(design, key, f, fallbackText, fallbackSize, fallbackChars, fallbackMaxLines) {
+  const layer = designLayer(design, key);
+  if (layer && !layer.empty && layer.lines && layer.lines.length) {
+    return { lines: layer.lines, size: Math.max(8, Math.round(layer.sizePct * f.w)), layer };
+  }
+  return Object.assign(fitMultilineText(fallbackText, fallbackSize, fallbackChars, fallbackMaxLines), { layer: null });
+}
+
+function textLayoutTransform(slide, key, f, base) {
+  const k = layerScaleFactor(slide, key);
+  const target = slide.textLayout?.[key];
+  if (!target || !Number.isFinite(Number(target.x)) || !Number.isFinite(Number(target.y))) {
+    // No dragged box: scale the text about its own top-left corner.
+    if (k === 1) return "";
+    return `transform="matrix(${k} 0 0 ${k} ${base.x * (1 - k)} ${base.y * (1 - k)})"`;
+  }
+  const bw = Math.max(1, base.width), bh = Math.max(1, base.height);
+  const width = Math.max(0.08, Math.min(1, Number(target.width) || bw / f.w)) * f.w;
+  const height = Math.max(0.04, Math.min(1, Number(target.height) || bh / f.h)) * f.h;
+  const sx = (width / bw) * k, sy = (height / bh) * k;
+  const x = Math.max(0, Math.min(f.w - width, Number(target.x) * f.w));
+  const y = Math.max(0, Math.min(f.h - height, Number(target.y) * f.h));
+  return `transform="matrix(${sx} 0 0 ${sy} ${x - sx * base.x} ${y - sy * base.y})"`;
+}
+
+function renderHookSVG(p, f, slide, category, scrimStrength, typo, design) {
+  const fontHead = (typo && typo.headline) ? typo.headline : FONT_SERIF;
+  const fontBody = (typo && typo.body) ? typo.body : FONT_SANS;
+  const m = f.margin;
+  const isSingle = (slide.totalSlides || 1) <= 1;
+  const isTall = f.h > 1500;
+  const head = designLines(design, "headline", f, slide.headline, f.hookHeadlineSize, f.hookHeadlineChars, templateMaxLines(design, "headline", f.hookMaxLines));
+  const lines = head.lines, size = head.size;
+  const lineH = Math.round(f.hookHeadlineLine * (size / f.hookHeadlineSize));
+  const startY = Math.max(Math.round(f.h * 0.16), Math.min(Math.round(f.h * 0.76), Math.round(f.h * f.hookHeadlineY) + Number(slide.textOffset || 0)));
+  const emphasisIdx = slide.emphasisLine != null ? slide.emphasisLine : (lines.length >= 3 ? 1 : -1);
+  const supportY = startY + lines.length * lineH + f.hookSupportGap;
+  const sup = (slide.supportingText || slide.body) ? designLines(design, "supportingText", f, slide.supportingText || slide.body, f.hookSupportSize, f.hookSupportChars, f.hookSupportMaxLines) : { lines: [], size: f.hookSupportSize, layer: null };
+  const supportLines = sup.lines;
+  const supportSize = sup.size;
+  const supportLineH = Math.round(f.hookSupportLine * (supportSize / f.hookSupportSize));
+
+  const footerY = isTall ? f.h - 220 : f.h - 80;
+  let footerSVG = "";
+  if (isSingle) {
+    const ctaText = slide.ctaLine ? String(slide.ctaLine).toUpperCase() : "";
+    const srcText = slide.sourceLabel ? ("SOURCE: " + slide.sourceLabel).toUpperCase() : "";
+    footerSVG = `
+      <g opacity="0.95">
+        ${srcText ? `<text x="${m}" y="${footerY - (ctaText ? 36 : 0)}" font-family="${fontBody}" font-size="20" font-weight="700" letter-spacing="1.5" fill="${p.secondaryText}">${escXml(srcText)}</text>` : ""}
+        ${ctaText ? `<g ${textLayoutTransform(slide, "ctaLine", f, { x: m, y: footerY - 34, width: f.w - 2*m, height: 40 })}><text x="${m}" y="${footerY}" font-family="${layerFont(slide, "ctaLine", fontHead)}" font-size="32" font-weight="800" letter-spacing="2" fill="${layerColor(slide, "ctaLine") || p.accent}">${escXml(ctaText)}</text></g>` : ""}
+      </g>`;
+  } else {
+    footerSVG = swipeFooter(p, f, typo);
+  }
+
+  return `
+  <svg width="${f.w}" height="${f.h}" viewBox="0 0 ${f.w} ${f.h}" xmlns="http://www.w3.org/2000/svg">
+    ${backgroundLayer(p, f, scrimStrength, "hook", design)}
+    ${pillHeader(p, f, category.displayName, category.slug, slide.slideNumber, slide.totalSlides, typo)}
+    <g ${textLayoutTransform(slide, "headline", f, { x: m, y: startY - size, width: f.w - 2*m, height: Math.max(lineH, lines.length * lineH) })}><text x="${m}" y="${startY}" font-family="${(head.layer && head.layer.fontFamily) || layerFont(slide, "headline", fontHead)}" font-size="${size}" font-weight="700">${(head.layer && head.layer.keyword) ? tspansKeyword(lines, m, startY, lineH, head.layer.keyword, layerColor(slide, "headline") || p.accent, (head.layer && head.layer.color) || p.primaryText) : tspansEmphasis(lines, m, startY, lineH, emphasisIdx, layerColor(slide, "headline") || p.accent, (head.layer && head.layer.color) || layerColor(slide, "headline") || p.primaryText)}</text></g>
+    ${supportLines.length ? `<g ${textLayoutTransform(slide, "supportingText", f, { x: m, y: supportY - supportSize, width: f.w - 2*m, height: Math.max(supportLineH, supportLines.length * supportLineH) })}><text x="${m}" y="${supportY}" font-family="${(sup.layer && sup.layer.fontFamily) || layerFont(slide, "supportingText", fontBody)}" font-size="${supportSize}" fill="${(sup.layer && sup.layer.color) || layerColor(slide, "supportingText") || p.secondaryText}">${tspans(supportLines, m, supportY, supportLineH)}</text></g>` : ""}
+    ${footerSVG}
+  </svg>`;
+}
+
+// ── Body slide composition variants ─────────────────────────────────────
+// Which one a slide uses is decided by which fields the AI actually filled
+// in for that slide's content — never forced, so a plain paragraph story
+// still just gets a paragraph. Precedence when multiple are present:
+// quote > timeline > facts > stat > plain paragraph.
+function detectBodyVariant(slide) {
+  if (slide.quote && String(slide.quote).trim()) return "quote";
+  if (Array.isArray(slide.timeline) && slide.timeline.length) return "timeline";
+  if (Array.isArray(slide.facts) && slide.facts.length) return "facts";
+  // Reaction beats comparison/announcement/stat — a claim-and-response
+  // dynamic is a stronger, more specific signal than any of those when it's
+  // genuinely present in the source.
+  if (slide.claim && String(slide.claim).trim()) return "reaction";
+  if (slide.compareA && slide.compareB) return "comparison";
+  if (slide.action && String(slide.action).trim()) return "announcement";
+  if (slide.stat != null && String(slide.stat).trim() !== "") return "stat";
+  return "standard";
+}
+
+// Three-beat composition: SUBJECT (who/what entity) → ACTION (the event
+// itself, given real visual weight) → OUTCOME (why it matters). Deliberately
+// decomposed into three separate visual beats connected by a thin rail,
+// instead of one continuous paragraph — that decomposition is what makes an
+// announcement scannable in under a second instead of read top to bottom.
+function measureAnnouncement(f, subject, action, outcome) {
+  // Sans-serif, not the Anton headline font — using the same bold display
+  // font at a slightly smaller size still reads as a second competing
+  // headline stacked under the real one. This needs to sit clearly
+  // subordinate to the headline, not rival it.
+  const actionSize = Math.round(f.bodyTextSize * 1.35);
+  const actionLineH = Math.round(actionSize * 1.32);
+  const actionLines = wrapWords(String(action||""), Math.round(f.bodyTextChars * 0.92)).slice(0, 3);
+  const outcomeLines = outcome ? wrapWords(String(outcome), f.bodyTextChars).slice(0, 3) : [];
+  const subjectH = subject ? 46 : 0;
+  const actionH = actionLines.length * actionLineH;
+  const outcomeH = outcomeLines.length ? 30 + outcomeLines.length * f.bodyTextLine : 0;
+  return { actionLines, actionSize, actionLineH, outcomeLines, height: subjectH + 28 + actionH + (outcomeLines.length ? outcomeH : 0) };
+}
+function renderAnnouncement(m, f, p, subject, action, outcome, startY, typo) {
+  const fontHead = (typo && typo.headline) ? typo.headline : FONT_SERIF;
+  const fontBody = (typo && typo.body) ? typo.body : FONT_SANS;
+  const { actionLines, actionSize, actionLineH, outcomeLines } = measureAnnouncement(f, subject, action, outcome);
+  let y = startY;
+  const out = [];
+  const railX = m + 4;
+  if (subject) {
+    out.push(`<text x="${m}" y="${y}" font-family="${fontBody}" font-size="24" font-weight="700" letter-spacing="1.5" fill="${p.accent}">${escXml((subject||"").toUpperCase())}</text>`);
+    out.push(`<line x1="${railX}" y1="${y+14}" x2="${railX}" y2="${y+46}" stroke="${p.accent}" stroke-width="2" opacity="0.5"/>`);
+    y += 46;
+  }
+  const actionY = y + actionSize * 0.85;
+  out.push(`<text x="${m}" y="${actionY}" font-family="${fontBody}" font-size="${actionSize}" font-weight="700" fill="${p.primaryText}">${tspans(actionLines, m, actionY, actionLineH)}</text>`);
+  y = actionY + (actionLines.length - 1) * actionLineH + 26;
+  if (outcomeLines.length) {
+    out.push(`<line x1="${railX}" y1="${y-14}" x2="${railX}" y2="${y+14}" stroke="${p.muted}" stroke-width="2" opacity="0.4"/>`);
+    const outcomeSize = Math.round(f.bodyTextSize * 0.9);
+    const outcomeY = y + outcomeSize * 0.9;
+    out.push(`<text x="${m+24}" y="${outcomeY}" font-family="${fontBody}" font-size="${outcomeSize}" fill="${p.secondaryText}">${tspans(outcomeLines, m+24, outcomeY, f.bodyTextLine)}</text>`);
+  }
+  return out.join("");
+}
+
+// Comparison — for the "X vs Y" / "before vs after" story shape, distinct
+// from the single-stat layout: two figures given equal visual weight side
+// by side, so the contrast between them is the whole point instead of one
+// number standing alone. Each value fits independently to its own
+// half-width column so a long figure on one side doesn't force both sides
+// to shrink.
+function measureComparison(f, compareA, compareB, note) {
+  const baseValueSize = Math.round(f.statSize * 0.58);
+  const labelSize = 24;
+  const noteLines = note ? wrapWords(String(note), f.bodyTextChars).slice(0, 3) : [];
+  const noteH = noteLines.length ? 30 + noteLines.length * f.bodyTextLine : 0;
+  const rowH = labelSize + 16 + baseValueSize * 0.9;
+  return { baseValueSize, labelSize, noteLines, height: rowH + (noteLines.length ? noteH : 0) };
+}
+function renderComparison(m, f, p, compareA, compareB, note, startY, typo) {
+  const fontHead = (typo && typo.headline) ? typo.headline : FONT_SERIF;
+  const fontBody = (typo && typo.body) ? typo.body : FONT_SANS;
+  const { baseValueSize, labelSize, noteLines } = measureComparison(f, compareA, compareB, note);
+  const colWidth = (f.w - 2*m - 72) / 2;
+  const colAx = m, colBx = m + colWidth + 72;
+  const midX = m + colWidth + 36;
+  const sizeA = fitStatFontSize(compareA.value || "", colWidth, baseValueSize);
+  const sizeB = fitStatFontSize(compareB.value || "", colWidth, baseValueSize);
+  const valueSize = Math.min(sizeA, sizeB); // same size both sides so neither reads as "more important" by accident
+  const labelY = startY;
+  const valueY = labelY + 16 + valueSize * 0.85;
+  const out = [];
+  out.push(`<text x="${colAx}" y="${labelY}" font-family="${fontBody}" font-size="${labelSize}" font-weight="700" letter-spacing="1" fill="${p.secondaryText}">${escXml((compareA.label||"").toUpperCase())}</text>`);
+  out.push(`<text x="${colBx}" y="${labelY}" font-family="${fontBody}" font-size="${labelSize}" font-weight="700" letter-spacing="1" fill="${p.secondaryText}">${escXml((compareB.label||"").toUpperCase())}</text>`);
+  out.push(`<text x="${colAx}" y="${valueY}" font-family="${fontBody}" font-size="${valueSize}" font-weight="900" fill="${p.primaryText}">${escXml(compareA.value||"")}</text>`);
+  out.push(`<text x="${colBx}" y="${valueY}" font-family="${fontBody}" font-size="${valueSize}" font-weight="900" fill="${p.accent}">${escXml(compareB.value||"")}</text>`);
+  out.push(`<text x="${midX}" y="${valueY - valueSize*0.32}" font-family="${fontBody}" font-size="22" font-weight="700" fill="${p.muted}" text-anchor="middle">VS</text>`);
+  let y = valueY + 38;
+  if (noteLines.length) {
+    out.push(`<line x1="${m+4}" y1="${y-8}" x2="${m+4}" y2="${y+20}" stroke="${p.muted}" stroke-width="2" opacity="0.4"/>`);
+    const noteSize = Math.round(f.bodyTextSize * 0.9);
+    const noteY = y + noteSize * 0.9;
+    out.push(`<text x="${m+24}" y="${noteY}" font-family="${fontBody}" font-size="${noteSize}" fill="${p.secondaryText}">${tspans(noteLines, m+24, noteY, f.bodyTextLine)}</text>`);
+  }
+  return out.join("");
+}
+
+// Reaction/controversy — for the "claim → response" story shape: a
+// statement or move (from a person, brand, or org) followed by how people
+// are responding to it. Structurally different from the Quote layout
+// (which renders one real, attributed quotation) — this is about the
+// dynamic between a claim and its reaction, and the claim itself doesn't
+// need to be a verbatim quote.
+function measureReaction(f, claim, reaction, reactionTag) {
+  const claimSize = Math.round(f.bodyTextSize * 1.15);
+  const claimLineH = Math.round(claimSize * 1.32);
+  const claimLines = wrapWords(String(claim||""), Math.round(f.bodyTextChars * 0.85)).slice(0, 3);
+  const reactionLines = reaction ? wrapWords(String(reaction), f.bodyTextChars).slice(0, 3) : [];
+  const tagH = reactionTag ? 60 : 0;
+  const claimH = claimLines.length * claimLineH;
+  const reactionH = reactionLines.length ? 28 + reactionLines.length * f.bodyTextLine : 0;
+  return { claimLines, claimSize, claimLineH, reactionLines, height: tagH + claimH + (reactionLines.length ? reactionH : 0) };
+}
+function renderReaction(m, f, p, claim, reaction, reactionTag, startY, typo) {
+  const fontHead = (typo && typo.headline) ? typo.headline : FONT_SERIF;
+  const fontBody = (typo && typo.body) ? typo.body : FONT_SANS;
+  const { claimLines, claimSize, claimLineH, reactionLines } = measureReaction(f, claim, reaction, reactionTag);
+  let y = startY;
+  const out = [];
+  const railX = m + 4;
+  if (reactionTag) {
+    const label = String(reactionTag).toUpperCase();
+    const pillW = 40 + label.length * 15;
+    out.push(`<rect x="${m}" y="${y-32}" width="${pillW}" height="44" rx="22" fill="none" stroke="${p.accent}" stroke-width="1.5"/>`);
+    out.push(`<text x="${m+20}" y="${y-4}" font-family="${fontBody}" font-size="22" font-weight="600" letter-spacing="1" fill="${p.accent}">${escXml(label)}</text>`);
+    y += 40;
+  }
+  out.push(`<line x1="${railX}" y1="${y}" x2="${railX}" y2="${y + claimLines.length*claimLineH}" stroke="${p.muted}" stroke-width="3" opacity="0.5"/>`);
+  const claimY = y + claimSize * 0.85;
+  out.push(`<text x="${m+24}" y="${claimY}" font-family="${fontBody}" font-size="${claimSize}" font-weight="700" fill="${p.primaryText}">${tspans(claimLines, m+24, claimY, claimLineH)}</text>`);
+  y = claimY + (claimLines.length - 1) * claimLineH + 34;
+  if (reactionLines.length) {
+    const reactionSize = Math.round(f.bodyTextSize * 0.92);
+    const reactionY = y + reactionSize * 0.9;
+    out.push(`<text x="${m}" y="${reactionY}" font-family="${fontBody}" font-size="${reactionSize}" font-style="italic" fill="${p.secondaryText}">${tspans(reactionLines, m, reactionY, f.bodyTextLine)}</text>`);
+  }
+  return out.join("");
+}
+
+function measureFacts(f, facts) {
+  const rows = facts.slice(0, 4).map(fact => wrapWords(String(fact), f.bodyTextChars).slice(0, 2));
+  const rowH = rows.map(lines => 26 + lines.length * f.bodyTextLine * 0.82);
+  return { rows, height: rowH.reduce((a,b) => a+b, 0) + (rows.length - 1) * 14 };
+}
+function renderFacts(m, f, p, rows, startY, typo) {
+  const fontHead = (typo && typo.headline) ? typo.headline : FONT_SERIF;
+  const fontBody = (typo && typo.body) ? typo.body : FONT_SANS;
+  let y = startY;
+  const out = [];
+  rows.forEach((lines, i) => {
+    const bSize = Math.round(f.bodyTextSize * 0.82);
+    const lineH = Math.round(f.bodyTextLine * 0.82);
+    out.push(`<circle cx="${m+10}" cy="${y - bSize*0.35}" r="5" fill="${p.accent}"/>`);
+    out.push(`<text x="${m+34}" y="${y}" font-family="${fontBody}" font-size="${bSize}" font-weight="500" fill="${p.secondaryText}">${tspans(lines, m+34, y, lineH)}</text>`);
+    y += lines.length * lineH + 40;
+  });
+  return out.join("");
+}
+
+function measureQuote(f, quote, attribution) {
+  const size = Math.round(f.bodyHeadlineSize * 0.62);
+  const lineH = Math.round(size * 1.28);
+  const lines = wrapWords(String(quote), Math.round(f.bodyHeadlineChars * 1.3)).slice(0, 4);
+  return { lines, size, lineH, height: 50 + lines.length * lineH + (attribution ? 44 : 0) };
+}
+function renderQuote(m, f, p, quote, attribution, startY, typo) {
+  const fontHead = (typo && typo.headline) ? typo.headline : FONT_SERIF;
+  const fontBody = (typo && typo.body) ? typo.body : FONT_SANS;
+  const { lines, size, lineH } = measureQuote(f, quote, attribution);
+  const textY = startY + 56;
+  return `
+    <text x="${m-6}" y="${startY+40}" font-family="${fontHead}" font-size="90" fill="${p.accent}" opacity="0.35">"</text>
+    <text x="${m}" y="${textY}" font-family="${fontHead}" font-size="${size}" fill="${p.primaryText}">${tspans(lines, m, textY, lineH)}</text>
+    ${attribution ? `<text x="${m}" y="${textY + lines.length*lineH + 36}" font-family="${fontBody}" font-size="24" font-weight="700" letter-spacing="1" fill="${p.secondaryText}">${escXml(("— "+attribution).toUpperCase())}</text>` : ""}`;
+}
+
+function measureTimeline(f, items) {
+  const rows = items.slice(0, 4).map(it => wrapWords(String(it.text||""), f.bodyTextChars - 4).slice(0, 2));
+  const rowH = rows.map(lines => 46 + lines.length * f.bodyTextLine * 0.8);
+  return { rows, height: rowH.reduce((a,b)=>a+b,0) + (rows.length-1)*10 };
+}
+function renderTimeline(m, f, p, items, rows, startY, typo) {
+  const fontHead = (typo && typo.headline) ? typo.headline : FONT_SERIF;
+  const fontBody = (typo && typo.body) ? typo.body : FONT_SANS;
+  let y = startY;
+  const railX = m + 4;
+  const out = [];
+  const totalH = rows.reduce((s,lines,i) => s + 46 + lines.length * f.bodyTextLine * 0.8 + (i>0?10:0), 0);
+  out.push(`<line x1="${railX}" y1="${startY - 24}" x2="${railX}" y2="${startY - 24 + totalH}" stroke="${p.muted}" stroke-width="2" opacity="0.4"/>`);
+  items.slice(0, 4).forEach((it, i) => {
+    const lines = rows[i];
+    const bSize = Math.round(f.bodyTextSize * 0.82);
+    const lineH = Math.round(f.bodyTextLine * 0.8);
+    out.push(`<circle cx="${railX}" cy="${y - bSize*0.7}" r="7" fill="${p.accent}"/>`);
+    out.push(`<text x="${m+34}" y="${y - bSize*0.55}" font-family="${fontBody}" font-size="22" font-weight="700" letter-spacing="1" fill="${p.accent}">${escXml((it.label||"").toUpperCase())}</text>`);
+    out.push(`<text x="${m+34}" y="${y + bSize*0.5}" font-family="${fontBody}" font-size="${bSize}" fill="${p.secondaryText}">${tspans(lines, m+34, y+bSize*0.5, lineH)}</text>`);
+    y += 46 + lines.length * lineH;
+  });
+  return out.join("");
+}
+
+function renderBodySVG(p, f, slide, category, scrimStrength, typo, design) {
+  const fontHead = (typo && typo.headline) ? typo.headline : FONT_SERIF;
+  const fontBody = (typo && typo.body) ? typo.body : FONT_SANS;
+  const m = f.margin;
+  const variant = detectBodyVariant(slide);
+  const hasStat = variant === "stat";
+  const statFontSize = hasStat ? fitStatFontSize(slide.stat, f.w - 2*m, f.statSize) : 0;
+
+  // Vertical rhythm, top to bottom: header → section label (small) →
+  // headline (large, dominant) → variant-specific middle content → footer.
+  // The whole block is vertically CENTERED in the space between header and
+  // footer so short content doesn't leave a dead gap above the footer.
+  const head = designLines(design, "headline", f, slide.headline, f.bodyHeadlineSize, f.bodyHeadlineChars, templateMaxLines(design, "headline", f.bodyHeadlineMaxLines));
+  const hLines = head.lines, hSize = head.size;
+  const hLineH = Math.round(f.bodyHeadlineLine * (hSize / f.bodyHeadlineSize));
+  const bodyFit = ((variant === "standard" || variant === "stat") && slide.body) ? designLines(design, "supportingText", f, slide.body, f.bodyTextSize, f.bodyTextChars, f.bodyTextMaxLines) : { lines: [], size: f.bodyTextSize, layer: null };
+  const bLines = bodyFit.lines, bSize = bodyFit.size;
+  const bLineH = Math.round(f.bodyTextLine * (bSize / f.bodyTextSize));
+
+  let factsData = null, timelineData = null;
+  if (variant === "facts") factsData = measureFacts(f, slide.facts);
+  if (variant === "timeline") timelineData = measureTimeline(f, slide.timeline);
+  const quoteData = variant === "quote" ? measureQuote(f, slide.quote, slide.quoteAttribution) : null;
+  const announcementData = variant === "announcement" ? measureAnnouncement(f, slide.subject, slide.action, slide.outcome) : null;
+  const comparisonData = variant === "comparison" ? measureComparison(f, slide.compareA, slide.compareB, slide.comparisonNote) : null;
+  const reactionData = variant === "reaction" ? measureReaction(f, slide.claim, slide.reaction, slide.reactionTag) : null;
+
+  const sectionBlockH = slide.sectionLabel ? 56 : 0;
+  const headlineBlockH = hLines.length * hLineH;
+  const middleBlockH =
+    variant === "quote" ? 40 + quoteData.height :
+    variant === "timeline" ? 64 + timelineData.height :
+    variant === "facts" ? 64 + factsData.height :
+    variant === "announcement" ? 40 + announcementData.height :
+    variant === "comparison" ? 40 + comparisonData.height :
+    variant === "reaction" ? 40 + reactionData.height :
+    variant === "stat" ? 64 + statFontSize * 0.78 + f.statLabelGap + 60 + (slide.body ? 60 + bLines.length * bLineH : 0) :
+    64 + (slide.body ? bLines.length * bLineH : 0);
+  const totalContentH = sectionBlockH + headlineBlockH + middleBlockH;
+
+  // A ctaLine ("FOLLOW FOR MORE →") means this slide is doing double duty as
+  // both the last piece of story AND the carousel's ending — used for short
+  // carousels (under 6 slides) instead of spending an entire separate slide
+  // on a CTA when there's barely been any story yet. Reserve extra room
+  // above the footer for it, and pull the divider up to match.
+  const hasCtaLine = !!slide.ctaLine;
+  const headerBottom = f.headerY + 70; // clear of the category header + progress dashes
+  const footerDividerY = f.h - 110 - (hasCtaLine ? 86 : 0);
+  const footerY = f.h - 66 - (hasCtaLine ? 86 : 0);
+  const availableH = footerDividerY - 60 - headerBottom;
+  const blockTopY = headerBottom + Math.max(0, (availableH - totalContentH) / 2);
+
+  const sectionLabelY = blockTopY + (slide.sectionLabel ? 20 : -24);
+  const headlineStartY = sectionLabelY + sectionBlockH + hSize * 0.78;
+  const headlineEndY = headlineStartY + (hLines.length - 1) * hLineH;
+  const afterHeadlineY = headlineEndY + 64;
+
+  let middleSVG = "";
+  if (variant === "quote") {
+    middleSVG = renderQuote(m, f, p, slide.quote, slide.quoteAttribution, afterHeadlineY, typo);
+  } else if (variant === "timeline") {
+    middleSVG = renderTimeline(m, f, p, slide.timeline, timelineData.rows, afterHeadlineY + 30, typo);
+  } else if (variant === "facts") {
+    middleSVG = renderFacts(m, f, p, factsData.rows, afterHeadlineY + 20, typo);
+  } else if (variant === "announcement") {
+    middleSVG = renderAnnouncement(m, f, p, slide.subject, slide.action, slide.outcome, afterHeadlineY + 10, typo);
+  } else if (variant === "comparison") {
+    middleSVG = renderComparison(m, f, p, slide.compareA, slide.compareB, slide.comparisonNote, afterHeadlineY + 10, typo);
+  } else if (variant === "reaction") {
+    middleSVG = renderReaction(m, f, p, slide.claim, slide.reaction, slide.reactionTag, afterHeadlineY + 10, typo);
+  } else if (variant === "stat") {
+    const statBaseline = afterHeadlineY + statFontSize * 0.78;
+    const statLabelY = statBaseline + f.statLabelGap;
+    const bodyStartY = statLabelY + 60;
+    middleSVG = `
+    <text x="${m}" y="${statBaseline}" font-family="${fontBody}" font-size="${statFontSize}" font-weight="900" fill="${p.accent}">${escXml(slide.stat)}</text>
+    ${slide.statLabel ? `<text x="${m}" y="${statLabelY}" font-family="${fontBody}" font-size="${f.statLabelSize}" font-weight="700" letter-spacing="1.5" fill="${p.secondaryText}">${escXml((slide.statLabel||"").toUpperCase())}</text>` : ""}
+    ${slide.body ? `<text x="${m}" y="${bodyStartY}" font-family="${fontBody}" font-size="${bSize}" fill="${p.secondaryText}">${tspans(bLines, m, bodyStartY, bLineH)}</text>` : ""}`;
+  } else if (slide.body) {
+    middleSVG = `
+    <rect x="${m}" y="${afterHeadlineY - bSize - 20}" width="130" height="3" fill="${p.accent}" opacity="0.5"/>
+    <text x="${m}" y="${afterHeadlineY}" font-family="${layerFont(slide, "supportingText", fontBody)}" font-size="${bSize}" fill="${layerColor(slide, "supportingText") || p.secondaryText}">${tspans(bLines, m, afterHeadlineY, bLineH)}</text>`;
+  }
+
+  return `
+  <svg width="${f.w}" height="${f.h}" viewBox="0 0 ${f.w} ${f.h}" xmlns="http://www.w3.org/2000/svg">
+    ${backgroundLayer(p, f, scrimStrength, "body", design)}
+    ${plainHeader(p, f, category.displayName, category.slug, slide.slideNumber, slide.totalSlides, typo)}
+    ${slide.sectionLabel ? `<rect x="${m}" y="${sectionLabelY-20}" width="4" height="24" fill="${p.accent}"/><text x="${m+18}" y="${sectionLabelY}" font-family="${fontBody}" font-size="${f.sectionLabelSize}" font-weight="700" letter-spacing="1.5" fill="${p.accent}">${escXml((slide.sectionLabel||"").toUpperCase())}</text>` : ""}
+    <g ${textLayoutTransform(slide, "headline", f, { x: m, y: headlineStartY - hSize, width: f.w - 2*m, height: Math.max(hLineH, hLines.length * hLineH) })}><text x="${m}" y="${headlineStartY}" font-family="${(head.layer && head.layer.fontFamily) || layerFont(slide, "headline", fontHead)}" font-size="${hSize}" font-weight="400" fill="${(head.layer && head.layer.color) || layerColor(slide, "headline") || p.primaryText}">${tspans(hLines, m, headlineStartY, hLineH)}</text></g>
+    <g ${textLayoutTransform(slide, "supportingText", f, { x: m, y: afterHeadlineY - 40, width: f.w - 2*m, height: Math.max(180, middleBlockH) })}>${middleSVG}</g>
+    ${hasCtaLine ? `<g ${textLayoutTransform(slide, "ctaLine", f, { x: m, y: footerDividerY - 66, width: f.w - 2*m, height: 40 })}><text x="${m}" y="${footerDividerY - 32}" font-family="${layerFont(slide, "ctaLine", fontHead)}" font-size="34" fill="${layerColor(slide, "ctaLine") || p.accent}">${escXml((slide.ctaLine||"").toUpperCase())}</text></g>` : ""}
+    <rect x="${m}" y="${footerDividerY}" width="${f.w-2*m}" height="1" fill="${p.muted}" opacity="0.4"/>
+    ${slide.tag ? `<rect x="${m}" y="${footerY-32}" width="${40+slide.tag.length*15}" height="44" rx="22" fill="none" stroke="${p.muted}" stroke-width="1.5"/><text x="${m+20}" y="${footerY-4}" font-family="${fontBody}" font-size="22" font-weight="600" letter-spacing="1" fill="${p.secondaryText}">${escXml((slide.tag||"").toUpperCase())}</text>` : ""}
+    ${(hasCtaLine || (slide.totalSlides || 1) <= 1) ? "" : swipeArrow(p, f, f.w - m, footerY - 4)}
+  </svg>`;
+}
+
+function renderOutroSVG(p, f, slide, category, scrimStrength, typo, design) {
+  const fontHead = (typo && typo.headline) ? typo.headline : FONT_SERIF;
+  const fontBody = (typo && typo.body) ? typo.body : FONT_SANS;
+  const m = f.margin;
+  const head = designLines(design, "headline", f, slide.headline, f.outroHeadlineSize, f.outroHeadlineChars, templateMaxLines(design, "headline", f.outroMaxLines));
+  const lines = head.lines, size = head.size;
+  const lineH = Math.round(f.outroHeadlineLine * (size / f.outroHeadlineSize));
+  const blockH = lines.length * lineH;
+  const startY = Math.round(f.h/2 - blockH/2);
+  const sup = slide.supportingText ? designLines(design, "supportingText", f, slide.supportingText, f.hookSupportSize, f.hookSupportChars, f.hookSupportMaxLines) : { lines: [], size: f.hookSupportSize, layer: null };
+  const supportLines = sup.lines;
+  const supportSize = sup.size;
+  const supportLineH = Math.round(f.hookSupportLine * (supportSize / f.hookSupportSize));
+  const supportY = startY + blockH + 56;
+  const emphasisIdx = slide.emphasisLine != null ? slide.emphasisLine : (lines.length >= 2 ? lines.length - 1 : -1);
+
+  return `
+  <svg width="${f.w}" height="${f.h}" viewBox="0 0 ${f.w} ${f.h}" xmlns="http://www.w3.org/2000/svg">
+    ${backgroundLayer(p, f, scrimStrength, "outro", design)}
+    ${plainHeader(p, f, category.displayName, category.slug, slide.slideNumber, slide.totalSlides, typo)}
+    <g ${textLayoutTransform(slide, "headline", f, { x: m, y: startY - size, width: f.w - 2*m, height: Math.max(lineH, lines.length * lineH) })}><text x="${m}" y="${startY}" font-family="${(head.layer && head.layer.fontFamily) || layerFont(slide, "headline", fontHead)}" font-size="${size}" font-weight="700">${(head.layer && head.layer.keyword) ? tspansKeyword(lines, m, startY, lineH, head.layer.keyword, layerColor(slide, "headline") || p.accent, (head.layer && head.layer.color) || p.primaryText) : tspansEmphasis(lines, m, startY, lineH, emphasisIdx, layerColor(slide, "headline") || p.accent, (head.layer && head.layer.color) || layerColor(slide, "headline") || p.primaryText)}</text></g>
+    ${supportLines.length ? `<g ${textLayoutTransform(slide, "supportingText", f, { x: m, y: supportY - supportSize, width: f.w - 2*m, height: Math.max(supportLineH, supportLines.length * supportLineH) })}><text x="${m}" y="${supportY}" font-family="${(sup.layer && sup.layer.fontFamily) || layerFont(slide, "supportingText", fontBody)}" font-size="${supportSize}" fill="${(sup.layer && sup.layer.color) || layerColor(slide, "supportingText") || p.secondaryText}">${tspans(supportLines, m, supportY, supportLineH)}</text></g>` : ""}
+    <defs><linearGradient id="fadeLine2" x1="${m}" y1="0" x2="${f.w-m}" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="${p.accent}" stop-opacity="1"/><stop offset="100%" stop-color="${p.accent}" stop-opacity="0"/>
+    </linearGradient></defs>
+    <rect x="${m}" y="${f.h-70}" width="${f.w-2*m}" height="3" fill="url(#fadeLine2)"/>
+  </svg>`;
+}
+
+function resolveType(slide, index, total) {
+  const t = slide.type || slide.role;
+  if (t === "hook" || t === "body" || t === "outro") return t;
+  if (index === 0) return "hook";
+  if (index === total - 1 && total > 1) return "outro";
+  return "body";
+}
+
+// Fetches + cover-crops a background photo, and measures its average
+// brightness so the scrim can darken proportionally (a bright photo needs a
+// stronger overlay than an already-dark one to keep text legible).
+async function fetchCoverImage(imageUrl, w, h, focalPoint) {
+  if (!imageUrl) return null;
+  try {
+    const signal = typeof AbortSignal !== "undefined" && AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined;
+    const r = await fetch(imageUrl, { headers: { "User-Agent": "Mozilla/5.0" }, signal });
+    if (!r.ok) return null;
+    const arrayBuffer = await r.arrayBuffer();
+    const buf = Buffer.from(arrayBuffer);
+    let pipeline = sharp(buf);
+    const meta = await pipeline.metadata();
+    const focalX = Math.max(0, Math.min(1, Number(focalPoint?.x ?? 0.5)));
+    const focalY = Math.max(0, Math.min(1, Number(focalPoint?.y ?? 0.5)));
+    if (focalPoint && meta.width && meta.height) {
+      const scale = Math.max(w / meta.width, h / meta.height);
+      const cropW = Math.max(1, Math.round(w / scale));
+      const cropH = Math.max(1, Math.round(h / scale));
+      const left = Math.round(Math.max(0, Math.min(meta.width - cropW, focalX * meta.width - cropW / 2)));
+      const top = Math.round(Math.max(0, Math.min(meta.height - cropH, focalY * meta.height - cropH / 2)));
+      pipeline = pipeline.extract({ left, top, width: cropW, height: cropH });
+    }
+    const cover = await pipeline.resize(w, h, { fit: "cover", position: focalPoint ? "centre" : sharp.strategy.attention }).jpeg({ quality: 90 }).toBuffer();
+    const stats = await sharp(cover).stats();
+    const avgLum = stats.channels.slice(0, 3).reduce((s, c) => s + c.mean, 0) / 3 / 255; // 0-1
+    return { buffer: cover, brightness: avgLum };
+  } catch (e) {
+    return null;
+  }
+}
+
+// Local niche background library. Structure per the design spec: each niche
+// gets 5 style folders, not one flat dump —
+//   assets/backgrounds/<slug>/cinematic/  — dark gradient, safest default
+//   assets/backgrounds/<slug>/texture/    — abstract texture/grain
+//   assets/backgrounds/<slug>/glow/       — light/glow/spotlight, for hooks
+//   assets/backgrounds/<slug>/geometric/  — editorial geometric, for body
+//   assets/backgrounds/<slug>/dramatic/   — dark/high-contrast, for CTA/major news
+// Drop any .jpg/.jpeg/.png/.webp file into the relevant folder — filename
+// doesn't matter, one is picked at random. A slide type maps to its ideal
+// style, but if that specific style folder is empty it falls back to
+// cinematic (the one style every niche is expected to eventually have),
+// then to no local image at all (renderer falls through to the gradient +
+// decorative texture, same as today, for niches nobody's uploaded to yet).
+const BACKGROUNDS_DIR = path.join(__dirname, "..", "assets", "backgrounds");
+const IMG_EXT = new Set([".jpg", ".jpeg", ".png", ".webp"]);
+const STYLE_FOR_SLIDE_TYPE = { hook: "glow", body: "geometric", outro: "dramatic" };
+function listImages(dir) {
+  try {
+    return fs.readdirSync(dir).filter(f => IMG_EXT.has(path.extname(f).toLowerCase()));
+  } catch (e) {
+    return [];
+  }
+}
+function pickLocalBackground(slug, slideType) {
+  const niche = slug || "default";
+  const preferredStyle = STYLE_FOR_SLIDE_TYPE[slideType] || "cinematic";
+  for (const style of [preferredStyle, "cinematic"]) {
+    const dir = path.join(BACKGROUNDS_DIR, niche, style);
+    const files = listImages(dir);
+    if (files.length) return path.join(dir, files[Math.floor(Math.random() * files.length)]);
+  }
+  return null; // niche has no images in either folder yet — falls through to gradient
+}
+
+// Cover-crops + measures brightness for a background image already on disk,
+// mirroring fetchCoverImage's output shape so both sources are interchangeable.
+async function coverFromLocalFile(filePath, w, h) {
+  try {
+    const cover = await sharp(filePath).resize(w, h, { fit: "cover", position: sharp.strategy.attention }).jpeg({ quality: 90 }).toBuffer();
+    const stats = await sharp(cover).stats();
+    const avgLum = stats.channels.slice(0, 3).reduce((s, c) => s + c.mean, 0) / 3 / 255;
+    return { buffer: cover, brightness: avgLum };
+  } catch (e) {
+    return null;
+  }
+}
+
+// Cover-crops + measures brightness for a user-uploaded image (sent from
+// the browser as a base64 data URL), mirroring fetchCoverImage's output
+// shape so all three background sources — user upload, live article photo,
+// local niche library — are interchangeable through the same scrim pipeline.
+async function coverFromBase64(dataUrl, w, h, focalPoint) {
+  try {
+    const base64 = String(dataUrl).replace(/^data:image\/\w+;base64,/, "");
+    const buf = Buffer.from(base64, "base64");
+    let pipeline = sharp(buf);
+    const meta = await pipeline.metadata();
+    const focalX = Math.max(0, Math.min(1, Number(focalPoint?.x ?? 0.5)));
+    const focalY = Math.max(0, Math.min(1, Number(focalPoint?.y ?? 0.5)));
+    if (focalPoint && meta.width && meta.height) {
+      const scale = Math.max(w / meta.width, h / meta.height);
+      const cropW = Math.max(1, Math.round(w / scale));
+      const cropH = Math.max(1, Math.round(h / scale));
+      const left = Math.round(Math.max(0, Math.min(meta.width - cropW, focalX * meta.width - cropW / 2)));
+      const top = Math.round(Math.max(0, Math.min(meta.height - cropH, focalY * meta.height - cropH / 2)));
+      pipeline = pipeline.extract({ left, top, width: cropW, height: cropH });
+    }
+    const cover = await pipeline.resize(w, h, { fit: "cover", position: focalPoint ? "centre" : sharp.strategy.attention }).jpeg({ quality: 90 }).toBuffer();
+    const stats = await sharp(cover).stats();
+    const avgLum = stats.channels.slice(0, 3).reduce((s, c) => s + c.mean, 0) / 3 / 255;
+    return { buffer: cover, brightness: avgLum };
+  } catch (e) {
+    return null;
+  }
+}
+
+async function renderYouTubeThumbnail(slide, imageUrl, options = {}) {
+  const width = 1280, height = 720;
+  const cover = slide.customImage ? await coverFromBase64(slide.customImage, width, height, options.focalPoint || slide.focalPoint)
+    : await fetchCoverImage(slide.imageUrl || imageUrl, width, height, options.focalPoint || slide.focalPoint);
+  const p = resolvePalette(options.palette || "noir_orange", options.theme || "modern_dark");
+  const typo = resolveTypography(options.typography || "impact");
+  const headline = escXml(String(slide.headline || slide.claim || "Story breakdown").toUpperCase().slice(0, 76));
+  const brand = options.brand?.name ? escXml(String(options.brand.name).slice(0, 28)) : "CREATORPULSE";
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><defs><linearGradient id="shade" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".88"/><stop offset=".7" stop-color="#000" stop-opacity=".18"/><stop offset="1" stop-color="#000" stop-opacity=".05"/></linearGradient></defs><rect width="100%" height="100%" fill="url(#shade)"/><rect x="62" y="74" width="10" height="570" rx="5" fill="${p.accent}"/><text x="104" y="143" fill="${p.accent}" font-family="${typo.body}" font-size="25" font-weight="800" letter-spacing="3">${brand}</text><g ${textLayoutTransform(slide, "headline", {w:width,h:height}, {x:100,y:205,width:760,height:420})}><foreignObject x="100" y="205" width="760" height="420"><div xmlns="http://www.w3.org/1999/xhtml" style="font-family:${typo.headline};font-size:74px;line-height:1.02;font-weight:900;color:${p.primaryText};text-shadow:0 3px 14px #000">${headline}</div></foreignObject></g></svg>`;
+  const layer = await sharp(Buffer.from(svg)).png().toBuffer();
+  if (!cover) return sharp(layer).composite([{input: Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720"><rect x="850" y="560" width="365" height="58" rx="12" fill="#111" stroke="${p.accent}" stroke-width="2"/><text x="875" y="597" fill="#fff" font-size="19" font-family="Arial" font-weight="700">SOURCE PHOTO UNAVAILABLE</text></svg>`), left:0, top:0}]).png().toBuffer();
+  return sharp(cover.buffer).composite([{ input: layer }]).png().toBuffer();
+}
+
+// Background only: the cover photo with the requested dim, or a plain palette
+// gradient when there is no photo. Matches the dim used by the full render.
+async function renderPlate(p, f, cover, slide, design) {
+  const dim = Number(slide.dim);
+  const a = Number.isFinite(dim) && dim > 0 ? Math.min(0.8, dim).toFixed(2) : "0";
+  if (cover) {
+    const dimSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${f.w}" height="${f.h}"><rect width="${f.w}" height="${f.h}" fill="#000" fill-opacity="${a}"/></svg>`;
+    return sharp(cover.buffer).composite([{ input: await sharp(Buffer.from(dimSvg)).png().toBuffer() }]).png().toBuffer();
+  }
+  // No photo: use the template's own gradient + decoration so a plate still
+  // carries the template's identity rather than a generic two-stop ramp.
+  const inner = design
+    ? templateBackgroundLayer(design, p, f, "plate")
+    : `<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${p.backgroundStart}"/><stop offset="1" stop-color="${p.backgroundEnd}"/></linearGradient></defs><rect width="${f.w}" height="${f.h}" fill="url(#g)"/>`;
+  const bg = `<svg xmlns="http://www.w3.org/2000/svg" width="${f.w}" height="${f.h}">${inner}</svg>`;
+  return sharp(Buffer.from(bg)).png().toBuffer();
+}
+
+// Maps a template's own palette onto the server palette shape.
+//
+// This is the core of the quality fix: before, the server never saw the
+// template id, so every template was painted with the same hardcoded palette
+// and theme. Now the template's declared colours win, and the theme only
+// supplies the background ramp when the template does not declare one.
+function paletteFromDesign(design, base) {
+  if (!design || !design.palette) return base;
+  const t = design.palette;
+  const bg = t.bg || base.backgroundStart;
+  return {
+    ...base,
+    name: `${design.name || design.templateId} · ${base.name}`,
+    backgroundStart: bg,
+    backgroundEnd: t.gradient ? bg : (t.bg || base.backgroundEnd),
+    accent: t.accent || base.accent,
+    primaryText: t.text || base.primaryText,
+    secondaryText: t.secondary || base.secondaryText,
+    muted: t.secondary || base.muted,
+    templateDim: Number.isFinite(Number(t.dim)) ? Number(t.dim) : null
+  };
+}
+
+async function renderStatCard(slide, category, paletteKey, format, imageUrl, options = {}) {
+  if (String(format || "").toLowerCase().includes("thumbnail")) {
+    return renderYouTubeThumbnail(slide, imageUrl, { ...options, palette: paletteKey });
+  }
+  const themeKey = options.theme || slide.theme || "modern_dark";
+  const typoKey = options.typography || slide.typography || "impact";
+  const densityKey = options.density || slide.density || "balanced";
+
+  const f = resolveFormat(format, densityKey);
+  const typo = resolveTypography(typoKey);
+  const type = resolveType(slide, (slide.slideNumber || 1) - 1, slide.totalSlides || 1);
+  const cat = typeof category === "string" ? { displayName: category, slug: "default" } : (category || { displayName: "", slug: "default" });
+
+  // Resolve the template the user actually picked. This is what makes each
+  // template produce the look it was designed for instead of a generic card.
+  const templateId = options.templateId || slide.templateId || null;
+  const design = templateId
+    ? designSystem.resolve(templateId, {
+        platform: options.platform || slide.platform,
+        index: (slide.slideNumber || 1) - 1,
+        total: slide.totalSlides || 1,
+        slide,
+        theme: themeKey
+      })
+    : null;
+
+  const basePalette = withTextColor(resolvePalette(paletteKey, themeKey), slide.textColor);
+  const p = design ? paletteFromDesign(design, basePalette) : basePalette;
+
+  let cover = slide.customImage ? await coverFromBase64(slide.customImage, f.w, f.h, options.focalPoint || slide.focalPoint) : null;
+  const isSingle = (slide.totalSlides || 1) <= 1;
+  const isFirstSlide = (slide.slideNumber || 1) === 1;
+  const wantsCover = type === "hook" || slide.useCover || slide.imageUrl || isFirstSlide || isSingle;
+  const photoUrl = slide.imageUrl || (wantsCover ? imageUrl : null);
+  // Shared cache: a carousel fetches + crops the same article photo once and
+  // every slide reuses it, instead of each slide re-downloading and re-decoding
+  // it. That is the single biggest win against the timing budget.
+  if (!cover && photoUrl) {
+    cover = await coverCache.loadCover(photoUrl, f.w, f.h, options.focalPoint || slide.focalPoint, {
+      timeoutMs: options.coverTimeoutMs
+    });
+  }
+  // Plate mode: clean background photo (dimmed) or palette gradient with no text
+  // or chrome. Early return isolates clean plates and skips text layout / SVG processing.
+  if (options.plateOnly || slide.plateOnly) {
+    return renderPlate(p, f, cover, slide, design);
+  }
+
+  const hasRequestedArticleImage = !!(slide.imageUrl || imageUrl);
+  const scrimStrength = cover ? cover.brightness : null;
+
+  const svg = type === "hook" ? renderHookSVG(p, f, slide, cat, scrimStrength, typo, design)
+    : type === "outro" ? renderOutroSVG(p, f, slide, cat, scrimStrength, typo, design)
+    : renderBodySVG(p, f, slide, cat, scrimStrength, typo, design);
+
+  const photoUrlForCard = slide.imageUrl || imageUrl;
+  const labels = [];
+  if (options.brand?.name) {
+    const name = escXml(String(options.brand.name).slice(0, 28));
+    const bottom = options.brand.placement === "bottom-left";
+    const y = bottom ? f.h - 128 : 150;
+    labels.push(`<g><rect x="${f.margin}" y="${y-34}" width="${Math.min(440, name.length*19+44)}" height="46" rx="23" fill="${p.backgroundEnd}" fill-opacity="0.82" stroke="${p.accent}" stroke-opacity="0.82" stroke-width="2"/><text x="${f.margin+20}" y="${y-4}" font-family="${typo.body}" font-size="20" font-weight="800" letter-spacing="1.2" fill="${p.primaryText}">${name}</text></g>`);
+  }
+  if (slide.silentCamera) {
+    labels.push(`<g><rect x="${f.margin}" y="${f.h-142}" width="310" height="42" rx="21" fill="${p.backgroundEnd}" fill-opacity="0.82" stroke="${p.accent}" stroke-opacity="0.8" stroke-width="2"/><text x="${f.margin+20}" y="${f.h-114}" font-family="${typo.body}" font-size="17" font-weight="700" letter-spacing="1.4" fill="${p.primaryText}">SILENT CAMERA · ON-SCREEN TEXT</text></g>`);
+  }
+  if (!cover && !slide.customImage) {
+    const missingText = hasRequestedArticleImage ? "SOURCE PHOTO UNAVAILABLE" : "NO ARTICLE PHOTO PROVIDED";
+    labels.push(`<g><rect x="${f.margin}" y="${f.h-198}" width="390" height="42" rx="21" fill="${p.backgroundEnd}" fill-opacity="0.92" stroke="${p.accent}" stroke-opacity="0.9" stroke-width="2"/><text x="${f.margin+20}" y="${f.h-170}" font-family="${typo.body}" font-size="17" font-weight="700" letter-spacing="1.2" fill="${p.primaryText}">${missingText}</text></g>`);
+  }
+  const labeledSvg = labels.length ? svg.replace("</svg>", `${labels.join("")}</svg>`) : svg;
+  const textLayer = await sharp(Buffer.from(labeledSvg)).png().toBuffer();
+  if (!cover) return textLayer;
+  // Dim the photo behind the text (0 = none, up to 0.8 = heavy), for legibility.
+  const dim = Number(slide.dim);
+  const layers = [];
+  if (Number.isFinite(dim) && dim > 0) {
+    const a = Math.min(0.8, dim).toFixed(2);
+    const dimSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="${f.w}" height="${f.h}"><rect width="${f.w}" height="${f.h}" fill="#000" fill-opacity="${a}"/></svg>`;
+    layers.push({ input: await sharp(Buffer.from(dimSvg)).png().toBuffer() });
+  }
+  layers.push({ input: textLayer });
+  return sharp(cover.buffer).composite(layers).png().toBuffer();
+}
+
+// Renders slides in small concurrent batches rather than all at once.
+// Each slide with a photo (a user upload, the local niche library, or the
+// live article photo) runs a full decode+resize+composite pipeline through
+// sharp — doing that for up to 10 slides simultaneously is exactly the kind
+// of spike that exceeds a small Render instance's memory limit and triggers
+// a forced restart. Capping how many run at once bounds peak memory
+// regardless of carousel size, at the cost of a slightly longer total
+// render time — a trade worth making over the service restarting.
+// Renders slides in bounded concurrent batches.
+//
+// History: this used to be strictly sequential (concurrency 1) because each
+// slide re-downloaded and re-decoded the same article photo, and doing that for
+// several slides at once spiked memory on a small Render instance. Now the
+// photo is fetched and cropped ONCE into services/coverCache and shared, so the
+// per-slide work is just an SVG rasterise + composite — cheap enough to run a
+// few at a time. The cap still bounds peak memory, but it is no longer 1, which
+// is what lets a 6-slide carousel finish inside the 15-second budget.
+const CARD_RENDER_CONCURRENCY = 3;
+
+// Runs `worker` over `items` with at most `limit` in flight, preserving order.
+async function mapWithConcurrency(items, limit, worker) {
+  const out = new Array(items.length);
+  let next = 0;
+  const runners = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, async () => {
+    while (true) {
+      const i = next++;
+      if (i >= items.length) return;
+      out[i] = await worker(items[i], i);
+    }
+  });
+  await Promise.all(runners);
+  return out;
+}
+
+async function renderCardSet(slides, category, paletteKey, format, imageUrl, options = {}) {
+  const total = slides.length;
+  const budget = require("../public/lib/generationBudget.js");
+  const limit = options.concurrency || budget.concurrency(total);
+  const buffers = await mapWithConcurrency(slides, limit, (s, i) =>
+    renderStatCard(
+      { ...s, slideNumber: i + 1, totalSlides: total },
+      category,
+      paletteKey,
+      format,
+      imageUrl,
+      options
+    )
+  );
+  return buffers.map(b => `data:image/png;base64,${b.toString("base64")}`);
+}
+
+module.exports = {
+  renderStatCard,
+  renderCardSet,
+  // Exposed so a test can prove the export draws the SAME wrapped lines the
+  // layout engine produced (i.e. the download matches the preview).
+  designLines,
+  mapWithConcurrency,
+  paletteFromDesign,
+  templateGradientDefs,
+  templateDecoration,
+  PALETTE,
+  DEFAULT_PALETTE,
+  THEMES,
+  TYPOGRAPHIES,
+  DENSITIES,
+  resolvePalette,
+  resolveFormat,
+  resolveTypography,
+  resolveDensity,
+  photoMissingLayer,
+  buildEditorialPhotoCover,
+  fetchCoverImage,
+  renderYouTubeThumbnail,
+  CATEGORY_ICON,
+  CATEGORY_ICON_OVERRIDES
+};
