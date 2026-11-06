@@ -181,18 +181,20 @@ test('template tiles are mini previews of the real template', () => {
 
 // ── Cache busting ────────────────────────────────────────────────────────────
 test('core.js and the service worker cache are bumped together', () => {
-  assert.match(html, /core\.js\?v=64/);
-  assert.match(sw, /creatorpulse-v43/);
+  assert.match(html, /core\.js\?v=65/);
+  assert.match(sw, /creatorpulse-v44/);
   assert.match(html, /lib\/cardLayout\.js\?v=3/, 'the shared layout facade is loaded');
-  assert.match(html, /lib\/cardPaint\.js\?v=2/, 'the new painter is loaded');
+  assert.match(html, /lib\/cardPaint\.js\?v=3/, 'the new painter is loaded');
   assert.match(html, /lib\/themePreview\.js\?v=1/, 'the new theme preview is loaded');
   // The design system loads in dependency order, before core.js reads it.
-  assert.match(html, /lib\/cardTypography\.js\?v=1/, 'typography is loaded');
+  assert.match(html, /lib\/cardTypography\.js\?v=2/, 'typography is loaded');
   assert.match(html, /lib\/cardTemplates\.js\?v=1/, 'the template specs are loaded');
-  assert.match(html, /lib\/photoTreatments\.js\?v=1/, 'the photo treatments are loaded');
-  assert.match(html, /lib\/cardLayoutEngine\.js\?v=1/, 'the layout engine is loaded');
+  assert.match(html, /lib\/photoTreatments\.js\?v=2/, 'the photo treatments are loaded');
+  assert.match(html, /lib\/contentTypes\.js\?v=1/, 'the content types are loaded');
+  assert.match(html, /lib\/roleLayouts\.js\?v=1/, 'the story roles are loaded');
+  assert.match(html, /lib\/cardLayoutEngine\.js\?v=2/, 'the layout engine is loaded');
   assert.match(html, /lib\/cardEditor\.js\?v=1/, 'the editor is loaded');
-  assert.ok(html.indexOf('lib/cardLayoutEngine.js') < html.indexOf('core.js?v=64'), 'the engine loads before core.js');
+  assert.ok(html.indexOf('lib/cardLayoutEngine.js') < html.indexOf('core.js?v=65'), 'the engine loads before core.js');
 });
 
 // ── Plus AI must not be broken ───────────────────────────────────────────────

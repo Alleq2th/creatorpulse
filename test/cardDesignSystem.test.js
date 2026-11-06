@@ -115,9 +115,13 @@ test('the templates are different from each other, not one design in different c
 
 // ── Part 3: photo treatments ─────────────────────────────────────────────────
 
-test('there are seven named photo treatments and each template picks exactly one', () => {
+test('there are eight named photo treatments and each template picks exactly one', () => {
   const list = treatments.list();
-  assert.equal(list.length, 7);
+  assert.equal(list.length, 8);
+  // The six the design brief names must all be present.
+  for (const id of treatments.REQUIRED) {
+    assert.ok(treatments.TREATMENTS[id], 'the brief names the ' + id + ' treatment');
+  }
   for (const t of templates.list()) {
     const d = resolve(t.id, t.platform, 'hook');
     assert.ok(treatments.NAMES[d.treatment.id], t.id + ' uses a named treatment');
@@ -128,7 +132,7 @@ test('the treatments are structurally distinct, not one treatment recoloured', (
   const shapes = new Set();
   for (const item of treatments.list()) {
     const d = treatments.resolve(item.id, { accent: '#e0a83c', dim: 0.4 });
-    const shape = JSON.stringify([d.frame, !!d.scrim, !!d.tint, !!d.backdrop, !!d.rule, !!d.border]);
+    const shape = JSON.stringify([d.frame, !!d.scrim, !!d.tint, !!d.backdrop, !!d.rule, !!d.border, d.focal || null]);
     assert.ok(!shapes.has(shape), item.id + ' duplicates another treatment');
     shapes.add(shape);
   }
@@ -153,8 +157,8 @@ test('typography is one source of truth: the engine uses its faces and its auto-
   const head = d.layers.find(l => l.key === 'headline');
   assert.equal(head.fontFamily, typography.face('impact').family);
   const fit = typography.autoFit({
-    text: SLIDE.headline.toUpperCase(), boxW: 0.84 * 0.90, boxH: 0.3 * 0.90, canvasW: 1080, canvasH: 1350,
-    lineHeight: 1.12, heightFactor: 1.12, maxLines: 4, minPct: 0.022, maxPct: 0.082
+    text: SLIDE.headline.toUpperCase(), boxW: head.fitBoxW, boxH: head.fitBoxH, canvasW: 1080, canvasH: 1350,
+    lineHeight: head.lineHeight, heightFactor: typography.lineBoxFactor('impact'), maxLines: 4, minPct: 0.022, maxPct: head.fitMaxPct
   });
   assert.equal(head.sizePct, fit.sizePct);
   assert.deepEqual(head.lines, fit.lines);

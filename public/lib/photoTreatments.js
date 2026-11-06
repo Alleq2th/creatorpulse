@@ -13,6 +13,18 @@
  * rgba stops, numeric filters). The DOM preview and the canvas export both read
  * that descriptor, so a treatment looks identical in both.
  *
+ * THE SCRIM RULE (enforced by the tests)
+ * --------------------------------------
+ * Wherever a text box overlaps the photo, a scrim must darken the photo under
+ * it, so a source photo's own logo or a bright block never fights the type.
+ * `scrimFor(treatment, textBoxes)` is the ONE place that decides this: it
+ * returns the scrim stops when any text box overlaps the photo frame, and null
+ * when the type sits on its own solid field. A treatment may also declare a
+ * `scrim` of its own (a full-bleed card always wants one); the rule then keeps
+ * it. `highContrastRegions()` finds the busy areas of a photo (by luminance
+ * variance) so a caller can assert that a high-contrast region under text is
+ * never left unscrimmed.
+ *
  * Runs in the browser (window.CPPhotoTreatments) and in Node (module.exports).
  */
 (function (root, factory) {
@@ -158,7 +170,29 @@
     };
   }
 
-  /* 6. HARD CROP + ACCENT RULE — the photo is cropped hard to a band and a
+  /* 6. SUBJECT-AWARE CROP — the photo is full-bleed, but the crop is biased
+   *    toward the UPPER-MIDDLE of the source, where a face usually is, so a
+   *    portrait is not decapitated by a centre crop. The type sits low on a
+   *    scrim, exactly as on a full-bleed card. */
+  function subjectAwareCrop(ctx) {
+    var dim = ctx.dim;
+    return {
+      id: 'subjectAwareCrop',
+      name: 'Subject-aware crop',
+      frame: { x: 0, y: 0, width: 1, height: 1, radius: 0 },
+      filter: { brightness: 1, contrast: 1.03, saturation: 1, blur: 0, grayscale: 0 },
+      scrim: scrimStops(dim, 0.22, 1),
+      tint: null,
+      rule: null,
+      backdrop: null,
+      // The crop bias: 0.5 = centre, 0.38 = upper-middle (faces). The export
+      // and the preview both read this, so the crop cannot drift between them.
+      focal: { x: 0.5, y: 0.38 },
+      textZone: { x: 0.06, y: 0.34, width: 0.88, height: 0.58 }
+    };
+  }
+
+  /* 7. HARD CROP + ACCENT RULE — the photo is cropped hard to a band and a
    *    single accent rule marks the edge between photo and type. */
   function hardCropRule(ctx) {
     return {
@@ -181,6 +215,7 @@
     insetFrame: insetFrame,
     tallInset: tallInset,
     blurredBackdrop: blurredBackdrop,
+    subjectAwareCrop: subjectAwareCrop,
     hardCropRule: hardCropRule
   };
 
@@ -191,8 +226,13 @@
     insetFrame: 'Inset frame',
     tallInset: 'Tall inset',
     blurredBackdrop: 'Blurred backdrop',
+    subjectAwareCrop: 'Subject-aware crop',
     hardCropRule: 'Hard crop + accent rule'
   };
+
+  /* The six treatments the design brief names, in the order it names them. The
+   * other two (tallInset, hardCropRule) are the platform's own extra variants. */
+  var REQUIRED = ['fullBleedScrim', 'duotone', 'splitPanel', 'insetFrame', 'blurredBackdrop', 'subjectAwareCrop'];
 
   /* Resolves a treatment id into its descriptor. `ctx` carries the template's
    * accent, dim and any per-template options (e.g. which side a split sits on).
@@ -208,11 +248,91 @@
     return Object.keys(TREATMENTS).map(function (id) { return { id: id, name: NAMES[id] }; });
   }
 
+  /* ── The scrim rule ────────────────────────────────────────────────────────
+   * Does a box overlap the photo frame? Touching edges do not count. */
+  function overlaps(a, b) {
+    if (!a || !b) return false;
+    return a.x < b.x + b.width && a.x + a.width > b.x &&
+           a.y < b.y + b.height && a.y + a.height > b.y;
+  }
+
+  /* The scrim a card must draw, given its treatment and the text boxes the
+   * engine resolved. Returns the scrim stops when ANY text box overlaps the
+   * photo frame (or when the treatment declares its own scrim, e.g. a full-bleed
+   * card), and null when the type sits on its own solid field. This is the ONE
+   * place the rule lives, so the preview and the export cannot disagree. */
+  function scrimFor(treatment, textBoxes) {
+    if (!treatment) return null;
+    var frame = treatment.frame || { x: 0, y: 0, width: 1, height: 1 };
+    var boxes = Array.isArray(textBoxes) ? textBoxes : [];
+    var anyOverlap = boxes.some(function (b) { return b && !b.empty && overlaps(b, frame); });
+    if (anyOverlap) {
+      // A treatment that already declares a scrim keeps it (it is tuned to the
+      // composition); otherwise a default scrim is applied over the photo.
+      return treatment.scrim || scrimStops(0.45, Math.max(0, frame.y), Math.min(1, frame.y + frame.height));
+    }
+    return treatment.scrim || null;
+  }
+
+  /* ── High-contrast detection ───────────────────────────────────────────────
+   * Finds the busy regions of a photo by luminance variance, so a caller can
+   * assert that a high-contrast region under text is never left unscrimmed.
+   *
+   * `pixels` is a flat RGBA array (as ImageData.data), `w`/`h` its dimensions.
+   * The image is divided into a grid; each cell's luminance variance is
+   * measured, and cells above `threshold` are returned as boxes in canvas
+   * fractions. A cell is "high contrast" when its pixels disagree about how
+   * bright they are — which is exactly what makes type unreadable. */
+  function highContrastRegions(pixels, w, h, opts) {
+    var o = opts || {};
+    var cols = Math.max(1, Number(o.cols) || 6);
+    var rows = Math.max(1, Number(o.rows) || 6);
+    var threshold = Number(o.threshold) || 900; // variance of 0-255 luminance
+    var out = [];
+    if (!pixels || !w || !h) return out;
+    var cw = Math.floor(w / cols), ch = Math.floor(h / rows);
+    if (cw < 1 || ch < 1) return out;
+    for (var r = 0; r < rows; r++) {
+      for (var c = 0; c < cols; c++) {
+        var sum = 0, sumSq = 0, n = 0;
+        for (var y = r * ch; y < (r + 1) * ch; y += 2) {
+          for (var x = c * cw; x < (c + 1) * cw; x += 2) {
+            var i = (y * w + x) * 4;
+            var lum = 0.2126 * pixels[i] + 0.7152 * pixels[i + 1] + 0.0722 * pixels[i + 2];
+            sum += lum; sumSq += lum * lum; n++;
+          }
+        }
+        if (!n) continue;
+        var mean = sum / n;
+        var variance = sumSq / n - mean * mean;
+        if (variance >= threshold) {
+          out.push({ x: c / cols, y: r / rows, width: 1 / cols, height: 1 / rows, variance: variance });
+        }
+      }
+    }
+    return out;
+  }
+
+  /* True when a high-contrast region sits under a text box and the card has no
+   * scrim to protect it. The tests use this to prove the rule holds. */
+  function unscrimmedHighContrast(regions, textBoxes, scrim) {
+    if (scrim) return [];
+    var boxes = Array.isArray(textBoxes) ? textBoxes : [];
+    return (regions || []).filter(function (reg) {
+      return boxes.some(function (b) { return b && !b.empty && overlaps(b, reg); });
+    });
+  }
+
   return {
     TREATMENTS: TREATMENTS,
     NAMES: NAMES,
+    REQUIRED: REQUIRED,
     resolve: resolve,
     list: list,
-    scrimStops: scrimStops
+    scrimStops: scrimStops,
+    scrimFor: scrimFor,
+    overlaps: overlaps,
+    highContrastRegions: highContrastRegions,
+    unscrimmedHighContrast: unscrimmedHighContrast
   };
 });

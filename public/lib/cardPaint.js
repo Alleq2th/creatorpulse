@@ -132,10 +132,44 @@
         color: d.bg,
         font: '900 ' + (d.size / W * 100).toFixed(3) + 'cqw/0.9 Inter, sans-serif',
         letterSpacing: '-.02em',
+        // Tabular digits, so a stat's figures line up (Part 5).
+        fontVariantNumeric: d.tabular ? 'tabular-nums' : 'normal',
         display: 'flex', alignItems: 'center', justifyContent: 'flex-start',
         whiteSpace: 'nowrap', overflow: 'hidden'
       });
     }
+  }
+
+  /* Paints the carousel counter / progress dots into the card itself, so a
+   * downloaded slide still shows where it sits in the set (Part 4). The dots
+   * and the label come from the same resolved layout the export draws from. */
+  function paintCounter(el, design) {
+    if (!el) return;
+    var c = design && design.counter;
+    if (!c) { el.hidden = true; el.textContent = ''; return; }
+    var canvas = (design && design.canvas) || { width: 1080, height: 1350 };
+    var W = canvas.width, H = canvas.height;
+    el.hidden = false;
+    el.textContent = '';
+    el.removeAttribute('style');
+    var cqw = function (px) { return (px / W * 100).toFixed(3) + 'cqw'; };
+    Object.assign(el.style, {
+      position: 'absolute', zIndex: '3', pointerEvents: 'none',
+      left: (c.x / W * 100).toFixed(3) + '%', top: (c.y / H * 100).toFixed(3) + '%',
+      width: (c.width / W * 100).toFixed(3) + '%', height: (c.height / H * 100).toFixed(3) + '%',
+      display: 'flex', alignItems: 'center', gap: cqw(c.gap),
+      font: '600 ' + cqw(c.size) + '/1 Inter, sans-serif',
+      color: 'rgba(246,246,246,.72)', letterSpacing: '.06em', whiteSpace: 'nowrap'
+    });
+    (c.dots || []).forEach(function (dot) {
+      var s = document.createElement('span');
+      s.style.cssText = 'display:block;border-radius:50%;width:' + cqw(c.dotR * 2) + ';height:' + cqw(c.dotR * 2) +
+        ';background:' + (dot.active ? (c.accent || '#f6f6f6') : 'rgba(246,246,246,.30)');
+      el.appendChild(s);
+    });
+    var label = document.createElement('span');
+    label.textContent = c.label;
+    el.appendChild(label);
   }
 
   /* Paints the legibility scrim behind the text area. A dark gradient from the
@@ -155,7 +189,7 @@
     el.style.opacity = '1';
   }
 
-  var api = { paintDecoration: paintDecoration, paintScrim: paintScrim };
+  var api = { paintDecoration: paintDecoration, paintScrim: paintScrim, paintCounter: paintCounter };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (root) root.CPCardPaint = api;
 })(typeof window !== 'undefined' ? window : null);
