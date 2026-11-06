@@ -855,3 +855,53 @@
 .cc-live-stage .cp-canvas-block.is-selected .cp-resize-top:before,.cc-live-stage .cp-canvas-block.is-selected .cp-resize-side:before{content:"";position:absolute;background:#073447;border-radius:4px}
 .cc-live-stage .cp-canvas-block.is-selected .cp-resize-top:before{left:5px;right:5px;top:5px;height:3px}
 .cc-live-stage .cp-canvas-block.is-selected .cp-resize-side:before{top:5px;bottom:5px;left:5px;width:3px}
+
+/* ── Part 6: the editing experience ─────────────────────────────────────────
+   The editor's five nav items (icon + short label), the layout-variant
+   carousel, the edit-mode guides, the skeleton placeholder and the real-card
+   thumbnails. One accent per card, hairline borders, 8-point spacing. */
+
+/* The nav bar: at most five items, each an icon plus a short label. */
+.cc-ed-navbar{display:flex;gap:4px;border-top:1px solid var(--br,#2c2c2c);padding:6px 8px;background:var(--sf,#161616)}
+.cc-ed-nav{flex:1 1 0;display:flex;flex-direction:column;align-items:center;gap:2px;min-height:48px;padding:6px 2px;border:0;border-radius:10px;background:transparent;color:var(--mu2,#9a9a9a);font-size:10px;font-weight:600;cursor:pointer}
+.cc-ed-nav.active{color:var(--ac,#ff7a1a);background:color-mix(in srgb,var(--ac,#ff7a1a) 12%,transparent)}
+.cc-ed-nav-ic{font-size:16px;line-height:1}
+.cc-ed-nav-lb{font-size:10px;letter-spacing:.02em}
+
+/* The layout-variant carousel: 3-4 real compositions for THIS slide. */
+.cc-ed-carousel{scroll-snap-type:x proximity}
+.cc-ed-carousel .cc-ed-tile{scroll-snap-align:start}
+.cc-ed-variant .cc-ed-frame{aspect-ratio:4/5}
+.cc-ed-tools{justify-content:flex-end}
+
+/* Edit-mode guides: dashed outlines and the safe zone. Drawn ONLY while the
+   stage is in edit mode, so a preview or an export never shows a guide. */
+.cc-guides{position:absolute;inset:0;z-index:6;pointer-events:none}
+.cc-guide-safe{position:absolute;border:1px dashed rgba(246,246,246,.55);border-radius:6px}
+.cc-guide-safe-tag{position:absolute;top:3px;left:5px;background:rgba(22,22,22,.72);color:#f6f6f6;font-size:9px;font-weight:700;padding:2px 5px;border-radius:4px}
+.cc-guide-box{position:absolute;border:1px dashed rgba(246,246,246,.7);border-radius:4px}
+.cc-guide-tag{position:absolute;top:-14px;left:0;background:rgba(22,22,22,.72);color:#f6f6f6;font-size:9px;font-weight:700;padding:1px 4px;border-radius:3px;white-space:nowrap}
+.cc-live-stage.is-editing .cp-canvas-block{border:1px dashed rgba(246,246,246,.7)}
+
+/* Skeleton loading: a shimmering placeholder with the card's own shape, shown
+   while an image generates — never a spinner. */
+.cc-live-skeleton{position:absolute;inset:0;z-index:7;background:#161616;display:flex;flex-direction:column;justify-content:flex-end;gap:10px;padding:8%}
+.cc-live-skeleton[hidden]{display:none}
+.cc-skel{position:relative;width:100%;height:100%;display:flex;flex-direction:column;justify-content:flex-end;gap:10px;padding:8%}
+.cc-skel-bar{display:block;height:14px;border-radius:6px;background:linear-gradient(90deg,#232323 25%,#2c2c2c 37%,#232323 63%);background-size:400% 100%;animation:cc-skel-shimmer 1.4s ease-in-out infinite}
+.cc-skel-bar-1{width:78%;height:22px}
+.cc-skel-bar-2{width:60%}
+.cc-skel-bar-3{width:40%}
+.cc-skel-label{font-size:11px;color:#9a9a9a;letter-spacing:.02em}
+@keyframes cc-skel-shimmer{0%{background-position:100% 0}100%{background-position:0 0}}
+@media (prefers-reduced-motion:reduce){.cc-skel-bar{animation:none}}
+
+/* Real-card thumbnails: every tile is a miniature of the actual card, with the
+   user's own photo and text — never a flat colour box. */
+.cc-thumb{display:flex;flex-direction:column;gap:6px;width:116px;flex:0 0 auto;padding:6px;background:transparent;border:2px solid transparent;border-radius:12px;cursor:pointer;text-align:left;color:inherit}
+.cc-thumb.active{border-color:var(--ac,#ff7a1a)}
+.cc-thumb-name{font-size:12px;font-weight:600;text-align:center}
+.cc-th-frame{position:relative;display:block;width:100%;aspect-ratio:4/5;border-radius:10px;overflow:hidden;background-color:#1b1b1f;container-type:inline-size}
+.cc-th-photo{position:absolute;z-index:0;background-size:cover;background-position:center;background-repeat:no-repeat}
+.cc-th-scrim{position:absolute;inset:0;z-index:1;pointer-events:none}
+.cc-th-layer{position:absolute;z-index:2;display:block;overflow:hidden;overflow-wrap:anywhere;white-space:pre-wrap}

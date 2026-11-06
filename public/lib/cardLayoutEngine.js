@@ -128,6 +128,48 @@
     return { x: x, y: y, width: width, height: height };
   }
 
+  /* Part 6: the 8-point grid. A dragged box is snapped to whole 8-card-pixel
+   * steps, so text always lands on the same rhythm as the rest of the design.
+   * The snap is applied ONLY to a per-slide override, so every template's own
+   * region is left exactly as authored. */
+  var GRID = 8;
+  function snapFraction(v, canvasSize) {
+    var step = GRID / (canvasSize || 1080);
+    return Math.round(Number(v) / step) * step;
+  }
+  function snapBox(box, canvas) {
+    var w = (canvas && canvas.width) || 1080;
+    var h = (canvas && canvas.height) || 1350;
+    return {
+      x: snapFraction(box.x, w),
+      y: snapFraction(box.y, h),
+      width: Math.max(GRID / w, snapFraction(box.width, w)),
+      height: Math.max(GRID / h, snapFraction(box.height, h))
+    };
+  }
+
+  /* Snaps a box to the 8-point grid AND keeps it inside the safe zone, without
+   * ever leaving the grid. The safe-zone edges are themselves snapped to the
+   * grid first, so clamping to them lands on a whole step: a dragged box is
+   * always on the grid and always inside the safe area, at the same time. */
+  function snapBoxInZone(box, canvas, zone) {
+    var w = (canvas && canvas.width) || 1080;
+    var h = (canvas && canvas.height) || 1350;
+    var z = zone || { top: 0, bottom: 0, left: 0, right: 0 };
+    // The safe-zone edges are snapped INWARD (left/top up, right/bottom down),
+    // so a box clamped to them is always strictly inside the true safe zone and
+    // still on a whole 8pt step.
+    var stepW = GRID / w, stepH = GRID / h;
+    var left = Math.ceil(z.left / stepW) * stepW, top = Math.ceil(z.top / stepH) * stepH;
+    var right = Math.floor((1 - z.right) / stepW) * stepW, bottom = Math.floor((1 - z.bottom) / stepH) * stepH;
+    var snapped = snapBox(box, canvas);
+    var width = Math.min(snapped.width, Math.max(stepW, right - left));
+    var height = Math.min(snapped.height, Math.max(stepH, bottom - top));
+    var x = Math.min(Math.max(snapped.x, left), Math.max(left, right - width));
+    var y = Math.min(Math.max(snapped.y, top), Math.max(top, bottom - height));
+    return { x: x, y: y, width: width, height: height };
+  }
+
   /* The badge used to be a div with `inset:0` plus left/top, so it stretched to
    * the whole card — the giant coloured blob. Its size is computed here in card
    * pixels and clamped, so it is always a pill. */
@@ -268,13 +310,21 @@
       // A "stack" region breaks the headline into short lines (3-4 words) so the
       // composition reads as a deliberate ladder rather than a paragraph.
       if (region.stack && displayText) displayText = stackWords(displayText, 4);
-      var box = clampToSafeZone({ x: Number(region.x) || 0, y: Number(region.y) || 0, width: Number(region.width) || 0.8, height: Number(region.height) || 0.2 }, platform, template);
+      // Part 6: a per-slide box override (drag-to-reposition) wins over the
+      // template's own region. It is snapped to the 8-point grid and clamped to
+      // the safe zone, so a dragged box lands on the grid and can never leave
+      // the safe area. Without an override the template's region is used
+      // unchanged, so every existing layout is untouched.
+      var override = slide.textLayout && slide.textLayout[L.key];
+      var geom = override || region;
+      var rawBox = { x: Number(geom.x) || 0, y: Number(geom.y) || 0, width: Number(geom.width) || 0.8, height: Number(geom.height) || 0.2 };
+      var box = override ? snapBoxInZone(rawBox, canvas, safeZone(platform, template)) : clampToSafeZone(rawBox, platform, template);
       // Part 4: the content type may nudge the HEADLINE block — a stat slide
       // lifts it to clear the giant number, a breaking slide sits higher. Only
       // the headline moves: shifting the supporting line too would push it into
       // the CTA below. The hook is governed by the role alone, so it is never
       // nudged.
-      if (role !== 'hook' && variant.shiftY && L.key === 'headline') {
+      if (!override && role !== 'hook' && variant.shiftY && L.key === 'headline') {
         var shifted = clampToSafeZone(Object.assign({}, box, { y: box.y + variant.shiftY }), platform, template);
         // If the box already sits against the safe-zone edge, the nudge would be
         // clamped away; nudge the other way so the content type still changes
@@ -352,7 +402,10 @@
       // is unchanged, so the safe-zone clamp still holds; the box is shrunk to
       // wrap the text (with a little headroom) and moved down to meet that edge.
       var anchor = region.anchor || 'top';
-      if (anchor === 'bottom') {
+      // A dragged box keeps the exact geometry the user placed: the anchor
+      // shrink is skipped for an override, or it would silently move the box
+      // back to the template's own bottom edge.
+      if (anchor === 'bottom' && !override) {
         var textH = (fit.lines.length * fit.sizePct * canvas.width * fit.lineHeight * typography.lineBoxFactor(faceId)) / canvas.height;
         var boxH = Math.min(box.height, textH);
         box = { x: box.x, y: box.y + (box.height - boxH), width: box.width, height: boxH };
@@ -473,6 +526,10 @@
     layerText: layerText,
     safeZone: safeZone,
     clampToSafeZone: clampToSafeZone,
+    GRID: GRID,
+    snapFraction: snapFraction,
+    snapBox: snapBox,
+    snapBoxInZone: snapBoxInZone,
     decorationGeometry: decorationGeometry,
     resolve: resolve,
     wrapLines: wrapLines,

@@ -11,3 +11,4 @@ pages/
 # Playwright end-to-end test output
 playwright-report/
 test-results/
+shots-editing/
