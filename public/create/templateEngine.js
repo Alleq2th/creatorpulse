@@ -82,7 +82,7 @@
 
   function legacyImageMode(treatmentId) {
     if (treatmentId === 'splitPanel') return 'split';
-    if (treatmentId === 'insetFrame' || treatmentId === 'blurredBackdrop') return 'panel';
+    if (treatmentId === 'insetFrame' || treatmentId === 'blurredBackdrop' || treatmentId === 'tallInset') return 'panel';
     return 'fullBleed';
   }
 

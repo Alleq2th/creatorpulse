@@ -1306,7 +1306,12 @@ function renderCardLiveStage(o, tid, idx, slideIndex, slide, aspectRatio) {
     // the preview and the export identical and stops a late font swap from
     // pushing text out of its box.
     const shown = hasText ? ((layer && layer.lines && layer.lines.length) ? layer.lines.join("\n") : text) : label;
-    return `<div class="cp-canvas-block${sel ? " is-selected" : ""}${hasText ? "" : " is-empty"}" data-canvas-key="${key}" data-canvas-block="${name}" tabindex="0" role="slider" aria-label="Drag or resize ${label}" style="left:${pos.x*100}%;top:${pos.y*100}%;width:${pos.width*100}%;height:${pos.height*100}%"><div class="cc-live-text${hasText ? "" : " is-empty"}" data-cp-live="${name}" style="${cpLiveTextStyle(live, name, o, tid)}">${esc(shown)}</div><span class="cp-canvas-label">${label}</span><button type="button" class="cp-canvas-resize cp-resize-corner" data-canvas-resize="true" data-canvas-resize-mode="both" aria-label="Resize ${label} width and height"></button><button type="button" class="cp-canvas-resize cp-resize-side" data-canvas-resize="true" data-canvas-resize-mode="horizontal" aria-label="Resize ${label} width"></button><button type="button" class="cp-canvas-resize cp-resize-top" data-canvas-resize="true" data-canvas-resize-mode="vertical" aria-label="Resize ${label} height"></button></div>`;
+    // A template may highlight ONE keyword in its accent. The text is escaped
+    // first, so the only markup that reaches the DOM is the span added here.
+    const shownHtml = hasText && layer && layer.keyword && window.CPCardTypography
+      ? window.CPCardTypography.keywordHtml(layer)
+      : esc(shown);
+    return `<div class="cp-canvas-block${sel ? " is-selected" : ""}${hasText ? "" : " is-empty"}" data-canvas-key="${key}" data-canvas-block="${name}" tabindex="0" role="slider" aria-label="Drag or resize ${label}" style="left:${pos.x*100}%;top:${pos.y*100}%;width:${pos.width*100}%;height:${pos.height*100}%"><div class="cc-live-text${hasText ? "" : " is-empty"}" data-cp-live="${name}" style="${cpLiveTextStyle(live, name, o, tid)}">${shownHtml}</div><span class="cp-canvas-label">${label}</span><button type="button" class="cp-canvas-resize cp-resize-corner" data-canvas-resize="true" data-canvas-resize-mode="both" aria-label="Resize ${label} width and height"></button><button type="button" class="cp-canvas-resize cp-resize-side" data-canvas-resize="true" data-canvas-resize-mode="horizontal" aria-label="Resize ${label} width"></button><button type="button" class="cp-canvas-resize cp-resize-top" data-canvas-resize="true" data-canvas-resize-mode="vertical" aria-label="Resize ${label} height"></button></div>`;
   };
   return `<div class="cp-canvas-stage cc-live-stage" data-canvas-stage="${key}" data-tid="${tid}" data-idx="${idx}" data-slide-index="${slideIndex}" style="aspect-ratio:${aspectRatio}"><div class="cc-live-backdrop" aria-hidden="true"></div><div class="cc-live-plate"></div><div class="cc-live-tint" aria-hidden="true"></div><div class="cc-live-dim"></div><div class="cc-live-scrim" aria-hidden="true"></div><div class="cc-live-rule" aria-hidden="true"></div><div class="cc-live-status" role="status"></div><div class="cp-canvas-blocks" data-canvas-key="${key}" data-slide-index="${slideIndex}" data-card-key="${tid}-${idx}">${CARD_LAYERS.map(L => box(L.key, L.label, cpCardLayerText(live, L))).join("")}</div></div>`;
 }
@@ -2414,7 +2419,11 @@ function cpGetDesignState(tid, idx, si) {
         color: resolved.color,
         align: resolved.align,
         box: resolved.box,
-        empty: resolved.empty
+        empty: resolved.empty,
+        // The one keyword a template may highlight in its accent (Headline
+        // Stack, Neon). Carried into the export so the download matches.
+        keyword: resolved.keyword || "",
+        keywordColor: resolved.keywordColor || ""
       };
     }
     const layerSpec = template?.typography?.[L.key];
@@ -2664,7 +2673,27 @@ function cpDrawTextBox(ctx, l, W, H) {
   ctx.shadowOffsetY = 0.006 * W; // 0.6% of the width, as in the preview text-shadow
   ctx.shadowBlur = 0.035 * W;    // 3.5% of the width
   const xPos = l.align === "center" ? (left + bw / 2) : (l.align === "right" ? (left + bw) : left);
-  lines.forEach((ln, i) => ctx.fillText(ln, xPos, firstBaseline + i * lineH));
+  // One keyword may be highlighted in the accent. The line is drawn in the
+  // layer colour, then the keyword is over-painted in the accent at the same
+  // baseline, so the highlight lands exactly where the preview puts it.
+  const kw = String(l.keyword || "");
+  lines.forEach((ln, i) => {
+    const y = firstBaseline + i * lineH;
+    ctx.fillStyle = l.color;
+    ctx.fillText(ln, xPos, y);
+    if (kw && ln.indexOf(kw) > -1) {
+      const before = ln.slice(0, ln.indexOf(kw));
+      const wBefore = ctx.measureText(before).width;
+      const wKw = ctx.measureText(kw).width;
+      let kx = xPos;
+      if (l.align === "center") kx = xPos - ctx.measureText(ln).width / 2 + wBefore;
+      else if (l.align === "right") kx = xPos - ctx.measureText(ln).width + wBefore;
+      else kx = xPos + wBefore;
+      ctx.fillStyle = l.keywordColor || l.color;
+      ctx.fillText(kw, kx, y);
+      void wKw;
+    }
+  });
   ctx.restore();
 }
 
@@ -2823,6 +2852,25 @@ function cpDrawDecoration(ctx, d, W, H, palette) {
     for (let y = d.y; y < d.y + d.height; y += Math.max(8, W * 0.011)) ctx.fillRect(0, y, W, Math.max(2, W * 0.002));
   } else if (d.type === "split") {
     ctx.globalAlpha = 0.28; ctx.fillStyle = d.bg; ctx.fillRect(d.x, 0, d.width, H);
+  } else if (d.type === "quote") {
+    // An oversized quote mark, drawn as a glyph in the accent.
+    ctx.fillStyle = d.bg;
+    ctx.font = `900 ${d.size}px Georgia, serif`;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.globalAlpha = 0.9;
+    ctx.fillText(String(d.text || "\u201C"), d.x, d.y);
+  } else if (d.type === "hairline") {
+    ctx.fillStyle = d.bg; ctx.fillRect(d.x, d.y, d.width, d.height);
+  } else if (d.type === "caption") {
+    ctx.fillStyle = d.bg; ctx.fillRect(0, d.y, W, d.height);
+  } else if (d.type === "stat") {
+    // A giant stat number as the hero. It is a decoration, so it never wraps.
+    ctx.fillStyle = d.bg;
+    ctx.font = `900 ${d.size}px Inter, Arial, sans-serif`;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(String(d.text || ""), d.x, d.y + d.height / 2);
   }
   ctx.restore();
 }

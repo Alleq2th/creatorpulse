@@ -39,6 +39,16 @@
   ];
   var LAYER_KEYS = ['headline', 'supportingText', 'ctaLine'];
 
+  // The largest size each layer may reach when its region does not say. A
+  // supporting line or a call to action must stay clearly subordinate to the
+  // headline; without this a supporting line defaulted to the headline's own
+  // ceiling and rendered as large as the headline itself.
+  var DEFAULT_MAX_SIZE = { headline: 0.10, supportingText: 0.034, ctaLine: 0.030 };
+  // The smallest size each layer may shrink to when its region does not say.
+  // Supporting copy and calls to action must be able to shrink further than a
+  // headline, or a long line in a narrow column cannot fit its box at all.
+  var DEFAULT_MIN_SIZE = { headline: 0.022, supportingText: 0.013, ctaLine: 0.013 };
+
   // The canvas each platform renders on. A template's own canvas is its native
   // one, but the same card is previewed and exported in a 16:9 YouTube frame and
   // a 1:1 X frame, so the layout must be resolved for the frame it is drawn in.
@@ -50,6 +60,41 @@
   };
 
   function clamp(n, lo, hi) { return Math.max(lo, Math.min(hi, n)); }
+
+  /* A "stack" region breaks its text into short lines (a few words each) so the
+   * composition reads as a deliberate ladder rather than a paragraph. The break
+   * is a real newline, so the shared wrapper keeps it in both preview and export. */
+  function stackWords(text, perLine) {
+    var words = String(text == null ? '' : text).split(/\s+/).filter(Boolean);
+    var out = [];
+    for (var i = 0; i < words.length; i += perLine) out.push(words.slice(i, i + perLine).join(' '));
+    return out.join('\n');
+  }
+
+  /* The one word a template may highlight in its accent. The longest meaningful
+   * word wins, so the highlight lands on the idea, not on "the" or "and". */
+  var STOPWORDS = { the: 1, and: 1, for: 1, that: 1, with: 1, this: 1, from: 1, your: 1, you: 1, are: 1, was: 1, has: 1, have: 1, its: 1, it: 1, a: 1, an: 1, of: 1, to: 1, in: 1, on: 1, is: 1, be: 1, as: 1, at: 1, by: 1, or: 1, but: 1, not: 1, all: 1, can: 1, will: 1 };
+  function pickKeyword(text) {
+    var words = String(text == null ? '' : text).split(/\s+/).map(function (w) { return w.replace(/[^A-Za-z0-9%$]/g, ''); }).filter(Boolean);
+    var best = '';
+    words.forEach(function (w) {
+      if (w.length >= 4 && !STOPWORDS[w.toLowerCase()] && w.length > best.length) best = w;
+    });
+    return best;
+  }
+
+  /* Builds the decoration spec for a card: the template's own decoration, with
+   * the editor's accent override and — for the stat template — the slide's stat
+   * value, so the giant number is real content and an empty slot is hidden. */
+  function decorationSpec(template, style, slide) {
+    var spec = Object.assign({}, (template && template.decoration) || { type: 'none' });
+    if (style && style.accent) spec.accent = style.accent;
+    if (spec.type === 'stat') {
+      var s = slide || {};
+      spec.value = String(s.stat || s.statValue || s.statNumber || '').trim();
+    }
+    return spec;
+  }
 
   /* Reads a layer's text from a slide, tolerating the older field names the
    * generator still emits (body / reaction / stat / sectionLabel). */
@@ -102,6 +147,18 @@
     if (d.type === 'orb') return { type: 'orb', cx: Math.round(W * 0.78), cy: Math.round(H * 0.2), r: Math.round(W * 0.34), bg: d.accent || '#f6f6f6' };
     if (d.type === 'stripes') return { type: 'stripes', x: 0, y: Math.round(H * 0.86), width: W, height: Math.round(H * 0.05), bg: d.accent || '#f6f6f6' };
     if (d.type === 'split') return { type: 'split', x: Math.round(W * 0.5), y: 0, width: Math.max(2, Math.round(W * 0.002)), height: H, bg: d.accent || '#f6f6f6' };
+    // An oversized quote mark, drawn as a glyph in the accent (Quote Card).
+    if (d.type === 'quote') return { type: 'quote', text: '\u201C', x: Math.round(W * z.left), y: Math.round(H * 0.10), size: Math.round(W * 0.30), bg: d.accent || '#f6f6f6' };
+    // A thin hairline rule (Editorial Clean) — a rule, not a bar.
+    if (d.type === 'hairline') return { type: 'hairline', x: Math.round(W * z.left), y: Math.round(H * 0.10), width: Math.round(W * 0.10), height: Math.max(2, Math.round(W * 0.0025)), bg: d.accent || '#f6f6f6' };
+    // A single caption bar pinned to the bottom (Minimal Caption).
+    if (d.type === 'caption') return { type: 'caption', x: 0, y: Math.round(H * 0.80), width: W, height: Math.round(H * 0.20), bg: 'rgba(22,22,22,.72)' };
+    // A giant stat number as the hero (Data & Stat Split). Hidden when empty.
+    if (d.type === 'stat') {
+      var value = String(d.value || '').trim();
+      if (!value) return { type: 'none' };
+      return { type: 'stat', text: value, x: Math.round(W * z.left), y: Math.round(H * 0.30), width: Math.round(W * 0.40), height: Math.round(H * 0.30), size: Math.round(W * 0.20), bg: d.accent || '#f6f6f6' };
+    }
     return { type: 'none' };
   }
 
@@ -138,7 +195,7 @@
    * source of truth. */
   function legacyImageMode(treatmentId) {
     if (treatmentId === 'splitPanel') return 'split';
-    if (treatmentId === 'insetFrame' || treatmentId === 'blurredBackdrop') return 'panel';
+    if (treatmentId === 'insetFrame' || treatmentId === 'blurredBackdrop' || treatmentId === 'tallInset') return 'panel';
     return 'fullBleed';
   }
 
@@ -184,22 +241,38 @@
       var text = layerText(slide, L.key);
       var upper = face.upper || L.key === 'ctaLine';
       var displayText = upper ? text.toUpperCase() : text;
+      // A "stack" region breaks the headline into short lines (3-4 words) so the
+      // composition reads as a deliberate ladder rather than a paragraph.
+      if (region.stack && displayText) displayText = stackWords(displayText, 4);
       var box = clampToSafeZone({ x: Number(region.x) || 0, y: Number(region.y) || 0, width: Number(region.width) || 0.8, height: Number(region.height) || 0.2 }, platform, template);
       var scale = clamp(Number((style.layerScale || {})[L.key]) || 1, 0.5, 1.6);
-      var baseSize = clamp(Number(region.maxSize) || 0.06, Number(region.minSize) || 0.022, 0.12) * scale;
+      var baseSize = clamp(Number(region.maxSize) || DEFAULT_MAX_SIZE[L.key] || 0.06, Number(region.minSize) || DEFAULT_MIN_SIZE[L.key] || 0.022, 0.12) * scale;
       var fit = typography.autoFit({
         text: displayText,
-        // A small safety margin: the browser's real font metrics are slightly
-        // wider than the canvas measure, so fitting to 100% of the box could
-        // still overflow by a few pixels after a late font swap.
-        boxW: box.width * 0.98, boxH: box.height * 0.96,
+        // A safety margin: the browser's real font metrics and its own line
+        // breaking are slightly wider/taller than the canvas measure, so fitting
+        // to 100% of the box could still overflow by a few pixels after a late
+        // font swap. 0.90/0.95 leaves enough headroom that the DOM never
+        // overflows its box in a real browser.
+        boxW: box.width * 0.90, boxH: box.height * 0.90,
         canvasW: canvas.width, canvasH: canvas.height,
         lineHeight: 1.12,
+        heightFactor: 1.12,
         maxLines: Number(region.maxLines) || 5,
-        minPct: Number(region.minSize) || 0.022,
+        minPct: Number(region.minSize) || DEFAULT_MIN_SIZE[L.key] || 0.022,
         maxPct: baseSize,
         measureFor: opts.measureFor || function (px) { return measureFor(px, face.family, face.weight, typography.trackingFor({ fontId: faceId, tracking: region.tracking })); }
       });
+      // `anchor: 'bottom'` pins the text block to the BOTTOM of its box (Bold
+      // Impact's headline is the last thing on the card). The box's BOTTOM edge
+      // is unchanged, so the safe-zone clamp still holds; the box is shrunk to
+      // wrap the text (with a little headroom) and moved down to meet that edge.
+      var anchor = region.anchor || 'top';
+      if (anchor === 'bottom') {
+        var textH = (fit.lines.length * fit.sizePct * canvas.width * fit.lineHeight * 1.12) / canvas.height;
+        var boxH = Math.min(box.height, textH);
+        box = { x: box.x, y: box.y + (box.height - boxH), width: box.width, height: boxH };
+      }
       return {
         key: L.key,
         field: L.field,
@@ -220,7 +293,10 @@
         fits: fit.fits,
         maxLines: Number(region.maxLines) || 5,
         color: (style.layerColors && style.layerColors[L.key]) || (L.key === 'ctaLine' ? palette.accent : null) || style.textColor || palette.text,
-        uppercase: upper
+        uppercase: upper,
+        // One keyword may be highlighted in the accent (Headline Stack, Neon).
+        keyword: region.keyword ? pickKeyword(displayText) : '',
+        keywordColor: palette.accent
       };
     });
 
@@ -257,7 +333,7 @@
       typography: typographyMap,
       image: { mode: legacyImageMode(treatment.id), crop: 'cover', focal: 'center', frame: treatment.frame, filter: treatment.filter },
       imageFrame: treatment.frame,
-      decoration: decorationGeometry(style.accent ? Object.assign({}, template.decoration, { accent: style.accent }) : template.decoration, canvas, platform, template),
+      decoration: decorationGeometry(decorationSpec(template, style, slide), canvas, platform, template),
       scrim: treatment.scrim,
       safeZone: safeZone(platform, template),
       blank: layers.every(function (l) { return l.empty; })

@@ -45,6 +45,6 @@ test('export composition omits editor controls and draws text from design-state 
 });
 
 test('changed scripts are cache-busted for the app and service worker', () => {
-  assert.match(html, /core\.js\?v=63/);
-  assert.match(sw, /creatorpulse-v42/);
+  assert.match(html, /core\.js\?v=64/);
+  assert.match(sw, /creatorpulse-v43/);
 });

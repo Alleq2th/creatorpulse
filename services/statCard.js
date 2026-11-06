@@ -379,6 +379,20 @@ function tspansEmphasis(lines, x, startY, lineHeight, emphasisLine, accent, norm
   return lines.map((l, i) => `<tspan x="${x}" y="${startY + i * lineHeight}" fill="${i === emphasisLine ? accent : normal}">${escXml(l)}</tspan>`).join("");
 }
 
+// One keyword highlighted in the accent, inside an otherwise normal line. The
+// text is escaped first, so the only markup in the result is the tspan added
+// here. Used by the templates that highlight a keyword (Headline Stack, Neon).
+function tspansKeyword(lines, x, startY, lineHeight, keyword, accent, normal) {
+  const kw = String(keyword || "");
+  return lines.map((l, i) => {
+    const y = startY + i * lineHeight;
+    const idx = kw ? l.indexOf(kw) : -1;
+    if (idx < 0) return `<tspan x="${x}" y="${y}" fill="${normal}">${escXml(l)}</tspan>`;
+    const before = l.slice(0, idx), after = l.slice(idx + kw.length);
+    return `<tspan x="${x}" y="${y}" fill="${normal}">${escXml(before)}<tspan fill="${accent}">${escXml(kw)}</tspan>${escXml(after)}</tspan>`;
+  }).join("");
+}
+
 function fitStatFontSize(text, maxWidth, baseSize) {
   const estCharWidth = 0.66; // Inter Black digits
   const estWidth = String(text).length * baseSize * estCharWidth;
@@ -431,10 +445,29 @@ function templateDecoration(design, p, f) {
       return `<rect x="${m * 0.6}" y="${m * 0.6}" width="${f.w - m * 1.2}" height="${f.h - m * 1.2}" rx="18" fill="none" stroke="${p.accent}" stroke-opacity="0.22" stroke-width="2"/>`;
     case "corner":
       return `<path d="M ${f.w - m - 90} ${m} L ${f.w - m} ${m} L ${f.w - m} ${m + 90}" fill="none" stroke="${p.accent}" stroke-width="5" stroke-linecap="round"/>`;
-    case "badge":
-      return `<rect x="${f.w - m - 150}" y="${m - 6}" width="150" height="44" rx="22" fill="${p.accent}" fill-opacity="0.16" stroke="${p.accent}" stroke-opacity="0.6" stroke-width="2"/>`;
+    case "badge": {
+      // A tag pinned to the TOP-LEFT (Breaking Alert's "BREAKING").
+      const label = String((design.decoration && design.decoration.text) || "").toUpperCase();
+      const bw = Math.max(120, 26 + label.length * 15);
+      return `<rect x="${m}" y="${m - 6}" width="${bw}" height="44" rx="22" fill="${p.accent}" fill-opacity="0.16" stroke="${p.accent}" stroke-opacity="0.6" stroke-width="2"/><text x="${m + bw / 2}" y="${m + 24}" font-family="${FONT_SANS}" font-size="22" font-weight="800" letter-spacing="1.5" fill="${p.accent}" text-anchor="middle">${escXml(label)}</text>`;
+    }
     case "split":
       return `<rect x="${Math.round(f.w * 0.5)}" y="0" width="2" height="${f.h}" fill="${p.accent}" fill-opacity="0.28"/>`;
+    case "quote":
+      // An oversized quote mark in the accent (Quote Card).
+      return `<text x="${m}" y="${Math.round(f.h * 0.30)}" font-family="${FONT_SERIF}" font-size="${Math.round(f.w * 0.30)}" font-weight="900" fill="${p.accent}" fill-opacity="0.9">\u201C</text>`;
+    case "hairline":
+      // A thin hairline rule (Editorial Clean) — a rule, not a bar.
+      return `<rect x="${m}" y="${Math.round(f.h * 0.10)}" width="${Math.round(f.w * 0.10)}" height="3" fill="${p.accent}"/>`;
+    case "caption":
+      // A single caption bar pinned to the bottom (Minimal Caption).
+      return `<rect x="0" y="${Math.round(f.h * 0.80)}" width="${f.w}" height="${Math.round(f.h * 0.20)}" fill="#161616" fill-opacity="0.72"/>`;
+    case "stat": {
+      // A giant stat number as the hero (Data & Stat Split). Hidden when empty.
+      const v = String((design.decoration && design.decoration.value) || "").trim();
+      if (!v) return "";
+      return `<text x="${m}" y="${Math.round(f.h * 0.45)}" font-family="${FONT_SANS}" font-size="${Math.round(f.w * 0.20)}" font-weight="900" fill="${p.accent}" letter-spacing="-2">${escXml(v)}</text>`;
+    }
     case "orb":
       return `<defs><radialGradient id="tplOrb" cx="50%" cy="50%" r="50%"><stop offset="0%" stop-color="${p.accent}" stop-opacity="0.30"/><stop offset="100%" stop-color="${p.accent}" stop-opacity="0"/></radialGradient></defs><circle cx="${Math.round(f.w * 0.78)}" cy="${Math.round(f.h * 0.2)}" r="${Math.round(f.w * 0.34)}" fill="url(#tplOrb)"/>`;
     case "stripes":
@@ -715,7 +748,7 @@ function renderHookSVG(p, f, slide, category, scrimStrength, typo, design) {
   <svg width="${f.w}" height="${f.h}" viewBox="0 0 ${f.w} ${f.h}" xmlns="http://www.w3.org/2000/svg">
     ${backgroundLayer(p, f, scrimStrength, "hook", design)}
     ${pillHeader(p, f, category.displayName, category.slug, slide.slideNumber, slide.totalSlides, typo)}
-    <g ${textLayoutTransform(slide, "headline", f, { x: m, y: startY - size, width: f.w - 2*m, height: Math.max(lineH, lines.length * lineH) })}><text x="${m}" y="${startY}" font-family="${(head.layer && head.layer.fontFamily) || layerFont(slide, "headline", fontHead)}" font-size="${size}" font-weight="700">${tspansEmphasis(lines, m, startY, lineH, emphasisIdx, layerColor(slide, "headline") || p.accent, (head.layer && head.layer.color) || layerColor(slide, "headline") || p.primaryText)}</text></g>
+    <g ${textLayoutTransform(slide, "headline", f, { x: m, y: startY - size, width: f.w - 2*m, height: Math.max(lineH, lines.length * lineH) })}><text x="${m}" y="${startY}" font-family="${(head.layer && head.layer.fontFamily) || layerFont(slide, "headline", fontHead)}" font-size="${size}" font-weight="700">${(head.layer && head.layer.keyword) ? tspansKeyword(lines, m, startY, lineH, head.layer.keyword, layerColor(slide, "headline") || p.accent, (head.layer && head.layer.color) || p.primaryText) : tspansEmphasis(lines, m, startY, lineH, emphasisIdx, layerColor(slide, "headline") || p.accent, (head.layer && head.layer.color) || layerColor(slide, "headline") || p.primaryText)}</text></g>
     ${supportLines.length ? `<g ${textLayoutTransform(slide, "supportingText", f, { x: m, y: supportY - supportSize, width: f.w - 2*m, height: Math.max(supportLineH, supportLines.length * supportLineH) })}><text x="${m}" y="${supportY}" font-family="${(sup.layer && sup.layer.fontFamily) || layerFont(slide, "supportingText", fontBody)}" font-size="${supportSize}" fill="${(sup.layer && sup.layer.color) || layerColor(slide, "supportingText") || p.secondaryText}">${tspans(supportLines, m, supportY, supportLineH)}</text></g>` : ""}
     ${footerSVG}
   </svg>`;
@@ -1035,7 +1068,7 @@ function renderOutroSVG(p, f, slide, category, scrimStrength, typo, design) {
   <svg width="${f.w}" height="${f.h}" viewBox="0 0 ${f.w} ${f.h}" xmlns="http://www.w3.org/2000/svg">
     ${backgroundLayer(p, f, scrimStrength, "outro", design)}
     ${plainHeader(p, f, category.displayName, category.slug, slide.slideNumber, slide.totalSlides, typo)}
-    <g ${textLayoutTransform(slide, "headline", f, { x: m, y: startY - size, width: f.w - 2*m, height: Math.max(lineH, lines.length * lineH) })}><text x="${m}" y="${startY}" font-family="${(head.layer && head.layer.fontFamily) || layerFont(slide, "headline", fontHead)}" font-size="${size}" font-weight="700">${tspansEmphasis(lines, m, startY, lineH, emphasisIdx, layerColor(slide, "headline") || p.accent, (head.layer && head.layer.color) || layerColor(slide, "headline") || p.primaryText)}</text></g>
+    <g ${textLayoutTransform(slide, "headline", f, { x: m, y: startY - size, width: f.w - 2*m, height: Math.max(lineH, lines.length * lineH) })}><text x="${m}" y="${startY}" font-family="${(head.layer && head.layer.fontFamily) || layerFont(slide, "headline", fontHead)}" font-size="${size}" font-weight="700">${(head.layer && head.layer.keyword) ? tspansKeyword(lines, m, startY, lineH, head.layer.keyword, layerColor(slide, "headline") || p.accent, (head.layer && head.layer.color) || p.primaryText) : tspansEmphasis(lines, m, startY, lineH, emphasisIdx, layerColor(slide, "headline") || p.accent, (head.layer && head.layer.color) || layerColor(slide, "headline") || p.primaryText)}</text></g>
     ${supportLines.length ? `<g ${textLayoutTransform(slide, "supportingText", f, { x: m, y: supportY - supportSize, width: f.w - 2*m, height: Math.max(supportLineH, supportLines.length * supportLineH) })}><text x="${m}" y="${supportY}" font-family="${(sup.layer && sup.layer.fontFamily) || layerFont(slide, "supportingText", fontBody)}" font-size="${supportSize}" fill="${(sup.layer && sup.layer.color) || layerColor(slide, "supportingText") || p.secondaryText}">${tspans(supportLines, m, supportY, supportLineH)}</text></g>` : ""}
     <defs><linearGradient id="fadeLine2" x1="${m}" y1="0" x2="${f.w-m}" y2="0" gradientUnits="userSpaceOnUse">
       <stop offset="0%" stop-color="${p.accent}" stop-opacity="1"/><stop offset="100%" stop-color="${p.accent}" stop-opacity="0"/>
