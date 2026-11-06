@@ -168,6 +168,99 @@
       escHtml(text.slice(idx + kw.length));
   }
 
+  /* ── Part 5: the typography rules ─────────────────────────────────────────
+   * These are the rules the design brief sets, in one place so the engine, the
+   * preview and the export all obey the same numbers. */
+
+  /* Hierarchy with scale contrast: the hero must be at least this many times
+   * the supporting text. */
+  var SCALE_CONTRAST = 2.5;
+
+  /* Line-length limit: a hero line should not run past this many characters, or
+   * the eye loses the line. The engine uses it to cap the hero's box width. */
+  var HERO_MAX_CHARS = 18;
+
+  /* The room a line really needs, as a multiple of the font size. A browser's
+   * line box is taller than fontSize * line-height (it uses the font's own
+   * ascent + descent), and a display face like Anton is taller still — about
+   * 1.25x. The engine reserves this much per line when it checks a fit, so a
+   * tight leading never lets the glyphs spill out of the box. The VISUAL leading
+   * is still `leadingFor`, so the type stays tight; only the reserved room is
+   * generous. */
+  var LINE_BOX_FACTOR = 1.32;
+
+  /* The room a line needs depends on the face: a display face (Anton, Archivo
+   * Black) has tall glyphs and needs the most; a text face (Inter) needs less.
+   * Reserving the display figure for every face would waste a small box's
+   * height and force a needless shrink. */
+  function lineBoxFactor(fontId) {
+    var id = String(fontId || '');
+    if (id === 'impact' || id === 'condensed_sans') return 1.32;
+    if (id === 'editorial_serif' || id === 'classic_serif') return 1.30;
+    if (id === 'code_mono') return 1.26;
+    return 1.20; // modern_sans / modern_body
+  }
+
+  /* Tight leading on condensed headlines, looser on serif. A condensed face is
+   * set tight so a stack reads as one block; a serif needs air between lines. */
+  function leadingFor(fontId) {
+    var id = String(fontId || '');
+    if (id === 'editorial_serif' || id === 'classic_serif') return 1.24;
+    if (id === 'impact' || id === 'condensed_sans') return 1.02;
+    if (id === 'code_mono') return 1.18;
+    return 1.12;
+  }
+
+  /* Tabular digits: a stat must line up, so a numeric face is asked for
+   * tabular (fixed-width) figures. Only the faces that carry numbers get it. */
+  function tabularDigits(fontId) {
+    var id = String(fontId || '');
+    return id === 'modern_sans' || id === 'modern_body' || id === 'code_mono' || id === 'condensed_sans';
+  }
+
+  /* Auto-picks the ONE keyword a headline may highlight in the accent: the
+   * number if there is one (a stat is the point), else the longest meaningful
+   * word (the name or the verb), never a stopword. */
+  var STOPWORDS = { the: 1, and: 1, for: 1, that: 1, with: 1, this: 1, from: 1, your: 1, you: 1, are: 1, was: 1, has: 1, have: 1, its: 1, it: 1, a: 1, an: 1, of: 1, to: 1, in: 1, on: 1, is: 1, be: 1, as: 1, at: 1, by: 1, or: 1, but: 1, not: 1, all: 1, can: 1, will: 1, how: 1, why: 1, what: 1, who: 1, when: 1, new: 1, more: 1, most: 1 };
+  function pickKeyword(text) {
+    var raw = String(text == null ? '' : text);
+    // A number (with an optional % or $) is the strongest keyword.
+    var num = raw.match(/[$€£]?\d[\d.,]*%?/);
+    if (num && num[0].replace(/[^\d]/g, '').length >= 1) return num[0];
+    var words = raw.split(/\s+/).map(function (w) { return w.replace(/[^A-Za-z0-9%$]/g, ''); }).filter(Boolean);
+    var best = '';
+    words.forEach(function (w) {
+      if (w.length >= 4 && !STOPWORDS[w.toLowerCase()] && w.length > best.length) best = w;
+    });
+    return best;
+  }
+
+  /* The longest line, in characters, of a wrapped block. The tests use it to
+   * prove the hero never runs past HERO_MAX_CHARS. */
+  function longestLine(lines) {
+    return (lines || []).reduce(function (m, l) { return Math.max(m, String(l).length); }, 0);
+  }
+
+  /* Enforces the scale contrast on a resolved set of layers: if the hero is not
+   * at least SCALE_CONTRAST times the largest supporting layer, the supporting
+   * layers are shrunk until it is. Returns the layers, adjusted in place, so the
+   * preview and the export both read the corrected sizes. */
+  function enforceScaleContrast(layers, heroKey, heroSizePct) {
+    var list = Array.isArray(layers) ? layers : [];
+    var hero = list.find(function (l) { return l.key === (heroKey || 'headline'); });
+    var heroSize = Number(heroSizePct) > 0 ? Number(heroSizePct) : (hero && hero.sizePct);
+    if (!heroSize) return list;
+    var others = list.filter(function (l) { return l !== hero && !l.empty && l.sizePct; });
+    if (!others.length) return list;
+    var biggest = others.reduce(function (m, l) { return Math.max(m, l.sizePct); }, 0);
+    var ceiling = heroSize / SCALE_CONTRAST;
+    if (biggest > ceiling) {
+      var k = ceiling / biggest;
+      others.forEach(function (l) { l.sizePct = l.sizePct * k; });
+    }
+    return list;
+  }
+
   /* CSS for one layer, used by the DOM preview. Sizes are in cqw so the card
    * scales with its container while keeping the export's proportions. */
   function layerCss(layer) {
@@ -180,19 +273,30 @@
       'letter-spacing:' + (t * layer.sizePct * 100).toFixed(3) + 'cqw',
       'color:' + layer.color,
       'text-transform:' + (layer.uppercase ? 'uppercase' : 'none'),
-      'text-align:' + layer.align
+      'text-align:' + layer.align,
+      // Tabular digits on a stat, so the numbers line up.
+      'font-variant-numeric:' + (layer.tabular ? 'tabular-nums' : 'normal')
     ].join(';');
   }
 
   return {
     FONTS: FONTS,
     PAIRINGS: PAIRINGS,
+    SCALE_CONTRAST: SCALE_CONTRAST,
+    HERO_MAX_CHARS: HERO_MAX_CHARS,
+    LINE_BOX_FACTOR: LINE_BOX_FACTOR,
+    lineBoxFactor: lineBoxFactor,
     face: face,
     clamp: clamp,
     estimateMeasure: estimateMeasure,
     wrapLines: wrapLines,
     autoFit: autoFit,
     trackingFor: trackingFor,
+    leadingFor: leadingFor,
+    tabularDigits: tabularDigits,
+    pickKeyword: pickKeyword,
+    longestLine: longestLine,
+    enforceScaleContrast: enforceScaleContrast,
     layerCss: layerCss,
     escHtml: escHtml,
     keywordHtml: keywordHtml

@@ -16,20 +16,24 @@
  */
 (function (root, factory) {
   'use strict';
-  var templates, typography, treatments;
+  var templates, typography, treatments, contentTypes, roleLayouts;
   if (typeof module !== 'undefined' && module.exports) {
     templates = require('./cardTemplates.js');
     typography = require('./cardTypography.js');
     treatments = require('./photoTreatments.js');
+    contentTypes = require('./contentTypes.js');
+    roleLayouts = require('./roleLayouts.js');
   } else {
     templates = root.CPCardTemplates;
     typography = root.CPCardTypography;
     treatments = root.CPPhotoTreatments;
+    contentTypes = root.CPContentTypes;
+    roleLayouts = root.CPRoleLayouts;
   }
-  var api = factory(templates, typography, treatments);
+  var api = factory(templates, typography, treatments, contentTypes, roleLayouts);
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (root) root.CPCardLayoutEngine = api;
-})(typeof window !== 'undefined' ? window : null, function (templates, typography, treatments) {
+})(typeof window !== 'undefined' ? window : null, function (templates, typography, treatments, contentTypes, roleLayouts) {
   'use strict';
 
   var LAYERS = [
@@ -157,7 +161,16 @@
     if (d.type === 'stat') {
       var value = String(d.value || '').trim();
       if (!value) return { type: 'none' };
-      return { type: 'stat', text: value, x: Math.round(W * z.left), y: Math.round(H * 0.30), width: Math.round(W * 0.40), height: Math.round(H * 0.30), size: Math.round(W * 0.20), bg: d.accent || '#f6f6f6' };
+      // The number is sized to FIT its box: a fixed size clipped a wide value
+      // like "87%" against the box edge. The box is the left column of the
+      // split, and the size is capped so the glyphs never run past it.
+      var statW = Math.round(W * 0.42);
+      var statH = Math.round(H * 0.30);
+      var perChar = 0.66; // a wide display digit + the % sign
+      var fitSize = Math.floor((statW * 0.90) / Math.max(1, value.length * perChar));
+      var statSize = Math.max(Math.round(W * 0.06), Math.min(Math.round(W * 0.20), fitSize));
+      // Tabular digits, so a stat's figures line up (Part 5).
+      return { type: 'stat', text: value, x: Math.round(W * z.left), y: Math.round(H * 0.30), width: statW, height: statH, size: statSize, bg: d.accent || '#f6f6f6', tabular: true };
     }
     return { type: 'none' };
   }
@@ -224,6 +237,17 @@
     if (opts.canvas && opts.canvas.width > 0 && opts.canvas.height > 0) {
       canvas = { width: Number(opts.canvas.width), height: Number(opts.canvas.height) };
     }
+    // ── Part 4: the slide's ROLE and CONTENT TYPE ────────────────────────────
+    // The role comes from the slide's position (hook / context / detail / cta);
+    // the content type from what the story IS (breaking / stat / quote / ...).
+    // Both are inputs to the layout, so a stat slide and an opinion slide are
+    // laid out differently even inside the same template.
+    var roleIntent = roleLayouts.intentFor(role);
+    var contentType = contentTypes.detect(slide, opts.contentType, template);
+    var variant = contentTypes.variantFor(contentType, template);
+    // The hook is governed by the role alone: slide 1 is always the largest type.
+    var heroKey = role === 'hook' ? 'headline' : (variant.hero || 'headline');
+    var showsStat = variant.hero === 'stat' || (template.decoration && template.decoration.type === 'stat');
     var roleLayout = (template.roles && template.roles[role]) || (template.roles && template.roles.hook) || {};
     var pairing = typography.PAIRINGS[template.pairing] || typography.PAIRINGS.poster;
     var palette = Object.assign({ bg: '#161616', text: '#f6f6f6', accent: '#f6f6f6', secondary: '#b9b9bd', dim: 0.45 }, template.palette || {});
@@ -245,8 +269,54 @@
       // composition reads as a deliberate ladder rather than a paragraph.
       if (region.stack && displayText) displayText = stackWords(displayText, 4);
       var box = clampToSafeZone({ x: Number(region.x) || 0, y: Number(region.y) || 0, width: Number(region.width) || 0.8, height: Number(region.height) || 0.2 }, platform, template);
+      // Part 4: the content type may nudge the HEADLINE block — a stat slide
+      // lifts it to clear the giant number, a breaking slide sits higher. Only
+      // the headline moves: shifting the supporting line too would push it into
+      // the CTA below. The hook is governed by the role alone, so it is never
+      // nudged.
+      if (role !== 'hook' && variant.shiftY && L.key === 'headline') {
+        var shifted = clampToSafeZone(Object.assign({}, box, { y: box.y + variant.shiftY }), platform, template);
+        // If the box already sits against the safe-zone edge, the nudge would be
+        // clamped away; nudge the other way so the content type still changes
+        // the layout rather than silently collapsing onto the default.
+        if (Math.abs(shifted.y - box.y) < 1e-6) {
+          shifted = clampToSafeZone(Object.assign({}, box, { y: box.y + (variant.fallbackShift || 0) }), platform, template);
+        }
+        box = shifted;
+      }
       var scale = clamp(Number((style.layerScale || {})[L.key]) || 1, 0.5, 1.6);
-      var baseSize = clamp(Number(region.maxSize) || DEFAULT_MAX_SIZE[L.key] || 0.06, Number(region.minSize) || DEFAULT_MIN_SIZE[L.key] || 0.022, 0.12) * scale;
+      // The role's own intent scales the template's ceiling: the hook is the
+      // largest type, the CTA a touch calmer. The content type then scales it
+      // again, so a stat slide makes room for the number and a quote slide gives
+      // the quote more room.
+      var roleScale = L.key === 'headline' ? roleIntent.heroScale : roleIntent.supportingScale;
+      // The hook is governed by the role alone: slide 1 is always the largest
+      // type, whatever the story is, so the content type never shrinks it.
+      var typeScale = role === 'hook' ? 1 : (L.key === 'headline' ? (variant.headlineScale || 1) : (variant.supportingScale || 1));
+      var baseSize = clamp(Number(region.maxSize) || DEFAULT_MAX_SIZE[L.key] || 0.06, Number(region.minSize) || DEFAULT_MIN_SIZE[L.key] || 0.022, 0.12) * scale * roleScale * typeScale;
+      // Part 5: a hero line must not run past ~18 characters, so the hero's box
+      // is capped at the width that many characters need. The cap is a MAXIMUM,
+      // so a template whose box is already narrower is left alone. It is only
+      // applied when the hero is genuinely display-sized: a small-type template
+      // (a caption card) keeps its own box, or the cap would force its short
+      // copy into more lines than the box allows.
+      var heroCap = null;
+      if (L.key === heroKey && !region.stack && baseSize >= 0.05 && displayText) {
+        // Target ~18 characters of THIS text, using its own average character
+        // width, so a line of narrow letters is not allowed to run long just
+        // because the box was sized for wide ones.
+        var capMeasure = typography.estimateMeasure(baseSize * canvas.width);
+        var avgChar = capMeasure(displayText) / Math.max(1, displayText.length);
+        var capPx = avgChar * typography.HERO_MAX_CHARS;
+        heroCap = clamp(capPx / canvas.width, 0.30, 0.92);
+      }
+      var fitBoxW = box.width * 0.90;
+      if (heroCap && fitBoxW > heroCap) fitBoxW = heroCap;
+      var fitBoxH = box.height * 0.90;
+      // The leading the face wants (tight on condensed, looser on serif). If
+      // that leading cannot fit the box, the engine steps it back toward the
+      // neutral 1.12 rather than overflow — the box is the hard constraint.
+      var leading = typography.leadingFor(faceId);
       var fit = typography.autoFit({
         text: displayText,
         // A safety margin: the browser's real font metrics and its own line
@@ -254,22 +324,36 @@
         // to 100% of the box could still overflow by a few pixels after a late
         // font swap. 0.90/0.95 leaves enough headroom that the DOM never
         // overflows its box in a real browser.
-        boxW: box.width * 0.90, boxH: box.height * 0.90,
+        boxW: fitBoxW, boxH: box.height * 0.90,
         canvasW: canvas.width, canvasH: canvas.height,
-        lineHeight: 1.12,
-        heightFactor: 1.12,
+        lineHeight: leading,
+        heightFactor: typography.lineBoxFactor(faceId),
         maxLines: Number(region.maxLines) || 5,
         minPct: Number(region.minSize) || DEFAULT_MIN_SIZE[L.key] || 0.022,
         maxPct: baseSize,
         measureFor: opts.measureFor || function (px) { return measureFor(px, face.family, face.weight, typography.trackingFor({ fontId: faceId, tracking: region.tracking })); }
       });
+      if (!fit.fits && leading > 1.12) {
+        leading = 1.12;
+        fit = typography.autoFit({
+          text: displayText,
+          boxW: fitBoxW, boxH: box.height * 0.90,
+          canvasW: canvas.width, canvasH: canvas.height,
+          lineHeight: leading,
+          heightFactor: typography.lineBoxFactor(faceId),
+          maxLines: Number(region.maxLines) || 5,
+          minPct: Number(region.minSize) || DEFAULT_MIN_SIZE[L.key] || 0.022,
+          maxPct: baseSize,
+          measureFor: opts.measureFor || function (px) { return measureFor(px, face.family, face.weight, typography.trackingFor({ fontId: faceId, tracking: region.tracking })); }
+        });
+      }
       // `anchor: 'bottom'` pins the text block to the BOTTOM of its box (Bold
       // Impact's headline is the last thing on the card). The box's BOTTOM edge
       // is unchanged, so the safe-zone clamp still holds; the box is shrunk to
       // wrap the text (with a little headroom) and moved down to meet that edge.
       var anchor = region.anchor || 'top';
       if (anchor === 'bottom') {
-        var textH = (fit.lines.length * fit.sizePct * canvas.width * fit.lineHeight * 1.12) / canvas.height;
+        var textH = (fit.lines.length * fit.sizePct * canvas.width * fit.lineHeight * typography.lineBoxFactor(faceId)) / canvas.height;
         var boxH = Math.min(box.height, textH);
         box = { x: box.x, y: box.y + (box.height - boxH), width: box.width, height: boxH };
       }
@@ -290,21 +374,45 @@
         sizePct: fit.sizePct,
         lineHeight: fit.lineHeight,
         lines: fit.lines,
+        // The box the fit actually ran against (after the hero line-length cap),
+        // so a test can reproduce the engine's own fit exactly.
+        fitBoxW: fitBoxW,
+        fitBoxH: fitBoxH,
+        fitMaxPct: baseSize,
         fits: fit.fits,
         maxLines: Number(region.maxLines) || 5,
         color: (style.layerColors && style.layerColors[L.key]) || (L.key === 'ctaLine' ? palette.accent : null) || style.textColor || palette.text,
         uppercase: upper,
-        // One keyword may be highlighted in the accent (Headline Stack, Neon).
-        keyword: region.keyword ? pickKeyword(displayText) : '',
+        // Part 5: tabular digits on a stat, so the figures line up.
+        tabular: L.key === 'supportingText' && showsStat,
+        // Part 5: one keyword per headline, auto-picked, in the accent.
+        keyword: (L.key === 'headline' && (region.keyword || variant.keyword)) ? typography.pickKeyword(displayText) : '',
         keywordColor: palette.accent
       };
     });
+
+    // Part 5: hierarchy with scale contrast. The hero must be at least 2.5x the
+    // supporting text; if it is not, the supporting layers are shrunk until it
+    // is. The hero's own size is never touched, so the hook stays the largest.
+    var heroLayer = layers.find(function (l) { return l.key === heroKey; });
+    typography.enforceScaleContrast(layers, heroKey, heroLayer && heroLayer.sizePct);
 
     var treatment = treatments.resolve(style.treatmentId || (template.treatment && template.treatment.id) || 'fullBleedScrim', {
       accent: palette.accent,
       dim: style.dim != null ? style.dim : palette.dim,
       side: template.treatment && template.treatment.options && template.treatment.options.side
     });
+
+    // Part 3: the scrim rule. Wherever a text box overlaps the photo, a scrim
+    // must darken the photo under it. `scrimFor` is the ONE place that decides.
+    var scrim = treatments.scrimFor(treatment, layers.map(function (l) {
+      return { x: l.box.x, y: l.box.y, width: l.box.width, height: l.box.height, empty: l.empty };
+    }));
+
+    // Part 4: carousel continuity — the counter / progress dots drawn into the
+    // image, the one margin system, and the single accent for the whole set.
+    var continuity = roleLayouts.continuity(index, total, palette.accent);
+    var counter = roleLayouts.counterGeometry(continuity, canvas, safeZone(platform, template));
 
     // Legacy-compatible views of the SAME result, so the export renderer
     // (services/statCard.js) and older callers keep working without a second
@@ -322,6 +430,10 @@
       name: template.name,
       platform: platform,
       role: role,
+      roleIntent: roleIntent,
+      contentType: contentType,
+      contentVariant: variant,
+      heroKey: heroKey,
       canvas: canvas,
       aspect: canvas.width / canvas.height,
       palette: palette,
@@ -329,12 +441,14 @@
       accentUse: template.accentUse || {},
       layers: layers,
       treatment: treatment,
+      scrim: scrim,
+      continuity: continuity,
+      counter: counter,
       textBoxes: textBoxes,
       typography: typographyMap,
       image: { mode: legacyImageMode(treatment.id), crop: 'cover', focal: 'center', frame: treatment.frame, filter: treatment.filter },
       imageFrame: treatment.frame,
-      decoration: decorationGeometry(decorationSpec(template, style, slide), canvas, platform, template),
-      scrim: treatment.scrim,
+      decoration: decorationGeometry(decorationSpec(template, style, slide, variant), canvas, platform, template),
       safeZone: safeZone(platform, template),
       blank: layers.every(function (l) { return l.empty; })
     };

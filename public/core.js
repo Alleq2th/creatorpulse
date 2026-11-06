@@ -1313,7 +1313,7 @@ function renderCardLiveStage(o, tid, idx, slideIndex, slide, aspectRatio) {
       : esc(shown);
     return `<div class="cp-canvas-block${sel ? " is-selected" : ""}${hasText ? "" : " is-empty"}" data-canvas-key="${key}" data-canvas-block="${name}" tabindex="0" role="slider" aria-label="Drag or resize ${label}" style="left:${pos.x*100}%;top:${pos.y*100}%;width:${pos.width*100}%;height:${pos.height*100}%"><div class="cc-live-text${hasText ? "" : " is-empty"}" data-cp-live="${name}" style="${cpLiveTextStyle(live, name, o, tid)}">${shownHtml}</div><span class="cp-canvas-label">${label}</span><button type="button" class="cp-canvas-resize cp-resize-corner" data-canvas-resize="true" data-canvas-resize-mode="both" aria-label="Resize ${label} width and height"></button><button type="button" class="cp-canvas-resize cp-resize-side" data-canvas-resize="true" data-canvas-resize-mode="horizontal" aria-label="Resize ${label} width"></button><button type="button" class="cp-canvas-resize cp-resize-top" data-canvas-resize="true" data-canvas-resize-mode="vertical" aria-label="Resize ${label} height"></button></div>`;
   };
-  return `<div class="cp-canvas-stage cc-live-stage" data-canvas-stage="${key}" data-tid="${tid}" data-idx="${idx}" data-slide-index="${slideIndex}" style="aspect-ratio:${aspectRatio}"><div class="cc-live-backdrop" aria-hidden="true"></div><div class="cc-live-plate"></div><div class="cc-live-tint" aria-hidden="true"></div><div class="cc-live-dim"></div><div class="cc-live-scrim" aria-hidden="true"></div><div class="cc-live-rule" aria-hidden="true"></div><div class="cc-live-status" role="status"></div><div class="cp-canvas-blocks" data-canvas-key="${key}" data-slide-index="${slideIndex}" data-card-key="${tid}-${idx}">${CARD_LAYERS.map(L => box(L.key, L.label, cpCardLayerText(live, L))).join("")}</div></div>`;
+  return `<div class="cp-canvas-stage cc-live-stage" data-canvas-stage="${key}" data-tid="${tid}" data-idx="${idx}" data-slide-index="${slideIndex}" style="aspect-ratio:${aspectRatio}"><div class="cc-live-backdrop" aria-hidden="true"></div><div class="cc-live-plate"></div><div class="cc-live-tint" aria-hidden="true"></div><div class="cc-live-dim"></div><div class="cc-live-scrim" aria-hidden="true"></div><div class="cc-live-rule" aria-hidden="true"></div><div class="cc-live-counter" aria-hidden="true"></div><div class="cc-live-status" role="status"></div><div class="cp-canvas-blocks" data-canvas-key="${key}" data-slide-index="${slideIndex}" data-card-key="${tid}-${idx}">${CARD_LAYERS.map(L => box(L.key, L.label, cpCardLayerText(live, L))).join("")}</div></div>`;
 }
 
 function renderPlatformMockup(o, tid, idx, curPlat) {
@@ -2222,6 +2222,20 @@ function cpApplyPhotoTreatment(stage, plateEl, design) {
     if (t.rule) { rule.hidden = false; Object.assign(rule.style, { left: pct(t.rule.x), top: pct(t.rule.y), width: pct(t.rule.width), height: pct(t.rule.height), background: t.rule.color }); }
     else { rule.hidden = true; rule.style.background = ""; }
   }
+  // A hairline border on an inset photo (Part 3), from the same descriptor the
+  // export strokes, so the framed photo looks identical in both.
+  if (plateEl) {
+    if (t.border) plateEl.style.border = `${Math.max(1, Math.round(t.border.width * 1000))}px solid ${cpHexA(t.border.color, t.border.alpha)}`;
+    else plateEl.style.border = "none";
+  }
+}
+
+// A hex colour + alpha as an rgba() string, for the treatment border.
+function cpHexA(hex, alpha) {
+  const h = String(hex || "#ffffff").replace("#", "");
+  const n = h.length === 3 ? h.split("").map(c => c + c).join("") : h;
+  const r = parseInt(n.slice(0, 2), 16) || 0, g = parseInt(n.slice(2, 4), 16) || 0, b = parseInt(n.slice(4, 6), 16) || 0;
+  return `rgba(${r},${g},${b},${alpha == null ? 1 : alpha})`;
 }
 
 // Writes the shared card state into one live stage: photo, dim, text, fonts, colours and boxes.
@@ -2257,7 +2271,11 @@ function cpUpdateLiveStage(tid, idx, slideIndex) {
     // photo sits, how it is graded and where the accent rule goes. The export
     // reads the same descriptor, so the two cannot disagree.
     cpApplyPhotoTreatment(stage, plateEl, design);
-    if (plateEl) plateEl.style.backgroundPosition = "center";
+    // The crop bias comes from the treatment (subject-aware crop biases toward
+    // the upper-middle, where faces are), so the preview crops exactly as the
+    // export does. A user's own focal point still wins.
+    const treatmentFocal = design && design.treatment && design.treatment.focal;
+    if (plateEl) plateEl.style.backgroundPosition = treatmentFocal ? `${treatmentFocal.x * 100}% ${treatmentFocal.y * 100}%` : "center";
     if (dimEl) dimEl.style.background = template.palette.gradient || "#000";
     // The badge/rule/frame/orb/stripes are painted by the shared painter, which
     // sizes them in card pixels. That is what stops the accent pill from
@@ -2269,6 +2287,9 @@ function cpUpdateLiveStage(tid, idx, slideIndex) {
   // over any photo. Painted from the same layout the export uses.
   const scrimEl = stage.querySelector(".cc-live-scrim");
   if (scrimEl && window.CPCardPaint) window.CPCardPaint.paintScrim(scrimEl, design);
+  // The carousel counter / progress dots, drawn into the card itself (Part 4).
+  const counterEl = stage.querySelector(".cc-live-counter");
+  if (counterEl && window.CPCardPaint) window.CPCardPaint.paintCounter(counterEl, design);
   if (sty.bgGradient) {
     const { color1, color2, angle = 135 } = sty.bgGradient;
     stage.style.background = `linear-gradient(${angle}deg, ${color1}, ${color2})`;
@@ -2293,6 +2314,10 @@ function cpUpdateLiveStage(tid, idx, slideIndex) {
     if (plateEl && plateEl.dataset.cpBgSrc !== sty.bgImage) {
       plateEl.style.backgroundImage = `url("${sty.bgImage}")`;
       plateEl.dataset.cpBgSrc = sty.bgImage;
+      // The blurred backdrop reads the plate's own image, so it is refreshed
+      // here, after the plate image is set (Part 3).
+      const bd = stage.querySelector(".cc-live-backdrop");
+      if (bd && !bd.hidden) bd.style.backgroundImage = plateEl.style.backgroundImage;
     }
     if (plateEl) {
       plateEl.style.backgroundPosition = S.focalPoint?.[tid] ? `${S.focalPoint[tid].x}% ${S.focalPoint[tid].y}%` : "center";
@@ -2423,7 +2448,9 @@ function cpGetDesignState(tid, idx, si) {
         // The one keyword a template may highlight in its accent (Headline
         // Stack, Neon). Carried into the export so the download matches.
         keyword: resolved.keyword || "",
-        keywordColor: resolved.keywordColor || ""
+        keywordColor: resolved.keywordColor || "",
+        // Tabular digits on a stat, so the exported figures line up (Part 5).
+        tabular: !!resolved.tabular
       };
     }
     const layerSpec = template?.typography?.[L.key];
@@ -2652,6 +2679,8 @@ function cpDrawTextBox(ctx, l, W, H) {
   const lineH = px * (Number(l.lineHeight) || 1.1);
   const left = l.box.x * W, top = l.box.y * H, bw = l.box.width * W, bh = l.box.height * H;
   ctx.font = `${l.weight} ${px}px ${l.family}`;
+  // Tabular digits on a stat, so the figures line up (Part 5).
+  if (l.tabular && "fontVariantNumeric" in ctx) ctx.fontVariantNumeric = "tabular-nums";
   // Shared wrapper: identical break points in preview and export.
   const lines = window.CPCardLayout
     ? window.CPCardLayout.wrapLines(s => ctx.measureText(s).width, l.text, bw)
@@ -2710,6 +2739,30 @@ function cpDrawScrim(ctx, design, W, H) {
   ctx.restore();
 }
 
+// Draws the carousel counter / progress dots into the exported image, from the
+// same resolved layout the preview paints from (Part 4).
+function cpDrawCounter(ctx, design, W, H) {
+  const c = design && design.counter;
+  if (!c) return;
+  ctx.save();
+  ctx.font = `600 ${c.size}px Inter, Arial, sans-serif`;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  const cy = c.y + c.height / 2;
+  let x = c.x;
+  (c.dots || []).forEach(dot => {
+    ctx.beginPath();
+    ctx.arc(x + c.dotR, cy, c.dotR, 0, Math.PI * 2);
+    ctx.fillStyle = dot.active ? (c.accent || "#f6f6f6") : "rgba(246,246,246,.30)";
+    ctx.fill();
+    x += c.dotR * 2 + c.gap;
+  });
+  if ((c.dots || []).length) x += c.gap - c.dotR * 2;
+  ctx.fillStyle = "rgba(246,246,246,.72)";
+  ctx.fillText(c.label, x, cy);
+  ctx.restore();
+}
+
 function cpDrawTemplateDecoration(ctx, el, accent, W, H) {
   ctx.save(); ctx.fillStyle = el.color || accent || "#fff";
   const t = Math.max(3, W * (Number(el.weight) || 0.04));
@@ -2758,7 +2811,11 @@ async function cpComposeCard(snap) {
     ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H);
   }
   if (photo) {
-    const [fx, fy] = state.focal ? state.focal.map(v => v / 100) : [0.5, 0.5];
+    // The crop bias comes from the treatment (subject-aware crop biases toward
+    // the upper-middle, where faces are), so the export crops exactly as the
+    // preview does. A user's own focal point still wins.
+    const treatmentFocal = state.design && state.design.treatment && state.design.treatment.focal;
+    const [fx, fy] = state.focal ? state.focal.map(v => v / 100) : (treatmentFocal ? [treatmentFocal.x, treatmentFocal.y] : [0.5, 0.5]);
     const adj = state.backgroundAdjustments || {};
     const brightness = Math.max(0, Math.min(2, Number(adj.brightness ?? 1)));
     const contrast = Math.max(0, Math.min(2, Number(adj.contrast ?? 1)));
@@ -2772,6 +2829,18 @@ async function cpComposeCard(snap) {
     const treatmentFrame = state.design && state.design.treatment && state.design.treatment.frame;
     const r = treatmentFrame || (imageMode === "panel" ? { x: .08, y: .06, width: .84, height: .42 } : imageMode === "split" ? { x: .52, y: .10, width: .40, height: .72 } : { x: 0, y: 0, width: 1, height: 1 });
     const x = r.x * W, y = r.y * H, rw = r.width * W, rh = r.height * H;
+    // A blurred, darkened copy of the photo fills the card behind a sharp inset
+    // (the blurred-backdrop treatment), from the same descriptor the preview
+    // paints, so the export matches the mockup.
+    const backdrop = state.design && state.design.treatment && state.design.treatment.backdrop;
+    if (backdrop) {
+      ctx.save();
+      ctx.filter = `blur(${backdrop.blur}px) brightness(${Math.max(0, 1 - (backdrop.dim || 0))})`;
+      const bs = Math.max(W / photo.naturalWidth, H / photo.naturalHeight);
+      const bw = photo.naturalWidth * bs, bh = photo.naturalHeight * bs;
+      ctx.drawImage(photo, (W - bw) / 2, (H - bh) / 2, bw, bh);
+      ctx.restore();
+    }
     const scale = Math.max(rw / photo.naturalWidth, rh / photo.naturalHeight);
     const dw = photo.naturalWidth * scale, dh = photo.naturalHeight * scale;
     ctx.save();
@@ -2788,6 +2857,16 @@ async function cpComposeCard(snap) {
       ctx.globalAlpha = Math.max(0, Math.min(1, Number(tint.alpha) || 0));
       ctx.fillStyle = tint.color;
       ctx.fillRect(0, 0, W, H);
+      ctx.restore();
+    }
+    // A hairline border on an inset photo (Part 3), from the same descriptor the
+    // preview paints, so the framed photo looks identical in both.
+    const border = state.design && state.design.treatment && state.design.treatment.border;
+    if (border) {
+      ctx.save();
+      ctx.strokeStyle = cpHexA(border.color, border.alpha);
+      ctx.lineWidth = Math.max(2, W * border.width);
+      ctx.strokeRect(x, y, rw, rh);
       ctx.restore();
     }
   }
@@ -2811,6 +2890,7 @@ async function cpComposeCard(snap) {
     index: 0, total: 1, style: state.style || {}
   }));
   cpDrawScrim(ctx, design, W, H);
+  cpDrawCounter(ctx, design, W, H);
   if (design && design.decoration && design.decoration.type !== "none") {
     cpDrawDecoration(ctx, design.decoration, W, H, design.palette);
   } else {
@@ -2868,6 +2948,7 @@ function cpDrawDecoration(ctx, d, W, H, palette) {
     // A giant stat number as the hero. It is a decoration, so it never wraps.
     ctx.fillStyle = d.bg;
     ctx.font = `900 ${d.size}px Inter, Arial, sans-serif`;
+    if (d.tabular && "fontVariantNumeric" in ctx) ctx.fontVariantNumeric = "tabular-nums";
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
     ctx.fillText(String(d.text || ""), d.x, d.y + d.height / 2);
