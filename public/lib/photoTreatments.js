@@ -208,8 +208,55 @@
     };
   }
 
+  /* 9. WHITE PANEL — the reference design the user pointed at: the news photo
+   *    fills the card as a full-bleed background layer, and a clean white panel
+   *    sits over the bottom of it carrying the headline. The type is DARK on
+   *    white, so no scrim is needed (a scrim would only dirty the panel). The
+   *    panel geometry is a descriptor, not a hardcoded box, so the DOM preview,
+   *    the canvas export and the server renderer all draw the same panel. */
+  function whitePanel(ctx) {
+    return {
+      id: 'whitePanel',
+      name: 'White panel',
+      // Full-bleed: the photo is the card's background layer, edge to edge.
+      frame: { x: 0, y: 0, width: 1, height: 1, radius: 0 },
+      filter: { brightness: 1, contrast: 1.02, saturation: 1.02, blur: 0, grayscale: 0 },
+      scrim: null,
+      tint: null,
+      rule: null,
+      backdrop: null,
+      // The white text panel. `height` is the fraction of the card it covers on
+      // a 4:5 card; `tallHeight` is the (shorter) fraction on a 9:16 card, where
+      // the extra height belongs to the photo. `overlap` lifts the panel a
+      // little over the photo so the seam reads as a deliberate card edge.
+      panel: { height: 0.34, tallHeight: 0.36, bg: '#fbfaf7', radius: 0, overlap: 0 },
+      textZone: { x: 0.075, y: 0.66, width: 0.85, height: 0.30 }
+    };
+  }
+
+  /* 10. WHITE PANEL, INSET — the second reference layout: the same white
+   *    text-under treatment, but the panel is a rounded card that overlaps the
+   *    photo, and the photo is graded slightly warmer. Structurally different
+   *    from whitePanel (rounded, overlapping, taller panel), not a repaint. */
+  function whitePanelInset(ctx) {
+    return {
+      id: 'whitePanelInset',
+      name: 'White panel, inset',
+      frame: { x: 0, y: 0, width: 1, height: 1, radius: 0 },
+      filter: { brightness: 1.01, contrast: 1.04, saturation: 1.06, blur: 0, grayscale: 0 },
+      scrim: null,
+      tint: null,
+      rule: null,
+      backdrop: null,
+      panel: { height: 0.38, tallHeight: 0.40, bg: '#fbfaf7', radius: 0.028, overlap: 0.022 },
+      textZone: { x: 0.075, y: 0.62, width: 0.85, height: 0.34 }
+    };
+  }
+
   var TREATMENTS = {
     fullBleedScrim: fullBleedScrim,
+    whitePanel: whitePanel,
+    whitePanelInset: whitePanelInset,
     duotone: duotone,
     splitPanel: splitPanel,
     insetFrame: insetFrame,
@@ -221,6 +268,8 @@
 
   var NAMES = {
     fullBleedScrim: 'Full-bleed + scrim',
+    whitePanel: 'White panel',
+    whitePanelInset: 'White panel, inset',
     duotone: 'Duotone',
     splitPanel: 'Split panel',
     insetFrame: 'Inset frame',
@@ -263,6 +312,11 @@
    * place the rule lives, so the preview and the export cannot disagree. */
   function scrimFor(treatment, textBoxes) {
     if (!treatment) return null;
+    // A treatment that carries its own solid text PANEL (the White Panel family)
+    // never needs a scrim: the type sits on the panel, not on the photo, and a
+    // scrim would only dirty the clean white card. This is checked first, so the
+    // overlap rule below cannot add one.
+    if (treatment.panel) return null;
     var frame = treatment.frame || { x: 0, y: 0, width: 1, height: 1 };
     var boxes = Array.isArray(textBoxes) ? textBoxes : [];
     var anyOverlap = boxes.some(function (b) { return b && !b.empty && overlaps(b, frame); });

@@ -459,6 +459,15 @@ function templateDecoration(design, p, f) {
     case "hairline":
       // A thin hairline rule (Editorial Clean) — a rule, not a bar.
       return `<rect x="${m}" y="${Math.round(f.h * 0.10)}" width="${Math.round(f.w * 0.10)}" height="3" fill="${p.accent}"/>`;
+    case "category": {
+      // A small category pill near the top of the card (the White Panel family).
+      // The label is the story's own category, resolved by the layout engine; an
+      // empty category draws nothing at all.
+      const d = design.decoration || {};
+      const label = String(d.text || "").trim();
+      if (!label) return "";
+      return `<rect x="${d.x}" y="${d.y}" width="${d.width}" height="${d.height}" rx="${d.radius}" fill="${d.bg}"/><text x="${d.x + d.width / 2}" y="${d.y + d.height / 2}" text-anchor="middle" dominant-baseline="central" font-family="${FONT_SANS}" font-size="${d.fontSize}" font-weight="800" letter-spacing="${(d.fontSize * 0.10).toFixed(1)}" fill="${d.color}">${escXml(label.toUpperCase())}</text>`;
+    }
     case "caption":
       // A single caption bar pinned to the bottom (Minimal Caption).
       return `<rect x="0" y="${Math.round(f.h * 0.80)}" width="${f.w}" height="${Math.round(f.h * 0.20)}" fill="#161616" fill-opacity="0.72"/>`;
@@ -711,6 +720,73 @@ function textLayoutTransform(slide, key, f, base) {
   const x = Math.max(0, Math.min(f.w - width, Number(target.x) * f.w));
   const y = Math.max(0, Math.min(f.h - height, Number(target.y) * f.h));
   return `transform="matrix(${sx} 0 0 ${sy} ${x - sx * base.x} ${y - sy * base.y})"`;
+}
+
+// ── White Panel family: the export path ──────────────────────────────────────
+// The White Panel templates put the photo full-bleed behind a solid white text
+// panel. Their type is DARK on white and sits at exact boxes the layout engine
+// resolved, so they are drawn from `design.layers` directly instead of through
+// the legacy hook/body flow (which positions type by its own vertical rhythm and
+// would put the headline on the photo). This is the same data the DOM preview
+// and the canvas painter read, so the download matches the preview exactly.
+function renderPanelSVG(p, f, slide, category, typo, design) {
+  const panel = design.panel;
+  const W = f.w, H = f.h;
+  const px = (v) => Math.round(v * W);
+  const py = (v) => Math.round(v * H);
+  const parts = [];
+
+  // 0. The card's own field, so a photo-less card still reads as designed (the
+  //    photo, when present, is composited underneath this layer by the caller).
+  parts.push(`<rect x="0" y="0" width="${W}" height="${H}" fill="${escXml(p.backgroundStart || '#fbfaf7')}"/>`);
+
+  // 1. The white text panel, over the bottom of the photo.
+  const panelX = px(panel.x), panelY = py(panel.y);
+  const panelW = px(panel.width), panelH = py(panel.height);
+  const radius = Math.max(0, Math.round(panel.radius || 0));
+  parts.push(`<rect x="${panelX}" y="${panelY}" width="${panelW}" height="${panelH}" rx="${radius}" fill="${escXml(panel.bg)}"/>`);
+
+  // 2. The category pill, near the top of the card. Its label is the story's
+  //    own category (resolved by the engine); an empty category draws nothing.
+  const d = design.decoration || { type: 'none' };
+  if (d.type === 'category' && d.text) {
+    parts.push(`<rect x="${d.x}" y="${d.y}" width="${d.width}" height="${d.height}" rx="${d.radius}" fill="${escXml(d.bg)}"/>`);
+    parts.push(`<text x="${d.x + d.width / 2}" y="${d.y + d.height / 2}" text-anchor="middle" dominant-baseline="central" font-family="${FONT_SANS}" font-size="${d.fontSize}" font-weight="800" letter-spacing="${(d.fontSize * 0.10).toFixed(1)}" fill="${escXml(d.color)}">${escXml(String(d.text).toUpperCase())}</text>`);
+  }
+
+  // 3. Every text layer at its exact box, with the engine's own wrapped lines
+  //    and fitted size. The block is centred in its box and clamped so the
+  //    ascender/descender can never leave it — the same guarantee the canvas
+  //    painter gives, so nothing clips.
+  design.layers.forEach((l) => {
+    if (l.empty) return;
+    const lines = (l.lines && l.lines.length) ? l.lines : String(l.displayText).split('\n');
+    let size = l.sizePct * W;
+    const lh = size * l.lineHeight;
+    const boxTop = l.box.y * H;
+    const boxH = l.box.height * H;
+    const extent = (n) => (n - 1) * lh + size * 1.0;
+    let need = extent(lines.length);
+    if (need > boxH && need > 0) { const k = boxH / need; size *= k; need = extent(lines.length); }
+    const pad = H * 0.010;
+    let firstBaseline = boxTop + size * 0.80 + Math.max(0, (boxH - need) / 2);
+    if (firstBaseline - size * 0.80 < boxTop + pad) firstBaseline = boxTop + pad + size * 0.80;
+    const bottom = firstBaseline + (lines.length - 1) * lh + size * 0.20;
+    if (bottom > boxTop + boxH - pad) firstBaseline -= (bottom - (boxTop + boxH - pad));
+    const anchor = l.align === 'center' ? 'middle' : (l.align === 'right' ? 'end' : 'start');
+    const tx = l.align === 'center' ? (l.box.x + l.box.width / 2) * W
+      : (l.align === 'right' ? (l.box.x + l.box.width) * W : l.box.x * W);
+    const weight = l.fontWeight || 400;
+    const tracking = (l.tracking || 0) * size;
+    lines.forEach((line, i) => {
+      const y = firstBaseline + i * lh;
+      const isKw = l.keyword && line.indexOf(l.keyword) > -1;
+      const fill = isKw ? l.keywordColor : l.color;
+      parts.push(`<text x="${tx.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${anchor}" font-family="${escXml(l.fontFamily)}" font-size="${size.toFixed(1)}" font-weight="${weight}" letter-spacing="${tracking.toFixed(2)}" fill="${escXml(fill)}">${escXml(line)}</text>`);
+    });
+  });
+
+  return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">${parts.join('')}</svg>`;
 }
 
 function renderHookSVG(p, f, slide, category, scrimStrength, typo, design) {
@@ -1311,7 +1387,9 @@ async function renderStatCard(slide, category, paletteKey, format, imageUrl, opt
   const hasRequestedArticleImage = !!(slide.imageUrl || imageUrl);
   const scrimStrength = cover ? cover.brightness : null;
 
-  const svg = type === "hook" ? renderHookSVG(p, f, slide, cat, scrimStrength, typo, design)
+  const svg = design && design.panel
+    ? renderPanelSVG(p, f, slide, cat, typo, design)
+    : type === "hook" ? renderHookSVG(p, f, slide, cat, scrimStrength, typo, design)
     : type === "outro" ? renderOutroSVG(p, f, slide, cat, scrimStrength, typo, design)
     : renderBodySVG(p, f, slide, cat, scrimStrength, typo, design);
 
@@ -1406,6 +1484,7 @@ module.exports = {
   paletteFromDesign,
   templateGradientDefs,
   templateDecoration,
+  renderPanelSVG,
   PALETTE,
   DEFAULT_PALETTE,
   THEMES,

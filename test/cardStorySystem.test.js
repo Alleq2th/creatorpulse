@@ -48,7 +48,7 @@ test('every treatment is structurally distinct, not one treatment recoloured', (
   const shapes = new Set();
   for (const item of treatments.list()) {
     const d = treatments.resolve(item.id, { accent: '#e0a83c', dim: 0.4 });
-    const shape = JSON.stringify([d.frame, !!d.scrim, !!d.tint, !!d.backdrop, !!d.rule, !!d.border, d.focal || null]);
+    const shape = JSON.stringify([d.frame, !!d.scrim, !!d.tint, !!d.backdrop, !!d.rule, !!d.border, d.focal || null, d.panel || null]);
     assert.ok(!shapes.has(shape), item.id + ' duplicates another treatment');
     shapes.add(shape);
   }
@@ -71,7 +71,9 @@ test('the scrim rule holds: any text box overlapping the photo has a scrim', () 
         const frame = d.treatment.frame;
         const overlapping = d.layers.filter(l => !l.empty && treatments.overlaps(l.box, frame));
         if (overlapping.length) {
-          assert.ok(d.scrim, t.id + '/' + role + '/' + platform + ' has text over the photo but no scrim');
+          // A solid text panel under the type is a legibility field in its own
+          // right (the White Panel family): the type sits on the panel.
+          assert.ok(d.scrim || d.panel, t.id + '/' + role + '/' + platform + ' has text over the photo but no scrim');
           checked++;
         }
       }
@@ -109,7 +111,7 @@ test('every template that puts text over its photo resolves a scrim', () => {
     const d = resolve(t.id, t.platform, 'hook');
     const frame = d.treatment.frame;
     const over = d.layers.some(l => !l.empty && treatments.overlaps(l.box, frame));
-    if (over) assert.ok(d.scrim, t.id + ' must scrim the photo under its text');
+    if (over) assert.ok(d.scrim || d.panel, t.id + ' must scrim the photo under its text');
   }
 });
 

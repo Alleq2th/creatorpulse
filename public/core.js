@@ -182,9 +182,19 @@ function localCardImage(slide, opts){
         const stops = design.scrim.stops.map(s => `<stop offset="${Math.round(s.offset*100)}%" stop-color="${esc2(s.color)}"/>`).join("");
         parts.push(`<defs><linearGradient id="scrim" x1="0" y1="0" x2="0" y2="1">${stops}</linearGradient></defs><rect width="100%" height="100%" fill="url(#scrim)"/>`);
       }
+      // The white text panel (the White Panel family): a solid field over the
+      // bottom of the photo, so the dark type inside it is readable with no
+      // scrim. Drawn from the same resolved descriptor the preview uses.
+      if (design.panel) {
+        const pn = design.panel;
+        parts.push(`<rect x="${Math.round(pn.x*W)}" y="${Math.round(pn.y*H)}" width="${Math.round(pn.width*W)}" height="${Math.round(pn.height*H)}" rx="${Math.round(pn.radius||0)}" fill="${esc2(pn.bg)}"/>`);
+      }
       // Decoration (badge / rule / hairline / orb / stripes / stat / quote).
       const d = design.decoration || { type: "none" };
-      if (d.type === "badge") {
+      if (d.type === "category") {
+        parts.push(`<rect x="${d.x}" y="${d.y}" width="${d.width}" height="${d.height}" rx="${d.radius}" fill="${esc2(d.bg)}"/>`);
+        parts.push(`<text x="${d.x + d.width/2}" y="${d.y + d.height/2}" text-anchor="middle" dominant-baseline="central" font-family="Inter,sans-serif" font-weight="800" font-size="${d.fontSize}" letter-spacing="${(d.fontSize*0.10).toFixed(1)}" fill="${esc2(d.color)}">${esc2(String(d.text).toUpperCase())}</text>`);
+      } else if (d.type === "badge") {
         parts.push(`<rect x="${d.x}" y="${d.y}" width="${d.width}" height="${d.height}" rx="${d.radius}" fill="${esc2(d.bg)}"/>`);
         parts.push(`<text x="${d.x + d.width/2}" y="${d.y + d.height/2}" text-anchor="middle" dominant-baseline="central" font-family="Inter,sans-serif" font-weight="800" font-size="${d.fontSize}" letter-spacing="${(d.fontSize*0.08).toFixed(1)}" fill="${esc2(pal.bg)}">${esc2(d.text)}</text>`);
       } else if (d.type === "rule" || d.type === "hairline") {
@@ -1427,7 +1437,7 @@ function renderCardLiveStage(o, tid, idx, slideIndex, slide, aspectRatio) {
       : esc(shown);
     return `<div class="cp-canvas-block${sel ? " is-selected" : ""}${hasText ? "" : " is-empty"}" data-canvas-key="${key}" data-canvas-block="${name}" tabindex="0" role="slider" aria-label="Drag or resize ${label}" style="left:${pos.x*100}%;top:${pos.y*100}%;width:${pos.width*100}%;height:${pos.height*100}%"><div class="cc-live-text${hasText ? "" : " is-empty"}" data-cp-live="${name}" style="${cpLiveTextStyle(live, name, o, tid)}">${shownHtml}</div><span class="cp-canvas-label">${label}</span><button type="button" class="cp-canvas-resize cp-resize-corner" data-canvas-resize="true" data-canvas-resize-mode="both" aria-label="Resize ${label} width and height"></button><button type="button" class="cp-canvas-resize cp-resize-side" data-canvas-resize="true" data-canvas-resize-mode="horizontal" aria-label="Resize ${label} width"></button><button type="button" class="cp-canvas-resize cp-resize-top" data-canvas-resize="true" data-canvas-resize-mode="vertical" aria-label="Resize ${label} height"></button></div>`;
   };
-  return `<div class="cp-canvas-stage cc-live-stage" data-canvas-stage="${key}" data-tid="${tid}" data-idx="${idx}" data-slide-index="${slideIndex}" style="aspect-ratio:${aspectRatio}"><div class="cc-live-backdrop" aria-hidden="true"></div><div class="cc-live-plate"></div><div class="cc-live-tint" aria-hidden="true"></div><div class="cc-live-dim"></div><div class="cc-live-scrim" aria-hidden="true"></div><div class="cc-live-rule" aria-hidden="true"></div><div class="cc-live-counter" aria-hidden="true"></div><div class="cc-live-status" role="status"></div><div class="cc-live-skeleton" aria-hidden="true"></div><div class="cp-canvas-blocks" data-canvas-key="${key}" data-slide-index="${slideIndex}" data-card-key="${tid}-${idx}">${CARD_LAYERS.map(L => box(L.key, L.label, cpCardLayerText(live, L))).join("")}</div></div>`;
+  return `<div class="cp-canvas-stage cc-live-stage" data-canvas-stage="${key}" data-tid="${tid}" data-idx="${idx}" data-slide-index="${slideIndex}" style="aspect-ratio:${aspectRatio}"><div class="cc-live-backdrop" aria-hidden="true"></div><div class="cc-live-plate"></div><div class="cc-live-tint" aria-hidden="true"></div><div class="cc-live-dim"></div><div class="cc-live-scrim" aria-hidden="true"></div><div class="cc-live-panel" aria-hidden="true"></div><div class="cc-live-rule" aria-hidden="true"></div><div class="cc-live-counter" aria-hidden="true"></div><div class="cc-live-status" role="status"></div><div class="cc-live-skeleton" aria-hidden="true"></div><div class="cp-canvas-blocks" data-canvas-key="${key}" data-slide-index="${slideIndex}" data-card-key="${tid}-${idx}">${CARD_LAYERS.map(L => box(L.key, L.label, cpCardLayerText(live, L))).join("")}</div></div>`;
 }
 
 function renderPlatformMockup(o, tid, idx, curPlat) {
@@ -2409,6 +2419,10 @@ function cpUpdateLiveStage(tid, idx, slideIndex) {
   // over any photo. Painted from the same layout the export uses.
   const scrimEl = stage.querySelector(".cc-live-scrim");
   if (scrimEl && window.CPCardPaint) window.CPCardPaint.paintScrim(scrimEl, design);
+  // The white text panel (the White Panel family), painted from the same
+  // resolved layout the export draws, so the preview and the download match.
+  const panelEl = stage.querySelector(".cc-live-panel");
+  if (panelEl && window.CPCardPaint) window.CPCardPaint.paintPanel(panelEl, design);
   // The carousel counter / progress dots, drawn into the card itself (Part 4).
   const counterEl = stage.querySelector(".cc-live-counter");
   if (counterEl && window.CPCardPaint) window.CPCardPaint.paintCounter(counterEl, design);

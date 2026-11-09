@@ -230,7 +230,9 @@
     { id: 'editorial', label: 'Editorial Clean', sub: 'Refined serif typography with generous spacing', preview: 'background:#09090b;color:#fafafa;font-family:serif;' },
     { id: 'stat_split', label: 'Data & Stat Split', sub: 'Accent highlight for key numbers and facts', preview: 'background:#1c1917;color:#38bdf8;font-weight:800;' },
     { id: 'dark_gradient', label: 'Dark Ambient Glow', sub: 'Soft radial backdrop with glowing accents', preview: 'background:radial-gradient(circle,#312e81,#09090b);color:#e0e7ff;' },
-    { id: 'neon_noir', label: 'Neon Cyber', sub: 'Electric lime & cyan punchy layout', preview: 'background:#022c22;color:#4ade80;font-weight:800;' }
+    { id: 'neon_noir', label: 'Neon Cyber', sub: 'Electric lime & cyan punchy layout', preview: 'background:#022c22;color:#4ade80;font-weight:800;' },
+    { id: 'white_panel', label: 'White Panel', sub: 'Photo on top, clean white text panel below', preview: 'background:#fbfaf7;color:#1a1a1a;font-family:serif;' },
+    { id: 'white_panel_inset', label: 'White Panel Inset', sub: 'Rounded white card overlapping the photo', preview: 'background:#fbfaf7;color:#1a1a1a;font-family:serif;' }
   ];
 
   var TEMPLATES_TT = [
