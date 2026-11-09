@@ -97,6 +97,15 @@
       var s = slide || {};
       spec.value = String(s.stat || s.statValue || s.statNumber || '').trim();
     }
+    // The category pill reads the STORY's own category, tolerating every shape
+    // the app produces: a plain string, a category object with displayName /
+    // name / slug, or the niche label. Missing → the pill hides itself.
+    if (spec.type === 'category') {
+      var sl = slide || {};
+      var raw = sl.category != null ? sl.category : (sl.categoryName != null ? sl.categoryName : (sl.niche != null ? sl.niche : ''));
+      if (raw && typeof raw === 'object') raw = raw.displayName || raw.name || raw.label || raw.slug || '';
+      spec.text = String(raw || '').trim();
+    }
     return spec;
   }
 
@@ -117,8 +126,8 @@
   /* Pushes a box inside the platform's safe zone. Width and height are clamped
    * first, then the position, so a box that is too wide or too tall still ends
    * up wholly inside the zone (the old code clamped only x and y). */
-  function clampToSafeZone(box, platform, template) {
-    var z = safeZone(platform, template);
+  function clampToSafeZone(box, platform, template, zoneOverride) {
+    var z = zoneOverride || safeZone(platform, template);
     var maxW = Math.max(0.1, 1 - z.left - z.right);
     var maxH = Math.max(0.05, 1 - z.top - z.bottom);
     var width = clamp(box.width, 0.05, maxW);
@@ -200,6 +209,26 @@
     // A single caption bar pinned to the bottom (Minimal Caption): a strip in
     // the lower quarter, wide and short, with the caption sitting on it.
     if (d.type === 'caption') return { type: 'caption', x: 0, y: Math.round(H * 0.76), width: W, height: Math.round(H * 0.24), bg: 'rgba(22,22,22,.78)' };
+    // A small category pill near the top of the card (the White Panel family).
+    // The label comes from the STORY's own category field, never a hardcoded
+    // string, and the pill is hidden entirely when the story has no category.
+    if (d.type === 'category') {
+      var cat = String(d.text || '').trim();
+      if (!cat) return { type: 'none' };
+      var catFont = Math.round(W * 0.021);
+      var catTextW = Math.round(cat.length * catFont * 0.72);
+      var catPadX = Math.round(W * 0.022);
+      var catPadY = Math.round(catFont * 0.62);
+      var catW = clamp(catTextW + catPadX * 2, Math.round(W * 0.10), Math.round(W * 0.52));
+      var catH = clamp(catFont + catPadY * 2, Math.round(H * 0.024), Math.round(H * 0.048));
+      return {
+        type: 'category', text: cat,
+        x: Math.round(W * z.left), y: Math.round(H * z.top),
+        width: catW, height: catH, radius: Math.round(catH / 2),
+        fontSize: catFont, padX: catPadX, padY: catPadY,
+        bg: 'rgba(251,250,247,.92)', color: d.accent || '#c8452c'
+      };
+    }
     // A giant stat number as the hero (Data & Stat Split). Hidden when empty.
     if (d.type === 'stat') {
       var value = String(d.value || '').trim();
@@ -301,6 +330,35 @@
     if (style.bg) palette.bg = style.bg;
     if (style.textColor) palette.text = style.textColor;
 
+    // The white text panel (the White Panel family). It is resolved BEFORE the
+    // layers are built, because the panel's height decides where the text goes:
+    // the templates author their regions in the 4:5 design space, and on a 9:16
+    // card the panel is a different height. Remapping the region up front means
+    // the text is WRAPPED AND FITTED to the box it will actually occupy — doing
+    // it afterwards left the headline fitted to the old box and bleeding over
+    // the seam.
+    var panel = null;
+    var panelTreatment = treatments.resolve(style.treatmentId || (template.treatment && template.treatment.id) || 'fullBleedScrim', {
+      accent: palette.accent,
+      dim: style.dim != null ? style.dim : palette.dim,
+      side: template.treatment && template.treatment.options && template.treatment.options.side
+    });
+    if (panelTreatment.panel) {
+      var pp = panelTreatment.panel;
+      var tallCard = canvas.height / canvas.width > 1.5;
+      var ph = clamp(Number(tallCard ? pp.tallHeight : pp.height) || 0.38, 0.15, 0.6);
+      var overlap = clamp(Number(pp.overlap) || 0, 0, 0.08);
+      panel = {
+        x: 0, y: 1 - ph - overlap, width: 1, height: ph + overlap,
+        bg: pp.bg || '#fbfaf7',
+        radius: Math.round((Number(pp.radius) || 0) * canvas.width),
+        seamY: 1 - ph - overlap,
+        // The 4:5 design-space top of the panel, so an authored region can be
+        // expressed as a fraction of the panel rather than of the whole card.
+        designTop: 1 - (Number(pp.height) || 0.38) - (Number(pp.overlap) || 0)
+      };
+    }
+
     var layers = LAYERS.map(function (L) {
       // A layer the template does not place gets a sensible default: the
       // headline keeps the old generic box, but a supporting line or a CTA is
@@ -312,6 +370,22 @@
         : L.key === 'supportingText'
           ? { x: 0.08, y: 0.80, width: 0.84, height: 0.10, align: 'left', anchor: 'top', maxLines: 3, minSize: 0.013, maxSize: 0.034 }
           : { x: 0.08, y: 0.90, width: 0.84, height: 0.06, align: 'left', anchor: 'top', maxLines: 1, minSize: 0.013, maxSize: 0.030 });
+      // The White Panel family authors its regions in the 4:5 design space. On a
+      // 9:16 card the panel is a different height, so the region is remapped into
+      // the panel that was actually resolved BEFORE the text is wrapped and
+      // fitted. Without this the headline is fitted to a box that sits above the
+      // seam and bleeds onto the photo.
+      if (panel && !(slide.textLayout && slide.textLayout[L.key])) {
+        var dTop = panel.designTop;
+        var dSpan = Math.max(0.05, 1 - dTop);
+        var pPad = 0.030;
+        var pInner = panel.height * (1 - pPad * 2);
+        var relY = (Number(region.y) - dTop) / dSpan;
+        region = Object.assign({}, region, {
+          y: panel.y + panel.height * pPad + clamp(relY, 0, 1) * pInner,
+          height: Math.max(0.02, (Number(region.height) / dSpan) * pInner)
+        });
+      }
       var faceId = (style.layerFonts && style.layerFonts[L.key]) || pairing[L.key] || 'impact';
       var face = typography.face(faceId);
       var text = layerText(slide, L.key);
@@ -328,7 +402,32 @@
       var override = slide.textLayout && slide.textLayout[L.key];
       var geom = override || region;
       var rawBox = { x: Number(geom.x) || 0, y: Number(geom.y) || 0, width: Number(geom.width) || 0.8, height: Number(geom.height) || 0.2 };
-      var box = override ? snapBoxInZone(rawBox, canvas, safeZone(platform, template)) : clampToSafeZone(rawBox, platform, template);
+      // The White Panel family authors its regions in the 4:5 design space. On a
+      // 9:16 card the panel is a different height, so the region is remapped into
+      // the panel that was actually resolved BEFORE the text is wrapped and
+      // fitted. Without this the headline is fitted to a box that sits above the
+      // seam and bleeds onto the photo.
+      if (panel && !override) {
+        var dTop = panel.designTop;
+        var dSpan = Math.max(0.05, 1 - dTop);
+        var pPad = 0.030;
+        var pInner = panel.height * (1 - pPad * 2);
+        var relY = (Number(region.y) - dTop) / dSpan;
+        rawBox = {
+          x: rawBox.x, width: rawBox.width,
+          y: panel.y + panel.height * pPad + clamp(relY, 0, 1) * pInner,
+          height: Math.max(0.02, (Number(region.height) / dSpan) * pInner)
+        };
+      }
+      // A panel template's safe zone is the PANEL, not the platform's full-card
+      // zone. The TikTok zone reserves 20% at the bottom for the app's own UI,
+      // which would clamp all three text boxes onto the same bottom edge and
+      // collapse them on top of each other. Inside a white panel the panel's own
+      // padding is the margin, so the panel is the zone.
+      var zone = panel
+        ? { top: panel.y, bottom: 1 - (panel.y + panel.height), left: 0.075, right: 0.075 }
+        : safeZone(platform, template);
+      var box = override ? snapBoxInZone(rawBox, canvas, zone) : clampToSafeZone(rawBox, platform, template, zone);
       // Part 4: the content type may nudge the HEADLINE block — a stat slide
       // lifts it to clear the giant number, a breaking slide sits higher. Only
       // the headline moves: shifting the supporting line too would push it into
@@ -468,17 +567,33 @@
     var heroLayer = layers.find(function (l) { return l.key === heroKey; });
     typography.enforceScaleContrast(layers, heroKey, heroLayer && heroLayer.sizePct);
 
-    var treatment = treatments.resolve(style.treatmentId || (template.treatment && template.treatment.id) || 'fullBleedScrim', {
-      accent: palette.accent,
-      dim: style.dim != null ? style.dim : palette.dim,
-      side: template.treatment && template.treatment.options && template.treatment.options.side
-    });
+    var treatment = panelTreatment;
 
     // Part 3: the scrim rule. Wherever a text box overlaps the photo, a scrim
     // must darken the photo under it. `scrimFor` is the ONE place that decides.
     var scrim = treatments.scrimFor(treatment, layers.map(function (l) {
       return { x: l.box.x, y: l.box.y, width: l.box.width, height: l.box.height, empty: l.empty };
     }));
+
+    // The White Panel family: the panel was resolved before the layers were
+    // built (see above), so the text is already fitted to the panel it sits in.
+    // The block is then centred vertically inside the panel, so the type fills
+    // the white area instead of clinging to its top edge and leaving dead space.
+    if (panel) {
+      var padTop = 0.030, padBottom = 0.030;
+      var live = layers.filter(function (l) { return !l.empty; });
+      if (live.length) {
+        var top = Math.min.apply(null, live.map(function (l) { return l.box.y; }));
+        var bottom = Math.max.apply(null, live.map(function (l) { return l.box.y + l.box.height; }));
+        var innerTop = panel.y + padTop * panel.height;
+        var innerBottom = panel.y + panel.height - padBottom * panel.height;
+        var shift = ((innerTop + innerBottom) / 2) - ((top + bottom) / 2);
+        // Never let the centring push the block out of the panel.
+        if (top + shift < innerTop) shift = innerTop - top;
+        if (bottom + shift > innerBottom) shift = innerBottom - bottom;
+        live.forEach(function (l) { l.box.y += shift; });
+      }
+    }
 
     // Part 4: carousel continuity — the counter / progress dots drawn into the
     // image, the one margin system, and the single accent for the whole set.
@@ -513,6 +628,7 @@
       layers: layers,
       treatment: treatment,
       scrim: scrim,
+      panel: panel,
       continuity: continuity,
       counter: counter,
       textBoxes: textBoxes,
@@ -520,7 +636,9 @@
       image: { mode: legacyImageMode(treatment.id), crop: 'cover', focal: 'center', frame: treatment.frame, filter: treatment.filter },
       imageFrame: treatment.frame,
       decoration: decorationGeometry(decorationSpec(template, style, slide, variant), canvas, platform, template),
-      safeZone: safeZone(platform, template),
+      safeZone: panel
+        ? { top: panel.y, bottom: 1 - (panel.y + panel.height), left: 0.075, right: 0.075 }
+        : safeZone(platform, template),
       blank: layers.every(function (l) { return l.empty; })
     };
   }

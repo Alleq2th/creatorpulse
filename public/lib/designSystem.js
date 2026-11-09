@@ -188,6 +188,9 @@
       layers: design.layers,
       treatment: design.treatment,
       scrim: design.scrim,
+      // The white text panel (the White Panel family), so the export draws the
+      // same panel the preview does.
+      panel: design.panel || null,
       accentUse: design.accentUse
     };
   }

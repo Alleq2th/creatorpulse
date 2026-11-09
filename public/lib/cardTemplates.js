@@ -259,6 +259,61 @@
       safeZones: { instagram: { top: .07, bottom: .07, left: .08, right: .08 } }
     },
 
+    /* ── White panel family (the reference designs) ───────────────────────────
+     * Both of these are the "white card with the text underneath the image"
+     * design language the user pointed at. The photo is the BACKGROUND layer
+     * (full-bleed, cover-cropped), a small category tag sits near the top, and
+     * the headline + supporting line live in a clean white panel below the
+     * photo. The type is DARK on white, so the treatment declares no scrim.
+     *
+     * The panel geometry lives in the treatment descriptor (photoTreatments.js
+     * → whitePanel / whitePanelInset), not in these regions, so the DOM
+     * preview, the canvas export and the server renderer all draw the same
+     * panel. The regions below are the text INSIDE that panel. */
+
+    /* Variant A — image on top, flat white text panel below. The primary one. */
+    white_panel: {
+      id: 'white_panel', platform: 'instagram', name: 'White Panel', aspect: '4/5',
+      canvas: { width: 1080, height: 1350 },
+      palette: { bg: '#fbfaf7', text: '#1a1a1a', accent: '#c8452c', secondary: '#5a5a5a', dim: 0, gradient: null },
+      pairing: 'editorial',
+      treatment: { id: 'whitePanel', options: {} },
+      accentUse: { cta: true, rule: false, keyword: false },
+      decoration: { type: 'category', accent: '#c8452c' },
+      roles: {
+        hook:     { headline: R(.075, .685, .85, .135, { maxLines: 3, maxSize: .072, minSize: .020 }), supportingText: R(.075, .828, .85, .070, { maxLines: 2, maxSize: .026 }), ctaLine: R(.075, .912, .85, .040, { maxLines: 1, maxSize: .021 }) },
+        context:  { headline: R(.075, .685, .85, .125, { maxLines: 3, maxSize: .066, minSize: .020 }), supportingText: R(.075, .818, .85, .080, { maxLines: 3, maxSize: .026 }), ctaLine: R(.075, .912, .85, .040, { maxLines: 1, maxSize: .021 }) },
+        evidence: { headline: R(.075, .685, .85, .110, { maxLines: 3, maxSize: .060, minSize: .020 }), supportingText: R(.075, .803, .85, .095, { maxLines: 4, maxSize: .026 }), ctaLine: R(.075, .912, .85, .040, { maxLines: 1, maxSize: .021 }) },
+        turn:     { supportingText: R(.075, .685, .85, .065, { maxLines: 2, maxSize: .026 }), headline: R(.075, .758, .85, .135, { maxLines: 3, maxSize: .068, minSize: .020 }), ctaLine: R(.075, .912, .85, .040, { maxLines: 1, maxSize: .021 }) },
+        payoff:   { headline: R(.075, .685, .85, .135, { maxLines: 3, maxSize: .068, minSize: .020 }), ctaLine: R(.075, .912, .85, .040, { maxLines: 1, maxSize: .021 }) },
+        cta:      { headline: R(.075, .685, .85, .125, { maxLines: 3, maxSize: .062, minSize: .020 }), ctaLine: R(.075, .820, .85, .080, { maxLines: 2, maxSize: .032 }) }
+      },
+      safeZones: { instagram: { top: .05, bottom: .03, left: .075, right: .075 } }
+    },
+
+    /* Variant B — the same white/text-under treatment, but the panel is a
+     * rounded card that overlaps the photo, and the photo is graded warmer.
+     * Structurally different from Variant A (rounded, overlapping, taller
+     * panel), not a repaint. */
+    white_panel_inset: {
+      id: 'white_panel_inset', platform: 'instagram', name: 'White Panel Inset', aspect: '4/5',
+      canvas: { width: 1080, height: 1350 },
+      palette: { bg: '#fbfaf7', text: '#1a1a1a', accent: '#b8452f', secondary: '#5a5a5a', dim: 0, gradient: null },
+      pairing: 'editorial',
+      treatment: { id: 'whitePanelInset', options: {} },
+      accentUse: { cta: true, rule: false, keyword: false },
+      decoration: { type: 'category', accent: '#b8452f' },
+      roles: {
+        hook:     { headline: R(.075, .645, .85, .145, { maxLines: 3, maxSize: .074, minSize: .020 }), supportingText: R(.075, .798, .85, .075, { maxLines: 2, maxSize: .026 }), ctaLine: R(.075, .888, .85, .040, { maxLines: 1, maxSize: .021 }) },
+        context:  { headline: R(.075, .645, .85, .135, { maxLines: 3, maxSize: .068, minSize: .020 }), supportingText: R(.075, .788, .85, .085, { maxLines: 3, maxSize: .026 }), ctaLine: R(.075, .888, .85, .040, { maxLines: 1, maxSize: .021 }) },
+        evidence: { headline: R(.075, .645, .85, .120, { maxLines: 3, maxSize: .062, minSize: .020 }), supportingText: R(.075, .773, .85, .100, { maxLines: 4, maxSize: .026 }), ctaLine: R(.075, .888, .85, .040, { maxLines: 1, maxSize: .021 }) },
+        turn:     { supportingText: R(.075, .645, .85, .070, { maxLines: 2, maxSize: .026 }), headline: R(.075, .723, .85, .145, { maxLines: 3, maxSize: .070, minSize: .020 }), ctaLine: R(.075, .888, .85, .040, { maxLines: 1, maxSize: .021 }) },
+        payoff:   { headline: R(.075, .645, .85, .145, { maxLines: 3, maxSize: .070, minSize: .020 }), ctaLine: R(.075, .888, .85, .040, { maxLines: 1, maxSize: .021 }) },
+        cta:      { headline: R(.075, .645, .85, .135, { maxLines: 3, maxSize: .064, minSize: .020 }), ctaLine: R(.075, .790, .85, .085, { maxLines: 2, maxSize: .032 }) }
+      },
+      safeZones: { instagram: { top: .05, bottom: .03, left: .075, right: .075 } }
+    },
+
     /* 8. Neon/Ambient — a dark background with a soft glow behind the subject,
      * light type, and the accent used ONLY on the keyword. The glow is a radial
      * decoration centred on the subject, and the type is a centred column. */

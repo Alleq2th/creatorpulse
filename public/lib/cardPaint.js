@@ -69,6 +69,31 @@
       });
       return;
     }
+    if (d.type === 'category') {
+      // A small category pill near the top of the card. The label is the
+      // story's own category, so it is never a hardcoded string.
+      el.textContent = d.text;
+      apply({
+        left: pct(d.x, W),
+        top: pct(d.y, H),
+        width: pct(d.width, W),
+        height: pct(d.height, H),
+        maxWidth: pct(d.width, W),
+        maxHeight: pct(d.height, H),
+        borderRadius: pct(d.radius, W),
+        background: d.bg,
+        color: d.color,
+        font: '800 ' + (d.fontSize / W * 100).toFixed(3) + 'cqw/1 Inter, sans-serif',
+        letterSpacing: '.10em',
+        textTransform: 'uppercase',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        whiteSpace: 'nowrap',
+        overflow: 'hidden'
+      });
+      return;
+    }
     if (d.type === 'rule') {
       apply({ left: pct(d.x, W), top: pct(d.y, H), width: pct(d.width, W), height: pct(d.height, H), background: d.bg, borderRadius: '3px' });
       return;
@@ -189,7 +214,28 @@
     el.style.opacity = '1';
   }
 
-  var api = { paintDecoration: paintDecoration, paintScrim: paintScrim, paintCounter: paintCounter };
+  /* Paints the white text panel (the White Panel family). The panel is a solid
+   * field over the bottom of the photo, so the dark type inside it is readable
+   * without any scrim. Geometry comes from the resolved layout, so the preview
+   * and the export draw the same panel. */
+  function paintPanel(el, design) {
+    if (!el) return;
+    var p = design && design.panel;
+    if (!p) { el.hidden = true; el.style.background = 'none'; el.style.borderRadius = '0'; return; }
+    var canvas = (design && design.canvas) || { width: 1080, height: 1350 };
+    var W = canvas.width, H = canvas.height;
+    el.hidden = false;
+    Object.assign(el.style, {
+      left: (p.x / W * 100).toFixed(3) + '%',
+      top: (p.y / H * 100).toFixed(3) + '%',
+      width: (p.width / W * 100).toFixed(3) + '%',
+      height: (p.height / H * 100).toFixed(3) + '%',
+      background: p.bg,
+      borderRadius: p.radius ? (p.radius / W * 100).toFixed(3) + '%' : '0'
+    });
+  }
+
+  var api = { paintDecoration: paintDecoration, paintScrim: paintScrim, paintCounter: paintCounter, paintPanel: paintPanel };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (root) root.CPCardPaint = api;
 })(typeof window !== 'undefined' ? window : null);

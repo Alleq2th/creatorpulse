@@ -2199,6 +2199,9 @@ body{padding-bottom:calc(var(--tab-h) + env(safe-area-inset-bottom));letter-spac
 /* The scrim sits above the photo and below the text, so a headline stays
    readable over any image. */
 .cc-live-scrim{position:absolute;inset:0;z-index:1;pointer-events:none}
+/* The white text panel (the White Panel family). It sits above the photo and
+   below the text, so the dark type inside it is readable with no scrim. */
+.cc-live-panel{position:absolute;z-index:1;pointer-events:none;display:block}
 .cc-live-plate,.cc-live-dim,.cc-live-backdrop{z-index:0}
 .cc-live-tint,.cc-live-rule{z-index:1;pointer-events:none}
 .cc-live-status{z-index:4}

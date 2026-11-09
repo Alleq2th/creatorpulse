@@ -115,9 +115,10 @@ test('the templates are different from each other, not one design in different c
 
 // ── Part 3: photo treatments ─────────────────────────────────────────────────
 
-test('there are eight named photo treatments and each template picks exactly one', () => {
+test('there are ten named photo treatments and each template picks exactly one', () => {
   const list = treatments.list();
-  assert.equal(list.length, 8);
+  // The eight original treatments plus the two White Panel variants.
+  assert.equal(list.length, 10);
   // The six the design brief names must all be present.
   for (const id of treatments.REQUIRED) {
     assert.ok(treatments.TREATMENTS[id], 'the brief names the ' + id + ' treatment');
@@ -132,7 +133,7 @@ test('the treatments are structurally distinct, not one treatment recoloured', (
   const shapes = new Set();
   for (const item of treatments.list()) {
     const d = treatments.resolve(item.id, { accent: '#e0a83c', dim: 0.4 });
-    const shape = JSON.stringify([d.frame, !!d.scrim, !!d.tint, !!d.backdrop, !!d.rule, !!d.border, d.focal || null]);
+    const shape = JSON.stringify([d.frame, !!d.scrim, !!d.tint, !!d.backdrop, !!d.rule, !!d.border, d.focal || null, d.panel || null]);
     assert.ok(!shapes.has(shape), item.id + ' duplicates another treatment');
     shapes.add(shape);
   }
@@ -141,7 +142,7 @@ test('the treatments are structurally distinct, not one treatment recoloured', (
 test('text stays legible over every treatment: a scrim, a tint, or a non-overlapping zone', () => {
   for (const item of treatments.list()) {
     const d = treatments.resolve(item.id, { accent: '#e0a83c', dim: 0.4 });
-    const hasField = !!(d.scrim || d.tint || d.backdrop);
+    const hasField = !!(d.scrim || d.tint || d.backdrop || d.panel);
     const frame = d.frame;
     const zone = d.textZone;
     const overlaps = zone.x < frame.x + frame.width && zone.x + zone.width > frame.x &&

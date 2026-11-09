@@ -91,7 +91,9 @@
       var d = R(t, role);
       var frame = d.treatment.frame;
       var over = d.layers.filter(function (l) { return !l.empty && treatments.overlaps(l.box, frame); });
-      if (over.length && !d.scrim) bad.push(role);
+      // A solid text PANEL under the type is a legibility field in its own right
+      // (the White Panel family): the type sits on the panel, not on the photo.
+      if (over.length && !d.scrim && !d.panel) bad.push(role);
     });
     return { id: 'readable', name: 'Readable text over every photo', pass: bad.length === 0, detail: bad.length ? t.id + ' has text over the photo with no scrim: ' + bad.join(', ') : 'every text box over the photo has a scrim' };
   }
