@@ -25,8 +25,8 @@
 })(typeof window !== 'undefined' ? window : null, function () {
   'use strict';
 
-  var MIN_SLIDES = 2;
-  var MAX_SLIDES = 8;
+  var MIN_SLIDES = 1;
+  var MAX_SLIDES = 10;
 
   /* Splits source text into sentences without inventing anything.
    * Used only to pad a short carousel with the story's own words. */
@@ -147,7 +147,7 @@
   function pageNumbers(total, current, max) {
     var n = Math.max(1, Math.round(Number(total) || 1));
     var active = Math.max(0, Math.min(n - 1, Math.round(Number(current) || 0)));
-    var cap = Math.max(1, Math.round(Number(max) || 8));
+    var cap = Math.max(1, Math.round(Number(max) || 10));
     var out = [];
     for (var i = 0; i < Math.min(n, cap); i++) {
       out.push({ index: i, label: String(i + 1), active: i === active });
@@ -165,7 +165,18 @@
    * Carousel is the only multi-slide one; the rest are single images, which is
    * why asking for "4 slides" on a single post used to do nothing. */
   function defaultSlideCount(platform, format) {
-    return isCarouselFormat(platform, format) ? 4 : 1;
+    if (isCarouselFormat(platform, format)) return 4;
+    // TikTok graphic formats are a multi-POST set, not a single image: the user
+    // swipes through several TikTok posts. Three is the sensible default.
+    if (platform === 'tiktok' && /graphic|camera/i.test(String(format || ''))) return 3;
+    return 1;
+  }
+
+  /* Does this format produce a swipeable multi-item set at all? Carousel on
+   * Instagram, and the graphic formats on TikTok (several posts). */
+  function isMultiFormat(platform, format) {
+    if (isCarouselFormat(platform, format)) return true;
+    return platform === 'tiktok' && /graphic|camera/i.test(String(format || ''));
   }
 
   return {
@@ -174,6 +185,7 @@
     sentences: sentences,
     pageNumbers: pageNumbers,
     isCarouselFormat: isCarouselFormat,
+    isMultiFormat: isMultiFormat,
     defaultSlideCount: defaultSlideCount,
     MIN_SLIDES: MIN_SLIDES,
     MAX_SLIDES: MAX_SLIDES

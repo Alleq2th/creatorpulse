@@ -53,9 +53,16 @@
     var back = f.STEPS.indexOf(st.step) > 0
       ? '<button class="btn bo cc-back" type="button" onclick="cpCreateBack()">Back</button>'
       : '';
+    // The action is NEVER rendered disabled. A disabled button swallows the tap
+    // silently, which is exactly what made Create feel like it needed two taps:
+    // the first tap hit a dead button, the user tapped again, and by then a
+    // repaint had landed. It is always tappable now; when the step is not ready
+    // yet, cpCreateNext() explains what is missing instead of doing nothing.
+    var ready = !!(opts && opts.canNext);
     var go = opts && opts.noNext ? '' :
-      '<button class="btn bp cc-next" type="button" ' + (opts && opts.canNext ? '' : 'disabled') +
-      ' onclick="cpCreateNext()">' + E((opts && opts.nextLabel) || 'Continue') + '</button>';
+      '<button class="btn bp cc-next' + (ready ? '' : ' cc-next-wait') + '" type="button" ' +
+      'aria-disabled="' + (ready ? 'false' : 'true') + '" ' +
+      'onclick="cpCreateNext()">' + E((opts && opts.nextLabel) || 'Continue') + '</button>';
     return '<div class="cc-foot">' + back + go + '</div>';
   }
 
@@ -251,23 +258,56 @@
     };
     var design = L.resolve({ templateId: tmpl.id, platform: platform, slide: sample, index: 0, total: 1, style: {} });
     if (!design) return '<div class="cc-template-thumb" style="' + tmpl.preview + '"><span>' + E(tmpl.label) + '</span></div>';
-    var scrim = design.scrim.stops.map(function (s) { return s.color + ' ' + Math.round(s.offset * 100) + '%'; }).join(',');
+    // A treatment with no scrim (split panel, inset frame, blurred backdrop)
+    // returns scrim:null. Reading .stops off it threw and blanked the whole
+    // template gallery, so the scrim is optional here.
+    var scrim = (design.scrim && design.scrim.stops && design.scrim.stops.length)
+      ? design.scrim.stops.map(function (s) { return s.color + ' ' + Math.round(s.offset * 100) + '%'; }).join(',')
+      : '';
     var layers = design.layers.filter(function (l) { return !l.empty; }).map(function (l) {
       return '<span class="cc-template-layer" style="left:' + (l.box.x * 100).toFixed(1) + '%;top:' + (l.box.y * 100).toFixed(1) + '%;width:' + (l.box.width * 100).toFixed(1) + '%;height:' + (l.box.height * 100).toFixed(1) + '%;' + L.layerCss(l) + '">' + E(l.displayText) + '</span>';
     }).join('');
     var deco = design.decoration;
+    var W = design.canvas.width, H = design.canvas.height;
+    var px = function (v, total) { return (v / total * 100).toFixed(2) + '%'; };
     var decoHtml = '';
     if (deco.type === 'badge') {
-      decoHtml = '<span class="cc-template-badge-pill" style="left:' + (deco.x / design.canvas.width * 100).toFixed(1) + '%;top:' + (deco.y / design.canvas.height * 100).toFixed(1) + '%;width:' + (deco.width / design.canvas.width * 100).toFixed(1) + '%;height:' + (deco.height / design.canvas.height * 100).toFixed(1) + '%;background:' + deco.bg + ';color:' + design.palette.bg + '">' + E(deco.text) + '</span>';
+      decoHtml = '<span class="cc-template-badge-pill" style="left:' + px(deco.x, W) + ';top:' + px(deco.y, H) + ';width:' + px(deco.width, W) + ';height:' + px(deco.height, H) + ';background:' + deco.bg + ';color:' + design.palette.bg + '">' + E(deco.text) + '</span>';
     } else if (deco.type === 'corner') {
-      decoHtml = '<span class="cc-template-rule" style="left:0;top:0;width:100%;height:' + (deco.height / design.canvas.height * 100).toFixed(1) + '%;background:' + deco.bg + '"></span>';
-    } else if (deco.type === 'rule') {
-      decoHtml = '<span class="cc-template-rule" style="left:' + (deco.x / design.canvas.width * 100).toFixed(1) + '%;top:' + (deco.y / design.canvas.height * 100).toFixed(1) + '%;width:' + (deco.width / design.canvas.width * 100).toFixed(1) + '%;height:' + (deco.height / design.canvas.height * 100).toFixed(1) + '%;background:' + deco.bg + '"></span>';
+      decoHtml = '<span class="cc-template-rule" style="left:0;top:0;width:100%;height:' + px(deco.height, H) + ';background:' + deco.bg + '"></span>';
+    } else if (deco.type === 'rule' || deco.type === 'hairline') {
+      decoHtml = '<span class="cc-template-rule" style="left:' + px(deco.x, W) + ';top:' + px(deco.y, H) + ';width:' + px(deco.width, W) + ';height:' + px(deco.height, H) + ';background:' + deco.bg + '"></span>';
+    } else if (deco.type === 'frame') {
+      decoHtml = '<span class="cc-template-rule" style="left:' + px(deco.x, W) + ';top:' + px(deco.y, H) + ';width:' + px(deco.width, W) + ';height:' + px(deco.height, H) + ';border:1px solid ' + deco.stroke + ';border-radius:8px"></span>';
+    } else if (deco.type === 'orb') {
+      decoHtml = '<span class="cc-template-rule" style="left:' + px(deco.cx - deco.r, W) + ';top:' + px(deco.cy - deco.r, H) + ';width:' + px(deco.r * 2, W) + ';height:' + px(deco.r * 2, W) + ';border-radius:50%;background:radial-gradient(circle,' + deco.bg + '55,transparent 70%)"></span>';
+    } else if (deco.type === 'stripes') {
+      decoHtml = '<span class="cc-template-rule" style="left:0;top:' + px(deco.y, H) + ';width:100%;height:' + px(deco.height, H) + ';opacity:.42;background:repeating-linear-gradient(0deg,' + deco.bg + ' 0 1px,transparent 1px 6px)"></span>';
+    } else if (deco.type === 'split') {
+      decoHtml = '<span class="cc-template-rule" style="left:' + px(deco.x, W) + ';top:0;width:' + px(deco.width, W) + ';height:100%;background:' + deco.bg + ';opacity:.28"></span>';
+    } else if (deco.type === 'caption') {
+      decoHtml = '<span class="cc-template-rule" style="left:0;top:' + px(deco.y, H) + ';width:100%;height:' + px(deco.height, H) + ';background:' + deco.bg + '"></span>';
+    } else if (deco.type === 'quote') {
+      decoHtml = '<span class="cc-template-rule" style="left:' + px(deco.x, W) + ';top:' + px(deco.y, H) + ';color:' + deco.bg + ';font:900 ' + (deco.size / W * 100).toFixed(2) + 'cqw/0.8 Georgia,serif;opacity:.9">\u201C</span>';
+    } else if (deco.type === 'stat') {
+      decoHtml = '<span class="cc-template-rule" style="left:' + px(deco.x, W) + ';top:' + px(deco.y, H) + ';width:' + px(deco.width, W) + ';height:' + px(deco.height, H) + ';color:' + deco.bg + ';font:900 ' + (deco.size / W * 100).toFixed(2) + 'cqw/0.9 Inter,sans-serif;letter-spacing:-.02em;display:flex;align-items:center;white-space:nowrap;overflow:hidden">' + E(deco.text) + '</span>';
     }
-    return '<div class="cc-template-thumb cc-template-thumb-live" style="background:' + design.palette.bg + '">' +
-      '<span class="cc-template-scrim" style="background:linear-gradient(180deg,' + scrim + ')"></span>' +
+    return '<div class="cc-template-thumb cc-template-thumb-live" data-aspect="' + (design.platform === 'tiktok' ? 'tiktok' : 'ig') + '" style="background:' + design.palette.bg + '">' +
+      (scrim ? '<span class="cc-template-scrim" style="background:linear-gradient(180deg,' + scrim + ')"></span>' : '') +
       decoHtml + layers +
     '</div>';
+  }
+
+  /* The 1-10 slide/post count selector and the large template preview live in
+   * templateUi.js (their own small file) — rendering them here would push this
+   * file past its size contract. */
+  function slideCountSelector(st, isMulti, noun) {
+    var Ui = window.CPCreateTemplateUi;
+    return Ui && Ui.slideCountSelector ? Ui.slideCountSelector(st, isMulti, noun) : '';
+  }
+  function templatePreview(st, tmpls) {
+    var Ui = window.CPCreateTemplateUi;
+    return Ui && Ui.templatePreview ? Ui.templatePreview(st, tmpls) : '';
   }
 
   function toneStep(st) {
@@ -279,9 +319,16 @@
       : 'Optional: a sensible voice is already selected for your script or draft.';
 
     var content = '';
+    var isMulti = false;
+    var noun = 'slides';
     if (isImage) {
       var tmpls = st.platform === 'tiktok' ? TEMPLATES_TT : TEMPLATES_IG;
-      content = '<div class="cc-templates-grid" role="radiogroup" aria-label="Graphic templates">' + tmpls.map(function (tmpl) {
+      var plan = window.CPCreateSlidePlan;
+      isMulti = plan ? plan.isMultiFormat(st.platform, st.format) : /carousel/i.test(st.format || '');
+      noun = st.platform === 'tiktok' ? 'posts' : 'slides';
+      content = templatePreview(st, tmpls) +
+        slideCountSelector(st, isMulti, noun) +
+        '<div class="cc-templates-grid" role="radiogroup" aria-label="Graphic templates">' + tmpls.map(function (tmpl) {
         var on = (st.template || tmpls[0].id) === tmpl.id;
         return '<button class="cc-template-card ' + (on ? 'on' : '') + '" type="button" ' +
           'onclick="cpCreateSetTemplate(\'' + tmpl.id + '\')" role="radio" aria-checked="' + (on ? 'true' : 'false') + '" aria-pressed="' + (on ? 'true' : 'false') + '">' +
@@ -336,12 +383,10 @@
       '<button class="cc-rail-c" type="button" onclick="' + onclick + '">Change</button></div>';
   }
 
-  
-  // Compatibility stubs for template search/filtering (loading="lazy" images)
-  window.cpFilterCreateTemplates = window.cpFilterCreateTemplates || function () {};
-  window.cpSearchCreateTemplates = window.cpSearchCreateTemplates || function () {};
   window.CPCreateSteps = {
     templateThumb: templateThumb,
+    slideCountSelector: slideCountSelector,
+    templatePreview: templatePreview,
     sourceStep: sourceStep,
     platformStep: platformStep,
     formatStep: formatStep,

@@ -91,6 +91,12 @@
         '<button class="cc-stale-b" type="button" onclick="cpCreateGenerate()">Regenerate</button></div>'
       : '';
 
+    // After generating, the template is still a live choice: the user can see
+    // the design they got and switch to another one without restarting the
+    // flow. This is the "preview and select templates after generating" half of
+    // the requirement; the template step covers the "before" half.
+    var templateBlock = outs.length ? templateSwitcher(st) : '';
+
     // Spec 7.4: make the most relevant action prominent: after generating,
     // that is saving, not generating again.
     var actions = outs.length ? primaryActions(st, outs) : '';
@@ -107,9 +113,37 @@
       stepRail('Tone', sum.tone, 'tone') +
       '</div>' +
       staleNote +
+      templateBlock +
       body +
       actions +
       '</div>';
+  }
+
+  /* The template picker on the result screen. It renders the SAME live
+   * miniature the template step uses, so what the user sees here is exactly
+   * what the export will draw. Choosing one regenerates in place. */
+  function templateSwitcher(st) {
+    var Steps = window.CPCreateSteps;
+    var T = window.CPCardTemplates;
+    if (!Steps || !T || !Steps.templateThumb) return '';
+    var isImage = (st.platform === 'instagram' && /IG (Single Post|Carousel)/.test(st.format || '')) ||
+      (st.platform === 'tiktok' && /graphic|camera/i.test(st.format || ''));
+    if (!isImage) return '';
+    var list = T.list(st.platform);
+    if (!list.length) return '';
+    var current = st.template || (list[0] && list[0].id);
+    var tiles = list.map(function (t) {
+      var on = t.id === current;
+      return '<button class="cc-template-card ' + (on ? 'on' : '') + '" type="button" ' +
+        'onclick="cpCreateSetTemplate(\'' + t.id + '\', true)" aria-pressed="' + (on ? 'true' : 'false') + '">' +
+        Steps.templateThumb(t, st.platform) +
+        '<div class="cc-template-meta"><span class="cc-template-title">' + E(t.name) + '</span></div>' +
+        '<span class="cc-template-badge">' + (on ? '\u2713 In use' : 'Switch') + '</span></button>';
+    }).join('');
+    return '<div class="cc-tpl-switch">' +
+      '<div class="cc-tpl-switch-hd"><span>Template</span>' +
+      '<span class="cc-tpl-switch-note">Tap one to regenerate in that style</span></div>' +
+      '<div class="cc-templates-grid">' + tiles + '</div></div>';
   }
 
   function stepRail(label, value, step) {

@@ -140,33 +140,143 @@ function localPlateImage(slide, opts){
 }
 function localCardImage(slide, opts){
   opts = opts||{};
+  // ── The card is drawn from the SHARED layout engine ────────────────────────
+  // This painter used to hardcode x=90, y=330, hSize=84 and a fixed 5-line wrap,
+  // ignoring the template entirely. That is why the generated slides looked
+  // exactly as bad as the templates: the template was only ever a thumbnail,
+  // never the thing that got painted. Now the same CPCardLayout.resolve() that
+  // drives the preview and the export drives this painter, so the output IS the
+  // template: real geometry, real auto-fit, real hierarchy, no overflow.
+  const L = (typeof window !== "undefined" && window.CPCardLayout) || null;
+  const tall = opts.format === "tiktok" || opts.format === "tiktok_silent";
+  const W = 1080, H = tall ? 1920 : (opts.format === "youtube_thumbnail" ? 720 : 1350);
+  const platform = tall ? "tiktok" : (opts.format === "youtube_thumbnail" ? "youtube" : "instagram");
+  const photo = opts.imageDataUrl || slide.customImage || slide.imageDataUrl || "";
+
+  if (L) {
+    const design = L.resolve({
+      templateId: opts.templateId || null,
+      platform,
+      slide,
+      index: Math.max(0, (slide.slideNumber || 1) - 1),
+      total: opts.total || 1,
+      style: {},
+      canvas: { width: W, height: H }
+    });
+    if (design) {
+      const pal = design.palette;
+      const esc2 = svgEsc;
+      const parts = [];
+      // Background: the photo, cropped to fill, or the template's own field.
+      if (photo) {
+        parts.push(`<image href="${esc2(photo)}" x="0" y="0" width="${W}" height="${H}" preserveAspectRatio="xMidYMid slice"/>`);
+      } else {
+        parts.push(`<rect width="100%" height="100%" fill="${pal.bg}"/>`);
+      }
+      // The template's gradient field, so a photo-less card still reads as designed.
+      if (pal.gradient) {
+        parts.push(`<rect width="100%" height="100%" fill="${esc2(pal.bg)}" opacity="${photo ? 0.18 : 0.55}"/>`);
+      }
+      // The legibility scrim, from the same scrimFor() the preview uses.
+      if (design.scrim && design.scrim.stops && design.scrim.stops.length) {
+        const stops = design.scrim.stops.map(s => `<stop offset="${Math.round(s.offset*100)}%" stop-color="${esc2(s.color)}"/>`).join("");
+        parts.push(`<defs><linearGradient id="scrim" x1="0" y1="0" x2="0" y2="1">${stops}</linearGradient></defs><rect width="100%" height="100%" fill="url(#scrim)"/>`);
+      }
+      // Decoration (badge / rule / hairline / orb / stripes / stat / quote).
+      const d = design.decoration || { type: "none" };
+      if (d.type === "badge") {
+        parts.push(`<rect x="${d.x}" y="${d.y}" width="${d.width}" height="${d.height}" rx="${d.radius}" fill="${esc2(d.bg)}"/>`);
+        parts.push(`<text x="${d.x + d.width/2}" y="${d.y + d.height/2}" text-anchor="middle" dominant-baseline="central" font-family="Inter,sans-serif" font-weight="800" font-size="${d.fontSize}" letter-spacing="${(d.fontSize*0.08).toFixed(1)}" fill="${esc2(pal.bg)}">${esc2(d.text)}</text>`);
+      } else if (d.type === "rule" || d.type === "hairline") {
+        parts.push(`<rect x="${d.x}" y="${d.y}" width="${d.width}" height="${d.height}" fill="${esc2(d.bg)}"/>`);
+      } else if (d.type === "corner") {
+        parts.push(`<rect x="0" y="0" width="${W}" height="${d.height}" fill="${esc2(d.bg)}"/>`);
+      } else if (d.type === "orb") {
+        parts.push(`<defs><radialGradient id="orb"><stop offset="0%" stop-color="${esc2(d.bg)}" stop-opacity=".34"/><stop offset="70%" stop-color="${esc2(d.bg)}" stop-opacity="0"/></radialGradient></defs><circle cx="${d.cx}" cy="${d.cy}" r="${d.r}" fill="url(#orb)"/>`);
+      } else if (d.type === "stripes") {
+        parts.push(`<rect x="0" y="${d.y}" width="${W}" height="${d.height}" fill="${esc2(d.bg)}" opacity=".42"/>`);
+      } else if (d.type === "split") {
+        parts.push(`<rect x="${d.x}" y="0" width="${d.width}" height="${H}" fill="${esc2(d.bg)}" opacity=".28"/>`);
+      } else if (d.type === "caption") {
+        parts.push(`<rect x="0" y="${d.y}" width="${W}" height="${d.height}" fill="${esc2(d.bg)}"/>`);
+      } else if (d.type === "quote") {
+        parts.push(`<text x="${d.x}" y="${d.y + d.size*0.8}" font-family="Georgia,serif" font-weight="900" font-size="${d.size}" fill="${esc2(d.bg)}" opacity=".9">\u201C</text>`);
+      } else if (d.type === "stat") {
+        parts.push(`<text x="${d.x}" y="${d.y + d.height*0.72}" font-family="Inter,sans-serif" font-weight="900" font-size="${d.size}" letter-spacing="${(-d.size*0.02).toFixed(1)}" fill="${esc2(d.bg)}">${esc2(d.text)}</text>`);
+      }
+      // Text layers: exact box, exact size, exact line breaks from auto-fit.
+      design.layers.forEach(l => {
+        if (l.empty) return;
+        let px = l.sizePct * W;
+        let lh = px * l.lineHeight;
+        const anchor = l.align === "center" ? "middle" : (l.align === "right" ? "end" : "start");
+        const tx = l.align === "center" ? l.box.x*W + l.box.width*W/2 : (l.align === "right" ? l.box.x*W + l.box.width*W : l.box.x*W);
+        let lines = l.lines && l.lines.length ? l.lines : String(l.displayText).split("\n");
+        // HARD GUARANTEE against clipping. A text block occupies from its
+        // ascender (px*0.80 above the first baseline) to its descender
+        // (px*0.20 below the last baseline). That whole extent is fitted inside
+        // the box: if it is taller, the type is stepped down; then the block is
+        // centred in the box. This is what stops the "clipped at the top" and
+        // "cut off at the bottom" cases the visual check caught.
+        const boxH = l.box.height * H;
+        const top = l.box.y * H;
+        const extent = (n) => (n - 1) * lh + px * 1.0;
+        let need = extent(lines.length);
+        if (need > boxH && need > 0) {
+          const k = boxH / need;
+          px = px * k;
+          lh = lh * k;
+          need = extent(lines.length);
+        }
+        let ty = top + px * 0.80 + Math.max(0, (boxH - need) / 2);
+        // Final clamp: never let the ascender rise above the box, never let the
+        // descender fall below it. A small breathing room (1.2% of the card) is
+        // kept at both edges so type never sits flush against a boundary.
+        const pad = H * 0.012;
+        if (ty - px * 0.80 < top + pad) ty = top + pad + px * 0.80;
+        const bottom = ty + (lines.length - 1) * lh + px * 0.20;
+        if (bottom > top + boxH - pad) ty -= (bottom - (top + boxH - pad));
+        lines.forEach((line, i) => {
+          const isKeyword = l.keyword && line.indexOf(l.keyword) > -1;
+          const fill = isKeyword ? l.keywordColor : l.color;
+          parts.push(`<text x="${tx}" y="${(ty + i*lh).toFixed(1)}" text-anchor="${anchor}" font-family="${esc2(l.fontFamily)}" font-weight="${l.fontWeight}" font-size="${px.toFixed(1)}" letter-spacing="${(l.tracking*px).toFixed(2)}" fill="${esc2(fill)}">${esc2(line)}</text>`);
+        });
+      });
+      // Carousel counter, so a downloaded slide still shows its place in the set.
+      if (design.counter && design.counter.label) {
+        const c = design.counter;
+        parts.push(`<text x="${c.x}" y="${c.y + c.size}" font-family="Inter,sans-serif" font-weight="600" font-size="${c.size}" letter-spacing="${(c.size*0.06).toFixed(1)}" fill="rgba(246,246,246,.72)">${esc2(c.label)}</text>`);
+      }
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">${parts.join("")}</svg>`;
+      return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+    }
+  }
+
+  // ── Fallback: no layout engine loaded (a stale cached page) ────────────────
+  // Kept deliberately simple and safe: it must never overflow, so it uses the
+  // same 8% margin and a conservative size ladder.
   const pal = PALETTE_VIS[opts.palette] || PALETTE_VIS.noir_orange;
   const th = THEME_VIS[opts.theme] || THEME_VIS.modern_dark;
   const ty = TYPO_VIS[opts.typography] || TYPO_VIS.impact;
-  const tall = opts.format === "tiktok";
-  const W=1080, H= tall ? 1920 : 1350;
   const bg = opts.palette==="white_platinum" ? pal[0] : (opts.theme==="clean_light"||opts.theme==="editorial_warm" ? th.bg : pal[0]);
   const light = bg==="#f4f4f2"||bg===THEME_VIS.clean_light.bg||bg===THEME_VIS.editorial_warm.bg;
   const fg = light ? "#141414" : "#ffffff"; const mu = light ? "#555" : "rgba(255,255,255,.72)";
   const acc = pal[1];
+  const M = Math.round(W*0.08);
   const headRaw = slide.headline || slide.claim || "";
   const head = ty.up ? headRaw.toUpperCase() : headRaw;
   const body = slide.type==="hook" ? (slide.supportingText||"") : (slide.body || slide.reaction || slide.outcome || "");
-  const hSize = slide.type==="hook" ? 104 : 84;
-  const hLines = wrapLines(head, Math.round(1500/hSize*(ty.up?1:1.15)), 5);
-  const bLines = wrapLines(body, 38, opts.density==="punchy"?3:opts.density==="detailed"?8:5);
-  let y = slide.type==="hook" ? H*0.38 : 330;
-  const hl = hLines.map((l,i)=>`<text x="90" y="${y+i*hSize*1.08}" font-family="${ty.f}" font-weight="${ty.w}" font-size="${hSize}" fill="${(slide.type==='hook'&&i===0)?acc:fg}">${svgEsc(l)}</text>`).join("");
-  y += hLines.length*hSize*1.08 + 50;
-  const stat = slide.stat ? `<text x="90" y="${y+90}" font-family="${ty.f}" font-weight="900" font-size="140" fill="${acc}">${svgEsc(slide.stat)}</text><text x="90" y="${y+150}" font-family="Inter,sans-serif" font-size="34" fill="${mu}">${svgEsc(slide.statLabel||"")}</text>` : "";
-  if(slide.stat) y += 210;
-  const bl = bLines.map((l,i)=>`<text x="90" y="${y+i*52}" font-family="Inter,Arial,sans-serif" font-weight="500" font-size="40" fill="${mu}">${svgEsc(l)}</text>`).join("");
-  const tag = (slide.tag||slide.sectionLabel) ? `<rect x="90" y="150" rx="22" width="${Math.min(800,(String(slide.tag||slide.sectionLabel).length*20)+60)}" height="54" fill="${acc}"/><text x="120" y="187" font-family="Inter,sans-serif" font-weight="800" font-size="28" fill="${light?'#fff':'#000'}">${svgEsc(String(slide.tag||slide.sectionLabel).toUpperCase())}</text>` : "";
-  const cta = slide.ctaLine ? `<text x="90" y="${H-110}" font-family="Inter,sans-serif" font-weight="800" font-size="40" fill="${acc}">${svgEsc(slide.ctaLine)}</text>` : "";
-  const num = slide.slideNumber ? `<text x="${W-90}" y="${H-110}" text-anchor="end" font-family="Inter,sans-serif" font-weight="700" font-size="32" fill="${mu}">${slide.slideNumber}${opts.total?' / '+opts.total:''}</text>` : "";
-  const photo=opts.imageDataUrl||slide.customImage||slide.imageDataUrl||"";
-  const photoLayer=photo?`<image href="${svgEsc(photo)}" x="0" y="0" width="${W}" height="${H}" preserveAspectRatio="xMidYMid slice"/><rect width="100%" height="100%" fill="url(#shade)"/>`:`<rect width="100%" height="100%" fill="${bg}"/><circle cx="${W-60}" cy="${H*0.2}" r="380" fill="${acc}" opacity=".08"/>`;
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><defs><linearGradient id="shade" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#000" stop-opacity=".82"/><stop offset=".7" stop-color="#000" stop-opacity=".36"/><stop offset="1" stop-color="#000" stop-opacity=".14"/></linearGradient></defs>${photoLayer}<rect x="0" y="0" width="${W}" height="14" fill="${acc}"/>${tag}${hl}${stat}${bl}${cta}${num}</svg>`;
+  const hSize = slide.type==="hook" ? 96 : 76;
+  const hLines = wrapLines(head, Math.round((W-M*2)/hSize*(ty.up?1:1.15)), 5);
+  const bLines = wrapLines(body, Math.round((W-M*2)/40), opts.density==="punchy"?3:opts.density==="detailed"?8:5);
+  let y = slide.type==="hook" ? H*0.40 : H*0.26;
+  const hl = hLines.map((l,i)=>`<text x="${M}" y="${y+i*hSize*1.10}" font-family="${ty.f}" font-weight="${ty.w}" font-size="${hSize}" fill="${(slide.type==='hook'&&i===0)?acc:fg}">${svgEsc(l)}</text>`).join("");
+  y += hLines.length*hSize*1.10 + 44;
+  const bl = bLines.map((l,i)=>`<text x="${M}" y="${y+i*52}" font-family="Inter,Arial,sans-serif" font-weight="500" font-size="38" fill="${mu}">${svgEsc(l)}</text>`).join("");
+  const cta = slide.ctaLine ? `<text x="${M}" y="${H-M-20}" font-family="Inter,sans-serif" font-weight="800" font-size="36" fill="${acc}">${svgEsc(slide.ctaLine)}</text>` : "";
+  const num = slide.slideNumber ? `<text x="${W-M}" y="${H-M-20}" text-anchor="end" font-family="Inter,sans-serif" font-weight="700" font-size="30" fill="${mu}">${slide.slideNumber}${opts.total?' / '+opts.total:''}</text>` : "";
+  const photoLayer=photo?`<image href="${svgEsc(photo)}" x="0" y="0" width="${W}" height="${H}" preserveAspectRatio="xMidYMid slice"/><rect width="100%" height="100%" fill="url(#shade)"/>`:`<rect width="100%" height="100%" fill="${bg}"/>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><defs><linearGradient id="shade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity=".30"/><stop offset=".55" stop-color="#000" stop-opacity=".55"/><stop offset="1" stop-color="#000" stop-opacity=".88"/></linearGradient></defs>${photoLayer}<rect x="0" y="0" width="${W}" height="10" fill="${acc}"/>${hl}${bl}${cta}${num}</svg>`;
   return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
 }
 // Maps a niche to one of the original icon glyphs in services/statCard.js.
@@ -1218,13 +1328,17 @@ function renderTrend(t){
 
     const brandChips = Object.entries(BRAND_PRESETS).map(([id,b]) => `<button class="h-card h-card-theme ${brandPreset===id?'active':''}" onclick="setBrandPreset('${t.id}','${id}')"><div class="h-theme-preview" style="background:${PALETTE_VIS[b.palette][0]};color:#fff;border-color:${PALETTE_VIS[b.palette][1]}"><span style="font-family:${TYPO_VIS[b.typography].f}">Aa</span><span class="h-theme-line" style="background:${PALETTE_VIS[b.palette][1]}"></span></div><div class="h-name">${b.label}</div></button>`).join("");
     const slideCount = S.slideCount[t.id] || 4;
-    const slideCountChips = [1,2,3,4,5,6,7,8].map(n => {
+    // 1-10, matching the Create flow's selector. The old 1-8 row could not
+    // express the long-form carousels the planner now supports.
+    const slideCountChips = [1,2,3,4,5,6,7,8,9,10].map(n => {
       const isAct = slideCount === n;
       return `<button class="h-slide-pill ${isAct?'active':''}" onclick="setSlideCount('${t.id}',${n})">
         ${n} ${n===1?'slide':'slides'}
       </button>`;
     }).join("");
-    const showSlideCount = ct === "IG Carousel";
+    // TikTok graphic formats are a multi-POST set too: the user swipes through
+    // several TikTok posts, so the count control belongs there as well.
+    const showSlideCount = ct === "IG Carousel" || (plat === "tiktok" && /graphic|camera/i.test(ct));
     const outsHTML = outs.map((o,i)=>renderOut(o,t.id,i)).join("");
 
     const platLabel = plat === "twitter" ? "X (Twitter)" : (PLATS.find(x=>x.id===plat)?.label || plat);
@@ -3747,10 +3861,18 @@ window.gen = async (tid, all) => {
         const isSilentCamera = c === "TikTok Silent Camera";
         const isThumbnail = c === "Thumbnail";
         const isInstagramSingle = c === "IG Single Post";
+        const isTikTokGraphic = c === "TikTok No-Face Graphic" || isSilentCamera;
         const photoLookup = !articleImage ? api(`/api/stock-photo?query=${encodeURIComponent((t.headline || "") + " " + (t.niche || ""))}&count=1`).then(photoResult => { articleImage = photoResult.photos?.[0]?.url || null; }).catch(e => { console.warn("Story photo lookup failed", e); }) : Promise.resolve();
-        const isSingle = isInstagramSingle || c === "TikTok No-Face Graphic" || isSilentCamera || isThumbnail;
-        const cardFormat = isSilentCamera ? "tiktok_silent" : isThumbnail ? "youtube_thumbnail" : isInstagramSingle ? "instagram" : isSingle ? "tiktok" : plat;
-        const requestedCount = isSingle ? 1 : (S.slideCount[tid] || 4);
+        // How many slides/posts the user asked for. IG Single Post and Thumbnail
+        // are inherently one image; everything else honours the 1-10 selector,
+        // with TikTok graphic formats defaulting to 3 posts rather than 1.
+        const requestedCount = (isInstagramSingle || isThumbnail)
+          ? 1
+          : Math.max(1, Math.min(10, Number(S.slideCount[tid]) || (isTikTokGraphic ? 3 : 4)));
+        // A single item is only "single" when the count really is 1. This is
+        // what lets TikTok produce several posts instead of always one.
+        const isSingle = isInstagramSingle || isThumbnail || requestedCount === 1;
+        const cardFormat = isSilentCamera ? "tiktok_silent" : isThumbnail ? "youtube_thumbnail" : isInstagramSingle ? "instagram" : (isTikTokGraphic || isSingle) ? "tiktok" : plat;
         // Only 6+ slides earns a dedicated CTA slide — below that, there's
         // too little actual story to justify spending a whole slide on
         // "follow for more" by itself. Instead the CTA gets folded onto the
@@ -4492,6 +4614,18 @@ function pageHome(){
     ${list}
   </main>`;
 }
+// Opens a digest story's own article. A new tab is the app's existing pattern
+// for leaving to a source; the noopener/noreferrer pair keeps the opened page
+// from touching this window. If the popup is blocked (some in-app browsers),
+// fall back to a same-tab navigation so the tap is never a no-op.
+window.cpOpenArticle = (url) => {
+  const href = String(url || "").trim();
+  if (!href) { setTab("home"); return; }
+  let opened = null;
+  try { opened = window.open(href, "_blank", "noopener,noreferrer"); } catch (e) { opened = null; }
+  if (!opened) { try { window.location.href = href; } catch (e) {} }
+};
+
 function renderDigest(){
   if(S.errors.digest && !S.digestDismissed && S.digest) { /* fall through, card rendered below */ }
   if(!S.digest || S.digestDismissed || !(S.digest.stories||[]).length) return "";
@@ -4499,7 +4633,14 @@ function renderDigest(){
   // headline, thin divider, repeat  which read as one long wall of text.
   // Now a horizontal scrollable strip of compact cards, capped at 8, so
   // it's a quick scan instead of a vertical slog.
-  const cards = S.digest.stories.slice(0,8).map(s=>`<div class="digest-card" onclick="setTab('home')"><div class="digest-niche">${esc(s.niche)}</div><div class="hl">${esc(s.headline)}</div></div>`).join("");
+  // Each card opens THAT story's own article, not the Home feed. The URL comes
+  // from the digest payload (routes/digest.js puts the feed item's link on
+  // `url`); a story without one falls back to Home rather than a dead tap.
+  const cards = S.digest.stories.slice(0,8).map(s=>{
+    const url = String(s.url || s.link || "").trim();
+    const act = url ? `cpOpenArticle('${esc(url).replace(/'/g,"\\'")}')` : "setTab('home')";
+    return `<div class="digest-card" role="link" tabindex="0" data-article-url="${esc(url)}" onclick="${act}" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();${act}}"><div class="digest-niche">${esc(s.niche)}</div><div class="hl">${esc(s.headline)}</div>${url?'<span class="digest-go" aria-hidden="true">↗</span>':''}</div>`;
+  }).join("");
   return `<div class="digest"><div class="digest-h"><div class="digest-title">Daily Digest</div><button class="tiny-copy tipbtn" data-tip="Dismiss today's digest" title="Dismiss today's digest" aria-label="Dismiss digest" onclick="dismissDigest()">Got it</button></div>${sectionErr("digest")}<div class="digest-strip">${cards}</div></div>`;
 }
 
