@@ -645,6 +645,11 @@ body{padding-bottom:calc(var(--tab-h) + env(safe-area-inset-bottom));letter-spac
 .digest-strip::-webkit-scrollbar{display:none}
 .digest-card{flex:0 0 auto;width:168px;background:var(--sf2);border:1px solid var(--br);border-radius:18px 18px 8px 8px;padding:12px;scroll-snap-align:start;cursor:pointer;transition:border-color .15s;border-top:3px solid var(--ac2)}
 .digest-card:hover{border-color:var(--ac)}
+/* A digest card is a link to that story's own article now, so it needs a
+   focus ring and a small outbound affordance. */
+.digest-card{position:relative}
+.digest-card:focus-visible{outline:2px solid var(--ac);outline-offset:2px}
+.digest-go{position:absolute;top:8px;right:9px;font-size:11px;line-height:1;color:var(--mu2);opacity:.85}
 .digest-card .em{font-size:17px;margin-bottom:8px;display:block}
 .digest-card .hl{font-family:var(--font-digest);font-size:12.5px;font-weight:600;line-height:1.35;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .digest-niche{font-size:9px;color:var(--ac2);text-transform:none;letter-spacing:.5px;font-weight:700;margin-bottom:2px}
@@ -2482,7 +2487,8 @@ body{padding-bottom:calc(var(--tab-h) + env(safe-area-inset-bottom));letter-spac
 <script src="create/env.js?v=45"></script>
 <script src="create/flow.js?v=45"></script>
 <script src="create/steps.js?v=48"></script>
-<script src="create/generate.js?v=45"></script>
+<script src="create/templateUi.js?v=1"></script>
+<script src="create/generate.js?v=46"></script>
 <script src="create/review.js?v=46"></script>
 <script src="create/index.js?v=46"></script>
 <script src="lib/studioPerf.js?v=30"></script>

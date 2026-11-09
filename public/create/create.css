@@ -319,6 +319,26 @@
 }
 .cc-back { flex: 0 0 auto; min-height: 46px; }
 .cc-next { flex: 1; min-height: 46px; justify-content: center; }
+/* The action is always tappable. When the step is not ready it is dimmed, not
+   disabled, so a tap still reaches the handler and gets an explanation. */
+.cc-next-wait { opacity: .55; }
+.cc-next-wait:active { opacity: .75; }
+
+/* ── Template switcher on the result screen ───────────────────────────────── */
+.cc-tpl-switch { margin: 0 0 16px; }
+.cc-tpl-switch-hd {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: .10em;
+  text-transform: uppercase;
+  color: var(--mu2);
+}
+.cc-tpl-switch-note { letter-spacing: 0; text-transform: none; font-weight: 600; font-size: 10.5px; color: var(--mu2); }
 
 /* ── result screen ─────────────────────────────────────────────────────── */
 .cc-out { margin-bottom: 14px; }
@@ -496,31 +516,30 @@
 .cc-templates-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px;
   margin-bottom: 18px;
 }
 .cc-template-card {
   display: flex;
   flex-direction: column;
   text-align: left;
-  padding: 10px;
-  border-radius: 14px;
+  padding: 8px;
+  border-radius: 16px;
   background: var(--sf);
   border: 1px solid var(--br);
   color: var(--tx);
   cursor: pointer;
-  transition: transform .14s, border-color .14s;
-  min-height: 140px;
+  transition: transform .14s, border-color .14s, box-shadow .14s;
+  min-height: 0;
 }
 .cc-template-card:hover { transform: translateY(-2px); border-color: var(--ac); }
 .cc-template-card.on {
   border-color: var(--ac);
-  box-shadow: 0 0 0 1px var(--ac);
+  box-shadow: 0 0 0 1.5px var(--ac), 0 8px 22px rgba(0,0,0,.28);
   background: color-mix(in srgb, var(--ac) 10%, var(--sf));
 }
 .cc-template-thumb {
-  height: 52px;
-  border-radius: 8px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -536,12 +555,16 @@
 .cc-template-thumb-live {
   position: relative;
   display: block;
-  height: 150px;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 5;
   padding: 0;
   overflow: hidden;
   container-type: inline-size;
   text-align: left;
+  background: #161616;
 }
+.cc-template-thumb-live[data-aspect="tiktok"] { aspect-ratio: 9 / 16; }
 .cc-template-scrim { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
 .cc-template-layer { position: absolute; z-index: 2; display: block; overflow: hidden; overflow-wrap: anywhere; white-space: pre-wrap; }
 .cc-template-badge-pill { position: absolute; z-index: 3; display: flex; align-items: center; justify-content: center; border-radius: 999px; font: 800 2.4cqw/1 Inter, sans-serif; letter-spacing: .08em; overflow: hidden; white-space: nowrap; }
@@ -557,6 +580,83 @@
   color: var(--mu2);
 }
 .cc-template-card.on .cc-template-badge { color: var(--ac); font-weight: 800; }
+
+/* ── Large live template preview ──────────────────────────────────────────── */
+.cc-tpl-preview {
+  margin: 0 0 16px;
+  padding: 10px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.015));
+  border: 1px solid var(--br);
+}
+.cc-tpl-preview-hd {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: .10em;
+  text-transform: uppercase;
+  color: var(--mu2);
+}
+.cc-tpl-preview-name { color: var(--tx); letter-spacing: 0; text-transform: none; font-size: 12px; }
+.cc-tpl-preview-frame { display: flex; justify-content: center; }
+.cc-tpl-preview-frame .cc-template-thumb-live {
+  width: min(100%, 260px);
+  border-radius: 12px;
+  box-shadow: 0 14px 34px rgba(0,0,0,.42);
+}
+
+/* ── Slide / post count selector (1-10) ───────────────────────────────────── */
+.cc-count {
+  margin: 0 0 18px;
+  padding: 12px 12px 10px;
+  border-radius: 16px;
+  background: var(--sf);
+  border: 1px solid var(--br);
+}
+.cc-count-hd {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.cc-count-l { font-size: 13px; font-weight: 750; color: var(--tx); letter-spacing: -.01em; }
+.cc-count-v { font-size: 11px; font-weight: 700; color: var(--ac); white-space: nowrap; }
+.cc-count-row {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 4px;
+}
+.cc-count-pill {
+  appearance: none;
+  border: 1px solid var(--br);
+  background: transparent;
+  color: var(--mu);
+  border-radius: 9px;
+  height: 34px;
+  padding: 0;
+  font: 750 13px/1 Inter, sans-serif;
+  cursor: pointer;
+  transition: background .12s, color .12s, border-color .12s, transform .12s;
+}
+.cc-count-pill:hover { border-color: var(--ac); color: var(--tx); }
+.cc-count-pill.on {
+  background: var(--ac);
+  border-color: var(--ac);
+  color: #0b0b0e;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--ac) 40%, transparent);
+}
+.cc-count-hint {
+  margin: 9px 0 0;
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--mu2);
+}
 
 /* ── Bouncing Creator+ Logo & Floating Progress Bar ───────────────────── */
 .cc-busy-brand {

@@ -115,6 +115,16 @@
       return;
     }
     if (st.step === 'review') return;
+    // The button is always tappable, so an unready step has to say what it is
+    // waiting for rather than silently doing nothing (the old double-tap bug).
+    if (!F().canAdvance(st, window.CPEnv.ptypes())) {
+      var need = st.step === 'source' ? 'Pick what you are creating from first.'
+        : st.step === 'platform' ? 'Pick a platform first.'
+        : st.step === 'format' ? 'Pick a format first.'
+        : 'Finish this step first.';
+      if (typeof window.toast === 'function') window.toast(need);
+      return;
+    }
     F().next(st, window.CPEnv.ptypes());
     repaint();
   };
@@ -236,7 +246,12 @@
     F().setSource(st, id);
     if (id === 'event') { window.setTab('calendar'); return; }
     if (id === 'idea') { window.openPulseAi('I have my own content idea. Help me turn it into a compelling post, and ask me what the idea is.', 'create'); return; }
-    if (id === 'story') { window.setTab('home'); return; }
+    // "Discover news" used to call setTab('home'), which threw the user out of
+    // the flow: the first tap looked like it did nothing (it navigated away),
+    // and only a second tap on Create brought them back. The story picker is
+    // rendered right here on step 1, so the correct behaviour is simply to
+    // repaint and show it.
+    if (id === 'story') { repaint(); return; }
     // The Studio is a full-screen tool, not a step in this flow: hand straight
     // over to the existing, unchanged code.
     if (id === 'studio') { window.cpCreateOpenStudio(); return; }
@@ -297,9 +312,30 @@
     repaint();
   };
 
+  /* The 1-10 carousel / multi-post count. Kept on the flow state so the
+   * generator reads exactly what the user picked, and mirrored onto the app's
+   * per-story map because gen() in core.js reads S.slideCount[tid]. */
+  window.cpCreateSetSlideCount = function (n) {
+    var st = cs();
+    F().setSlideCount(st, n);
+    var S = S_();
+    if (S && st.trendId) {
+      S.slideCount = S.slideCount || {};
+      S.slideCount[st.trendId] = st.slideCount;
+    }
+    repaint();
+  };
+
   window.cpCreateSetTemplate = function (id, autoAdvance) {
     var st = cs();
     st.template = id;
+    // Keep the app's per-story template map in step, so the preview here and
+    // the rendered output after Generate are the same design.
+    var S = S_();
+    if (S && st.trendId) {
+      S.cardTemplate = S.cardTemplate || {};
+      S.cardTemplate[st.trendId] = id;
+    }
     if (autoAdvance) {
       window.cpCreateNext();
       return;

@@ -99,6 +99,13 @@
     S.plat[trend.id] = st.platform;
     S.ctype[trend.id] = st.format;
     S.tone[trend.id] = st.tone || 'normal';
+    // The count the user picked in the flow is the count the generator must
+    // produce. gen() reads S.slideCount[tid], so it is written here rather than
+    // left to a default.
+    if (st.slideCount) {
+      S.slideCount = S.slideCount || {};
+      S.slideCount[trend.id] = Math.max(1, Math.min(10, Number(st.slideCount) || 1));
+    }
     if (st.template) {
       S.cardTemplate = S.cardTemplate || {};
       S.cardTemplate[trend.id] = st.template;

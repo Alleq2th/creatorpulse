@@ -55,6 +55,8 @@
       platform: null,
       format: null,
       tone: 'normal',
+      template: null,    // chosen graphic template id
+      slideCount: null,  // how many slides/posts the user asked for (1-10)
       trendId: null,     // the S.trends id the output is keyed by
       needsRegen: false, // set when a change invalidated existing output
       error: ''
@@ -163,6 +165,15 @@
     return st;
   }
 
+  /* The carousel / multi-post count. Clamped to 1-10 here so no caller can put
+   * an impossible number into the generator. */
+  function setSlideCount(st, n) {
+    var v = Math.round(Number(n));
+    if (!Number.isFinite(v)) return st;
+    st.slideCount = Math.max(1, Math.min(10, v));
+    return st;
+  }
+
   /* Spec 7.2: "a compact row could show: Platform: TikTok: Change".
    * summarize() produces the value half of those rows. */
   function summarize(st, plats, toneList) {
@@ -221,6 +232,7 @@
     setPlatform: setPlatform,
     setFormat: setFormat,
     setTone: setTone,
+    setSlideCount: setSlideCount,
     summarize: summarize,
     trendIdFor: trendIdFor
   };

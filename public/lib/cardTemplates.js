@@ -179,12 +179,12 @@
       accentUse: { cta: true, rule: true, keyword: true },
       decoration: { type: 'badge', text: 'BREAKING', accent: '#d96a4a' },
       roles: {
-        hook:     { headline: R(.08, .20, .72, .26, { maxLines: 4, maxSize: .078, stack: true }), supportingText: R(.08, .50, .72, .20, { maxLines: 4 }), ctaLine: R(.08, .74, .72, .07, { maxLines: 1, maxSize: .026 }) },
-        context:  { headline: R(.08, .20, .72, .24, { maxLines: 4, maxSize: .072, stack: true }), supportingText: R(.08, .48, .72, .26, { maxLines: 5 }), ctaLine: R(.08, .76, .72, .07, { maxLines: 1, maxSize: .026 }) },
-        evidence: { headline: R(.08, .22, .72, .24, { maxLines: 4, maxSize: .076, stack: true }), supportingText: R(.08, .50, .72, .22, { maxLines: 4 }), ctaLine: R(.08, .74, .72, .07, { maxLines: 1, maxSize: .026 }) },
-        turn:     { supportingText: R(.08, .22, .72, .22, { maxLines: 4 }), headline: R(.08, .48, .72, .26, { maxLines: 4, maxSize: .078, stack: true }), ctaLine: R(.08, .76, .72, .07, { maxLines: 1, maxSize: .026 }) },
-        payoff:   { headline: R(.08, .34, .72, .26, { maxLines: 4, maxSize: .076, stack: true }), ctaLine: R(.08, .64, .72, .07, { maxLines: 1, maxSize: .028 }) },
-        cta:      { headline: R(.08, .24, .72, .24, { maxLines: 4, maxSize: .072, stack: true }), ctaLine: R(.08, .54, .72, .10, { maxLines: 2, maxSize: .046 }) }
+        hook:     { headline: R(.09, .20, .70, .26, { maxLines: 4, maxSize: .070, stack: true }), supportingText: R(.09, .50, .70, .20, { maxLines: 4 }), ctaLine: R(.09, .74, .70, .07, { maxLines: 1, maxSize: .026 }) },
+        context:  { headline: R(.09, .20, .70, .24, { maxLines: 4, maxSize: .066, stack: true }), supportingText: R(.09, .48, .70, .26, { maxLines: 5 }), ctaLine: R(.09, .76, .70, .07, { maxLines: 1, maxSize: .026 }) },
+        evidence: { headline: R(.09, .22, .70, .24, { maxLines: 4, maxSize: .068, stack: true }), supportingText: R(.09, .50, .70, .22, { maxLines: 4 }), ctaLine: R(.09, .74, .70, .07, { maxLines: 1, maxSize: .026 }) },
+        turn:     { supportingText: R(.09, .22, .70, .22, { maxLines: 4 }), headline: R(.09, .48, .70, .26, { maxLines: 4, maxSize: .070, stack: true }), ctaLine: R(.09, .76, .70, .07, { maxLines: 1, maxSize: .026 }) },
+        payoff:   { headline: R(.09, .34, .70, .26, { maxLines: 4, maxSize: .068, stack: true }), ctaLine: R(.09, .64, .70, .07, { maxLines: 1, maxSize: .028 }) },
+        cta:      { headline: R(.09, .24, .70, .24, { maxLines: 4, maxSize: .066, stack: true }), ctaLine: R(.09, .54, .70, .10, { maxLines: 2, maxSize: .046 }) }
       },
       safeZones: { tiktok: { top: .10, bottom: .20, left: .06, right: .20 } }
     },
@@ -249,12 +249,12 @@
       accentUse: { cta: true, rule: true, keyword: true },
       decoration: { type: 'stat', accent: '#4a9ec9' },
       roles: {
-        hook:     { headline: R(.08, .12, .40, .16, { maxLines: 3, maxSize: .052, minSize: .016 }), supportingText: R(.08, .30, .40, .12, { maxLines: 3, maxSize: .024 }), ctaLine: R(.08, .44, .40, .07, { maxLines: 1, maxSize: .022 }) },
-        context:  { headline: R(.08, .14, .40, .14, { maxLines: 3, maxSize: .050, minSize: .016 }), supportingText: R(.08, .30, .40, .12, { maxLines: 3, maxSize: .024 }), ctaLine: R(.08, .44, .40, .07, { maxLines: 1, maxSize: .022 }) },
-        evidence: { headline: R(.08, .10, .40, .18, { maxLines: 3, maxSize: .050, minSize: .016 }), supportingText: R(.08, .30, .40, .12, { maxLines: 3, maxSize: .024 }), ctaLine: R(.08, .44, .40, .07, { maxLines: 1, maxSize: .022 }) },
-        turn:     { supportingText: R(.08, .12, .40, .12, { maxLines: 3, maxSize: .024 }), headline: R(.08, .26, .40, .18, { maxLines: 3, maxSize: .050, minSize: .016 }), ctaLine: R(.08, .46, .40, .07, { maxLines: 1, maxSize: .022 }) },
-        payoff:   { headline: R(.08, .16, .40, .12, { maxLines: 2, maxSize: .050, minSize: .016 }), ctaLine: R(.08, .30, .40, .08, { maxLines: 1, maxSize: .024 }) },
-        cta:      { headline: R(.08, .18, .40, .10, { maxLines: 2, maxSize: .048, minSize: .016 }), ctaLine: R(.08, .30, .40, .10, { maxLines: 2, maxSize: .034 }) }
+        hook:     { headline: R(.08, .12, .40, .16, { maxLines: 3, maxSize: .052, minSize: .016 }), supportingText: R(.08, .30, .40, .11, { maxLines: 3, maxSize: .024 }), ctaLine: R(.08, .47, .40, .06, { maxLines: 1, maxSize: .022 }) },
+        context:  { headline: R(.08, .14, .40, .14, { maxLines: 3, maxSize: .050, minSize: .016 }), supportingText: R(.08, .30, .40, .11, { maxLines: 3, maxSize: .024 }), ctaLine: R(.08, .47, .40, .06, { maxLines: 1, maxSize: .022 }) },
+        evidence: { headline: R(.08, .10, .40, .18, { maxLines: 3, maxSize: .050, minSize: .016 }), supportingText: R(.08, .30, .40, .11, { maxLines: 3, maxSize: .024 }), ctaLine: R(.08, .47, .40, .06, { maxLines: 1, maxSize: .022 }) },
+        turn:     { supportingText: R(.08, .12, .40, .11, { maxLines: 3, maxSize: .024 }), headline: R(.08, .26, .40, .18, { maxLines: 3, maxSize: .050, minSize: .016 }), ctaLine: R(.08, .49, .40, .06, { maxLines: 1, maxSize: .022 }) },
+        payoff:   { headline: R(.08, .16, .40, .12, { maxLines: 2, maxSize: .050, minSize: .016 }), ctaLine: R(.08, .33, .40, .07, { maxLines: 1, maxSize: .024 }) },
+        cta:      { headline: R(.08, .18, .40, .10, { maxLines: 2, maxSize: .048, minSize: .016 }), ctaLine: R(.08, .33, .40, .09, { maxLines: 2, maxSize: .034 }) }
       },
       safeZones: { instagram: { top: .07, bottom: .07, left: .08, right: .08 } }
     },
@@ -292,7 +292,7 @@
       pairing: 'terminal',
       treatment: { id: 'hardCropRule', options: {} },
       accentUse: { cta: true, rule: true, keyword: true },
-      decoration: { type: 'stripes', accent: '#5fbf8f' },
+      decoration: { type: 'rule', accent: '#5fbf8f' },
       roles: {
         hook:     { headline: R(.08, .58, .84, .24, { maxLines: 4, maxSize: .072, keyword: true }), supportingText: R(.08, .84, .84, .10, { maxLines: 3 }) },
         context:  { headline: R(.08, .56, .84, .22, { maxLines: 4, maxSize: .068, keyword: true }), supportingText: R(.08, .82, .84, .12, { maxLines: 4 }) },

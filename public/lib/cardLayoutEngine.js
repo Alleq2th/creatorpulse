@@ -197,8 +197,9 @@
     if (d.type === 'quote') return { type: 'quote', text: '\u201C', x: Math.round(W * z.left), y: Math.round(H * 0.10), size: Math.round(W * 0.30), bg: d.accent || '#f6f6f6' };
     // A thin hairline rule (Editorial Clean) — a rule, not a bar.
     if (d.type === 'hairline') return { type: 'hairline', x: Math.round(W * z.left), y: Math.round(H * 0.10), width: Math.round(W * 0.10), height: Math.max(2, Math.round(W * 0.0025)), bg: d.accent || '#f6f6f6' };
-    // A single caption bar pinned to the bottom (Minimal Caption).
-    if (d.type === 'caption') return { type: 'caption', x: 0, y: Math.round(H * 0.80), width: W, height: Math.round(H * 0.20), bg: 'rgba(22,22,22,.72)' };
+    // A single caption bar pinned to the bottom (Minimal Caption): a strip in
+    // the lower quarter, wide and short, with the caption sitting on it.
+    if (d.type === 'caption') return { type: 'caption', x: 0, y: Math.round(H * 0.76), width: W, height: Math.round(H * 0.24), bg: 'rgba(22,22,22,.78)' };
     // A giant stat number as the hero (Data & Stat Split). Hidden when empty.
     if (d.type === 'stat') {
       var value = String(d.value || '').trim();
@@ -301,7 +302,16 @@
     if (style.textColor) palette.text = style.textColor;
 
     var layers = LAYERS.map(function (L) {
-      var region = roleLayout[L.key] || { x: 0.08, y: 0.3, width: 0.84, height: 0.2, align: 'left', anchor: 'top', maxLines: 5, minSize: 0.022, maxSize: 0.10 };
+      // A layer the template does not place gets a sensible default: the
+      // headline keeps the old generic box, but a supporting line or a CTA is
+      // pinned to the bottom of the card. Without this, a template that only
+      // declares a headline (neon_noir's hook) drew its CTA at y=0.3 — floating
+      // in the middle of the card, above the headline.
+      var region = roleLayout[L.key] || (L.key === 'headline'
+        ? { x: 0.08, y: 0.3, width: 0.84, height: 0.2, align: 'left', anchor: 'top', maxLines: 5, minSize: 0.022, maxSize: 0.10 }
+        : L.key === 'supportingText'
+          ? { x: 0.08, y: 0.80, width: 0.84, height: 0.10, align: 'left', anchor: 'top', maxLines: 3, minSize: 0.013, maxSize: 0.034 }
+          : { x: 0.08, y: 0.90, width: 0.84, height: 0.06, align: 'left', anchor: 'top', maxLines: 1, minSize: 0.013, maxSize: 0.030 });
       var faceId = (style.layerFonts && style.layerFonts[L.key]) || pairing[L.key] || 'impact';
       var face = typography.face(faceId);
       var text = layerText(slide, L.key);
