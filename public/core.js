@@ -2913,14 +2913,14 @@ function cpDrawTextBox(ctx, l, W, H) {
   ctx.beginPath();
   ctx.rect(left, top, bw, bh);
   ctx.clip();
-  ctx.font = `${effects.italic ? "italic " : """}${l.weight} ${px}px ${l.family}`;
+  ctx.font = `${effects.italic ? "italic " : ""}${l.weight} ${px}px ${l.family}`;
   ctx.fillStyle = l.color;
   ctx.textAlign = l.align === "center" ? "center" : (l.align === "right" ? "right" : "left");
   ctx.textBaseline = "alphabetic";
-  ctx.shadowColor = "rgba(0,0,0,0.45)";
+  ctx.shadowColor = effects.shadow === false ? "transparent" : "rgba(0,0,0,0.45)";
   ctx.shadowOffsetX = 0;
-  ctx.shadowOffsetY = 0.006 * W; // 0.6% of the width, as in the preview text-shadow
-  ctx.shadowBlur = 0.035 * W;    // 3.5% of the width
+  ctx.shadowOffsetY = effects.shadow === false ? 0 : 0.006 * W;
+  ctx.shadowBlur = effects.shadow === false ? 0 : 0.035 * W;
   const xPos = l.align === "center" ? (left + bw / 2) : (l.align === "right" ? (left + bw) : left);
   // One keyword may be highlighted in the accent. The line is drawn in the
   // layer colour, then the keyword is over-painted in the accent at the same
