@@ -1963,7 +1963,7 @@ function cpLiveTextStyle(slide, name, o, tid) {
     (effects.uppercase ? ";text-transform:uppercase" : "") +
     (effects.italic ? ";font-style:italic" : "") +
     (effects.shadow === false ? ";text-shadow:none" : "") +
-    (effects.outline ? ";-webkit-text-stroke:1px " + ((sty.layerColors || {})[name] || "#ffffff") : "");
+    (effects.outline ? ";-webkit-text-stroke:1px " + ((design && design.palette && design.palette.accent) || "#f2b630") : "");
 }
 
 // Which platform's safe zones a card is being previewed in. The mockup tab the
@@ -2661,7 +2661,8 @@ function cpGetDesignState(tid, idx, si) {
         keywordColor: resolved.keywordColor || "",
         // Tabular digits on a stat, so the exported figures line up (Part 5).
         tabular: !!resolved.tabular,
-        effects: (sty.layerEffects || {})[L.key] || {}
+        effects: (sty.layerEffects || {})[L.key] || {},
+        accentColor: design && design.palette ? design.palette.accent : null
       };
     }
     const layerSpec = template?.typography?.[L.key];
@@ -2682,7 +2683,8 @@ function cpGetDesignState(tid, idx, si) {
       color: (sty.layerColors || {})[L.key] || (L.key === "ctaLine" ? template?.palette?.accent : null) || sty.textColor || template?.palette?.text || "#ffffff",
       align,
       box: (slide.textLayout || {})[L.key] || (template && template.layout && template.layout[L.key]) || CP_LIVE_DEFAULT_BOX[L.key],
-      effects: (sty.layerEffects || {})[L.key] || {}
+      effects: (sty.layerEffects || {})[L.key] || {},
+      accentColor: template && template.palette ? template.palette.accent : null
     };
   });
 
@@ -2930,7 +2932,7 @@ function cpDrawTextBox(ctx, l, W, H) {
     const y = firstBaseline + i * lineH;
     ctx.fillStyle = l.color;
     if (effects.outline) {
-      ctx.strokeStyle = (l.keywordColor || l.color);
+      ctx.strokeStyle = (l.accentColor || l.keywordColor || l.color);
       ctx.lineWidth = Math.max(2, px * 0.045);
       ctx.lineJoin = "round";
       ctx.strokeText(ln, xPos, y);
