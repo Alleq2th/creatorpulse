@@ -181,8 +181,8 @@ test('template tiles are mini previews of the real template', () => {
 
 // ── Cache busting ────────────────────────────────────────────────────────────
 test('core.js and the service worker cache are bumped together', () => {
-  assert.match(html, /core\.js\?v=71/);
-  assert.match(sw, /creatorpulse-v53/);
+  assert.match(html, /core\.js\?v=72/);
+  assert.match(sw, /creatorpulse-v54/);
   assert.match(html, /lib\/cardLayout\.js\?v=3/, 'the shared layout facade is loaded');
   assert.match(html, /lib\/cardPaint\.js\?v=3/, 'the new painter is loaded');
   assert.match(html, /lib\/themePreview\.js\?v=2/, 'the new theme preview is loaded');
@@ -201,7 +201,7 @@ test('core.js and the service worker cache are bumped together', () => {
   assert.match(html, /lib\/cardThumbnails\.js\?v=1/, 'the real-card thumbnails are loaded');
   assert.match(html, /lib\/cardSkeleton\.js\?v=1/, 'the skeleton placeholder is loaded');
   assert.match(html, /lib\/cardQualityBar\.js\?v=1/, 'the quality-bar review is loaded');
-  assert.ok(html.indexOf('lib/cardLayoutEngine.js') < html.indexOf('core.js?v=71'), 'the engine loads before core.js');
+  assert.ok(html.indexOf('lib/cardLayoutEngine.js') < html.indexOf('core.js?v=72'), 'the engine loads before core.js');
 });
 
 // ── Plus AI must not be broken ───────────────────────────────────────────────
