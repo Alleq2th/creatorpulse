@@ -410,6 +410,10 @@
           if (field === 'opacity') value = Number(value) / 100;
           if (field === 'rotation') value = Number(value);
           el[field] = value;
+          if (field === 'width') el.x = Math.min(Number(el.x) || 0, 1 - value);
+          if (field === 'height') el.y = Math.min(Number(el.y) || 0, 1 - value);
+          if (field === 'x') el.x = Math.min(value, 1 - (Number(el.width) || .02));
+          if (field === 'y') el.y = Math.min(value, 1 - (Number(el.height) || .008));
           host.onChange && host.onChange();
           if (commit) host.onEdit && host.onEdit();
         }
