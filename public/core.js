@@ -1963,7 +1963,7 @@ function cpLiveTextStyle(slide, name, o, tid) {
     (effects.uppercase ? ";text-transform:uppercase" : "") +
     (effects.italic ? ";font-style:italic" : "") +
     (effects.shadow === false ? ";text-shadow:none" : "") +
-    (effects.outline ? ";-webkit-text-stroke:1px " + ((design && design.palette && design.palette.accent) || "#f2b630") : "");
+    (effects.outline ? ";-webkit-text-stroke:0.045em " + ((design && design.palette && design.palette.accent) || "#f2b630") : "");
 }
 
 // Which platform's safe zones a card is being previewed in. The mockup tab the
@@ -3007,7 +3007,14 @@ async function cpComposeCard(snap) {
   const { state } = snap;
   const W = CP_EXPORT_W;
   const H = Math.round(W * state.aspect[1] / state.aspect[0]);
-  await cpEnsureGraphicFontsLoaded(state.layers);
+  const elementFonts = window.CPCardElementLibrary
+    ? (state.elements || []).filter(el => el.text && (el.type === "text" || el.type === "badge")).map(el => ({
+        text: el.text,
+        family: window.CPCardElementLibrary.FONTS[el.font] || "Inter, Arial, sans-serif",
+        weight: el.weight || 800
+      }))
+    : [];
+  await cpEnsureGraphicFontsLoaded([...(state.layers || []), ...elementFonts]);
   const photo = snap.plateSrc ? await cpLoadExportImage(snap.plateSrc).catch(() => null) : null;
   const canvas = document.createElement("canvas");
   canvas.width = W;
