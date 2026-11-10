@@ -70,6 +70,8 @@ test('editor exposes five sections and a working Elements library', () => {
   assert.match(markup, /data-ed-element-duplicate/);
   assert.match(markup, /data-ed-element-field="width"/);
   assert.match(markup, /data-ed-element-field="height"/);
+  assert.match(markup, /data-ed-element-field="align"/);
+  assert.match(markup, /data-ed-element-field="weight"/);
 });
 
 test('all 26 fonts are available to the live text controls and layout engine', () => {
