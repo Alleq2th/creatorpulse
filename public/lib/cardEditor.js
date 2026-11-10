@@ -214,6 +214,8 @@
           '<label class="cc-ed-control"><span>Opacity</span><input type="range" min="0" max="100" value="' + Math.round((el.opacity == null ? 1 : el.opacity) * 100) + '" data-ed-element-field="opacity" data-ed-element-id="' + id + '" /></label>' +
           '<label class="cc-ed-control"><span>Rotation</span><input type="range" min="-180" max="180" value="' + Number(el.rotation || 0) + '" data-ed-element-field="rotation" data-ed-element-id="' + id + '" /></label>' +
           (isText ? '<label class="cc-ed-control"><span>Font</span><select data-ed-element-field="font" data-ed-element-id="' + id + '">' + fontOptions + '</select></label>' : '') +
+          (isText ? '<label class="cc-ed-control"><span>Alignment</span><select data-ed-element-field="align" data-ed-element-id="' + id + '"><option value="left"' + (el.align === 'left' ? ' selected' : '') + '>Left</option><option value="center"' + (el.align === 'center' ? ' selected' : '') + '>Center</option><option value="right"' + (el.align === 'right' ? ' selected' : '') + '>Right</option></select></label>' : '') +
+          (isText ? '<label class="cc-ed-control"><span>Weight</span><select data-ed-element-field="weight" data-ed-element-id="' + id + '">' + [400,500,600,700,800,900].map(function (weight) { return '<option value="' + weight + '"' + (Number(el.weight) === weight ? ' selected' : '') + '>' + weight + '</option>'; }).join('') + '</select></label>' : '') +
           (isText ? '<label class="cc-ed-control"><span>Size</span><input type="range" min="12" max="100" value="' + Math.round((el.fontSize || .038) * 1000) + '" data-ed-element-field="fontSize" data-ed-element-id="' + id + '" /></label>' : '') +
           (isText ? '<label class="cc-ed-control"><span><input type="checkbox" ' + (el.italic ? 'checked' : '') + ' data-ed-element-field="italic" data-ed-element-id="' + id + '"/> Italic</span><span><input type="checkbox" ' + (el.uppercase ? 'checked' : '') + ' data-ed-element-field="uppercase" data-ed-element-id="' + id + '"/> Uppercase</span></label>' : '') +
           (el.type === 'badge' ? '<label class="cc-ed-control"><span>Badge background</span><input type="color" value="' + esc(el.background || '#2f7bff') + '" data-ed-element-field="background" data-ed-element-id="' + id + '" /></label>' : '') +
@@ -408,7 +410,7 @@
           if (field === 'x' || field === 'y' || field === 'width' || field === 'height') value = Number(value) / 100;
           if (field === 'fontSize') value = Number(value) / 1000;
           if (field === 'opacity') value = Number(value) / 100;
-          if (field === 'rotation') value = Number(value);
+          if (field === 'rotation' || field === 'weight') value = Number(value);
           el[field] = value;
           if (field === 'width') el.x = Math.min(Number(el.x) || 0, 1 - value);
           if (field === 'height') el.y = Math.min(Number(el.y) || 0, 1 - value);
