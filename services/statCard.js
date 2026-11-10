@@ -534,12 +534,40 @@ function decorativeTexture(p, f, seed) {
   ${lines}`;
 }
 
+// Convert the shared treatment's exact scrim stops into SVG. The browser
+// preview paints these same stops through CPCardPaint.paintScrim; using the
+// photo's average brightness to invent a second gradient caused visual drift.
+function templatePhotoScrimDefs(design, f) {
+  const scrim = design && design.scrim;
+  if (!scrim || !Array.isArray(scrim.stops) || !scrim.stops.length) {
+    return scrimDefs(f.w, f.h, 0.45);
+  }
+  const stops = scrim.stops.map((stop) => {
+    const color = String(stop.color || "rgba(0,0,0,.45)");
+    const match = color.match(/^rgba?\\(([^)]+)\\)$/i);
+    let stopColor = color, opacity = 1;
+    if (match) {
+      const channels = match[1].split(",").map(x => x.trim());
+      if (channels.length >= 3) {
+        stopColor = `rgb(${channels.slice(0, 3).join(",")})`;
+        if (channels.length > 3 && Number.isFinite(Number(channels[3]))) opacity = Math.max(0, Math.min(1, Number(channels[3])));
+      }
+    }
+    const offset = Math.max(0, Math.min(1, Number(stop.offset) || 0)) * 100;
+    return `<stop offset="${offset.toFixed(2)}%" stop-color="${escXml(stopColor)}" stop-opacity="${opacity.toFixed(3)}"/>`;
+  }).join("");
+  return `<linearGradient id="scrim" x1="0" y1="0" x2="0" y2="${f.h}" gradientUnits="userSpaceOnUse">${stops}</linearGradient>`;
+}
+
 function backgroundLayer(p, f, scrimStrength, slideType, design) {
   if (scrimStrength != null) {
     // Keep the selected template's signature decoration on top of a real photo
     // as well as on a generated gradient. Previously photo-backed cards silently
     // lost quote marks, rules and badges because this branch returned early.
-    return `<defs>${scrimDefs(f.w, f.h, scrimStrength)}</defs><rect width="${f.w}" height="${f.h}" fill="url(#scrim)"/>${design ? templateDecoration(design, p, f) : ""}`;
+    const scrim = design && design.scrim
+      ? templatePhotoScrimDefs(design, f)
+      : scrimDefs(f.w, f.h, scrimStrength);
+    return `<defs>${scrim}</defs><rect width="${f.w}" height="${f.h}" fill="url(#scrim)"/>${design ? templateDecoration(design, p, f) : ""}`;
   }
   if (design) return templateBackgroundLayer(design, p, f, slideType);
   return `<defs>${gradientDefs(p, f.w, f.h)}</defs><rect width="${f.w}" height="${f.h}" fill="url(#bgGrad)"/>${decorativeTexture(p, f, slideType)}`;
@@ -1522,6 +1550,7 @@ module.exports = {
   mapWithConcurrency,
   paletteFromDesign,
   templateGradientDefs,
+  templatePhotoScrimDefs,
   templateDecoration,
   renderPanelSVG,
   PALETTE,
