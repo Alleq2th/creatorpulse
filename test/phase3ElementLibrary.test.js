@@ -112,3 +112,16 @@ test('text effects are exposed and applied in both preview and export', () => {
   assert.match(cardEditor, /data-ed-element-field="italic"/);
   assert.match(cardEditor, /data-ed-element-field="uppercase"/);
 });
+
+test('theme preview supports templates without scrims and exposes headline layer identity', () => {
+  const themePreview = fs.readFileSync(path.join(__dirname, '../public/lib/themePreview.js'), 'utf8');
+  assert.match(themePreview, /design\.scrim && Array\.isArray\(design\.scrim\.stops\)/);
+  assert.match(themePreview, /data-layer-key=/);
+  assert.match(html, /lib\/themePreview\.js\?v=2/);
+});
+
+test('custom element fonts are loaded before the final canvas export', () => {
+  assert.match(core, /const elementFonts = window\.CPCardElementLibrary/);
+  assert.match(core, /CPCardElementLibrary\.FONTS\[el\.font\]/);
+  assert.match(core, /cpEnsureGraphicFontsLoaded\(\[\.\.\.\(state\.layers \|\| \[\]\), \.\.\.elementFonts\]\)/);
+});
