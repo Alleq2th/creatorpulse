@@ -2265,9 +2265,9 @@ function cpPlateKey(tid, idx, slideIndex) {
   const slide = cpCardSlide(tid, idx, slideIndex) || {};
   const sty = slide._style || {};
   const bg = sty.bgImage ? `up:${sty.bgImage.length}:${sty.bgImage.slice(-48)}:${sty.bgName || ""}` : "";
-  const focalX = Number.isFinite(Number(sty.cropX)) ? Number(sty.cropX) : (slide.focalPoint?.x ?? S.focalPoint?.[tid]?.x ?? null);
-  const focalY = Number.isFinite(Number(sty.cropY)) ? Number(sty.cropY) : (slide.focalPoint?.y ?? S.focalPoint?.[tid]?.y ?? null);
-  const focal = focalX != null || focalY != null ? `${focalX ?? 50}/${focalY ?? 50}` : "";
+  // Crop sliders are client-side presentation state. Do not key the source
+  // photo cache on them or a slider drag would issue a fresh image request.
+  const focal = S.focalPoint?.[tid] ? `${S.focalPoint[tid].x}/${S.focalPoint[tid].y}` : "";
   return [tid, idx, slideIndex, ctx.palette || "", ctx.category || "", ctx.format || o?.aspect || "", bg, ctx.imageUrl || "", slide.customImage || "", focal].join("|");
 }
 
