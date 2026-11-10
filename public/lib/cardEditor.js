@@ -211,6 +211,10 @@
           '<label class="cc-ed-control"><span>Vertical position</span><input type="range" min="0" max="96" value="' + Math.round((el.y || 0) * 100) + '" data-ed-element-field="y" data-ed-element-id="' + id + '" /></label>' +
           (isText ? '<label class="cc-ed-control"><span>Font</span><select data-ed-element-field="font" data-ed-element-id="' + id + '">' + fontOptions + '</select></label>' : '') +
           (isText ? '<label class="cc-ed-control"><span>Size</span><input type="range" min="12" max="100" value="' + Math.round((el.fontSize || .038) * 1000) + '" data-ed-element-field="fontSize" data-ed-element-id="' + id + '" /></label>' : '') +
+          (isText ? '<label class="cc-ed-control"><span>Opacity</span><input type="range" min="0" max="100" value="' + Math.round((el.opacity == null ? 1 : el.opacity) * 100) + '" data-ed-element-field="opacity" data-ed-element-id="' + id + '" /></label>' : '') +
+          (isText ? '<label class="cc-ed-control"><span>Rotation</span><input type="range" min="-180" max="180" value="' + Number(el.rotation || 0) + '" data-ed-element-field="rotation" data-ed-element-id="' + id + '" /></label>' : '') +
+          (isText ? '<label class="cc-ed-control"><span><input type="checkbox" ' + (el.italic ? 'checked' : '') + ' data-ed-element-field="italic" data-ed-element-id="' + id + '"/> Italic</span><span><input type="checkbox" ' + (el.uppercase ? 'checked' : '') + ' data-ed-element-field="uppercase" data-ed-element-id="' + id + '"/> Uppercase</span></label>' : '') +
+          (el.type === 'badge' ? '<label class="cc-ed-control"><span>Badge background</span><input type="color" value="' + esc(el.background || '#2f7bff') + '" data-ed-element-field="background" data-ed-element-id="' + id + '" /></label>' : '') +
           '</div>';
       }).join('');
       panel = '<div class="cc-ed-section">Add an element</div>' +
@@ -381,9 +385,11 @@
           var field = input.getAttribute('data-ed-element-field');
           var el = (slide.elements || []).find(function (item) { return String(item.id) === id; });
           if (!el) return;
-          var value = input.value;
+          var value = input.type === 'checkbox' ? !!input.checked : input.value;
           if (field === 'x' || field === 'y') value = Number(value) / 100;
           if (field === 'fontSize') value = Number(value) / 1000;
+          if (field === 'opacity') value = Number(value) / 100;
+          if (field === 'rotation') value = Number(value);
           el[field] = value;
           host.onChange && host.onChange();
           if (commit) host.onEdit && host.onEdit();
