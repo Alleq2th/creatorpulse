@@ -66,8 +66,8 @@ test('the nine required compositions are all present in the catalogue', () => {
   // The platform-specific names are kept, not replaced.
   assert.equal(templates.get('neon_noir').name, 'Neon Cyber');
   assert.equal(templates.list('tiktok').length, 5);
-  // Five original Instagram compositions plus the two White Panel variants.
-  assert.equal(templates.list('instagram').length, 7);
+  // The Instagram collection now contains eight distinct compositions.
+  assert.equal(templates.list('instagram').length, 8);
 });
 
 // ── Every template is structurally different from every other ────────────────
