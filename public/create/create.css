@@ -565,6 +565,28 @@
   background: #161616;
 }
 .cc-template-thumb-live[data-aspect="tiktok"] { aspect-ratio: 9 / 16; }
+.cc-template-photo {
+  position: absolute;
+  display: block;
+  z-index: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  pointer-events: none;
+}
+.cc-template-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  display: block;
+  pointer-events: none;
+  background-image: radial-gradient(circle, rgba(200,69,44,.22) 1px, transparent 1.5px);
+  background-size: 9px 9px;
+  background-repeat: no-repeat;
+  background-position: right bottom;
+}
 .cc-template-scrim { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
 .cc-template-layer { position: absolute; z-index: 2; display: block; overflow: hidden; overflow-wrap: anywhere; white-space: pre-wrap; }
 .cc-template-badge-pill { position: absolute; z-index: 3; display: flex; align-items: center; justify-content: center; border-radius: 999px; font: 800 2.4cqw/1 Inter, sans-serif; letter-spacing: .08em; overflow: hidden; white-space: nowrap; }
