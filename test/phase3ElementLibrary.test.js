@@ -125,3 +125,11 @@ test('custom element fonts are loaded before the final canvas export', () => {
   assert.match(core, /CPCardElementLibrary\.FONTS\[el\.font\]/);
   assert.match(core, /cpEnsureGraphicFontsLoaded\(\[\.\.\.\(state\.layers \|\| \[\]\), \.\.\.elementFonts\]\)/);
 });
+
+test('the 26 font picker faces are all requested from the webfont stylesheet', () => {
+  for (const family of [
+    'Barlow+Condensed','Roboto+Condensed','Montserrat','Poppins','DM+Sans','Space+Grotesk',
+    'Urbanist','Outfit','Figtree','DM+Serif+Display','Lora','Merriweather',
+    'Cormorant+Garamond','Libre+Baskerville','Roboto+Slab','Space+Mono','Source+Code+Pro'
+  ]) assert.ok(html.includes('family=' + family), family + ' must be loaded for the editor');
+});
