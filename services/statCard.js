@@ -534,9 +534,47 @@ function decorativeTexture(p, f, seed) {
   ${lines}`;
 }
 
+// Convert the shared treatment's exact scrim stops into SVG. The browser
+// preview paints these same stops through CPCardPaint.paintScrim; using the
+// photo's average brightness to invent a second gradient caused visual drift.
+function templatePhotoScrimDefs(design, f) {
+  const scrim = design && design.scrim;
+  if (!scrim || !Array.isArray(scrim.stops) || !scrim.stops.length) {
+    return scrimDefs(f.w, f.h, 0.45);
+  }
+  const stops = scrim.stops.map((stop) => {
+    const color = String(stop.color || "rgba(0,0,0,.45)");
+    const match = color.match(/^rgba?\(([^)]+)\)$/i);
+    let stopColor = color, opacity = 1;
+    if (match) {
+      const channels = match[1].split(",").map(x => x.trim());
+      if (channels.length >= 3) {
+        stopColor = `rgb(${channels.slice(0, 3).join(",")})`;
+        if (channels.length > 3 && Number.isFinite(Number(channels[3]))) opacity = Math.max(0, Math.min(1, Number(channels[3])));
+      }
+    }
+    const offset = Math.max(0, Math.min(1, Number(stop.offset) || 0)) * 100;
+    return `<stop offset="${offset.toFixed(2)}%" stop-color="${escXml(stopColor)}" stop-opacity="${opacity.toFixed(3)}"/>`;
+  }).join("");
+  return `<linearGradient id="scrim" x1="0" y1="0" x2="0" y2="${f.h}" gradientUnits="userSpaceOnUse">${stops}</linearGradient>`;
+}
+
 function backgroundLayer(p, f, scrimStrength, slideType, design) {
-  if (scrimStrength != null) return `<defs>${scrimDefs(f.w, f.h, scrimStrength)}</defs><rect width="${f.w}" height="${f.h}" fill="url(#scrim)"/>`;
+  if (design && scrimStrength != null) {
+    // A template's scrim is optional. Never invent a generic dark overlay when
+    // its treatment deliberately keeps text off the photo or uses a solid field.
+    const scrim = design.scrim ? templatePhotoScrimDefs(design, f) : "";
+    const scrimLayer = scrim
+      ? `<defs>${scrim}</defs><rect width="${f.w}" height="${f.h}" fill="url(#scrim)"/>`
+      : "";
+    // Keep the selected template's signature decoration over real photos too.
+    return `${scrimLayer}${templateDecoration(design, p, f)}`;
+  }
   if (design) return templateBackgroundLayer(design, p, f, slideType);
+  if (scrimStrength != null) {
+    const scrim = scrimDefs(f.w, f.h, scrimStrength);
+    return `<defs>${scrim}</defs><rect width="${f.w}" height="${f.h}" fill="url(#scrim)"/>`;
+  }
   return `<defs>${gradientDefs(p, f.w, f.h)}</defs><rect width="${f.w}" height="${f.h}" fill="url(#bgGrad)"/>${decorativeTexture(p, f, slideType)}`;
 }
 
@@ -729,7 +767,7 @@ function textLayoutTransform(slide, key, f, base) {
 // the legacy hook/body flow (which positions type by its own vertical rhythm and
 // would put the headline on the photo). This is the same data the DOM preview
 // and the canvas painter read, so the download matches the preview exactly.
-function renderPanelSVG(p, f, slide, category, typo, design) {
+function renderPanelSVG(p, f, slide, category, typo, design, brand) {
   const panel = design.panel;
   const W = f.w, H = f.h;
   const px = (v) => Math.round(v * W);
@@ -744,7 +782,12 @@ function renderPanelSVG(p, f, slide, category, typo, design) {
   const panelX = px(panel.x), panelY = py(panel.y);
   const panelW = px(panel.width), panelH = py(panel.height);
   const radius = Math.max(0, Math.round(panel.radius || 0));
-  parts.push(`<rect x="${panelX}" y="${panelY}" width="${panelW}" height="${panelH}" rx="${radius}" fill="${escXml(panel.bg)}"/>`);
+  // Round only the top corners: the panel meets the photo like a deliberate
+  // editorial card edge while the bottom remains flush with the canvas.
+  const panelPath = radius > 0
+    ? `M 0 ${panelY + radius} Q 0 ${panelY} ${radius} ${panelY} H ${W - radius} Q ${W} ${panelY} ${W} ${panelY + radius} V ${H} H 0 Z`
+    : `M 0 ${panelY} H ${W} V ${H} H 0 Z`;
+  parts.push(`<path d="${panelPath}" fill="${escXml(panel.bg)}"/>`);
 
   // 2. The category pill, near the top of the card. Its label is the story's
   //    own category (resolved by the engine); an empty category draws nothing.
@@ -752,6 +795,22 @@ function renderPanelSVG(p, f, slide, category, typo, design) {
   if (d.type === 'category' && d.text) {
     parts.push(`<rect x="${d.x}" y="${d.y}" width="${d.width}" height="${d.height}" rx="${d.radius}" fill="${escXml(d.bg)}"/>`);
     parts.push(`<text x="${d.x + d.width / 2}" y="${d.y + d.height / 2}" text-anchor="middle" dominant-baseline="central" font-family="${FONT_SANS}" font-size="${d.fontSize}" font-weight="800" letter-spacing="${(d.fontSize * 0.10).toFixed(1)}" fill="${escXml(d.color)}">${escXml(String(d.text).toUpperCase())}</text>`);
+  }
+
+  // 2b. A restrained halftone accent gives the white panel the printed/editorial
+  //    texture from the reference without competing with the headline.
+  parts.push(`<defs><pattern id="cpPanelDots" width="16" height="16" patternUnits="userSpaceOnUse"><circle cx="3" cy="3" r="2" fill="${escXml(p.accent)}" fill-opacity=".42"/></pattern></defs>`);
+  parts.push(`<rect x="${Math.round(W * 0.78)}" y="${Math.round(panelY + panelH * 0.08)}" width="${Math.round(W * 0.22)}" height="${Math.round(panelH * 0.82)}" fill="url(#cpPanelDots)" opacity=".22"/>`);
+
+  // 2c. If the creator supplied a brand name, turn it into a compact circular
+  //    seam badge. Never invent a logo or display a fake mark when no brand exists.
+  const brandName = brand && brand.name ? String(brand.name).trim().slice(0, 28) : "";
+  if (brandName) {
+    const initials = brandName.split(/\s+/).filter(Boolean).slice(0, 2).map(x => x[0].toUpperCase()).join("");
+    const cx = Math.round(W / 2), cy = panelY, r = Math.round(W * 0.047);
+    parts.push(`<circle cx="${cx}" cy="${cy}" r="${r + 7}" fill="${escXml(panel.bg)}"/>`);
+    parts.push(`<circle cx="${cx}" cy="${cy}" r="${r}" fill="${escXml(p.accent)}"/>`);
+    parts.push(`<text x="${cx}" y="${cy + Math.round(r * .34)}" text-anchor="middle" font-family="${FONT_SANS}" font-size="${Math.round(r * .82)}" font-weight="900" fill="#ffffff">${escXml(initials)}</text>`);
   }
 
   // 3. Every text layer at its exact box, with the engine's own wrapped lines
@@ -786,6 +845,13 @@ function renderPanelSVG(p, f, slide, category, typo, design) {
     });
   });
 
+  // A swipe cue appears only on slides that lead to another slide. The final
+  // slide keeps its CTA clean and does not ask the viewer to swipe again.
+  const slideNumber = Number(slide.slideNumber) || 1;
+  const totalSlides = Number(slide.totalSlides) || 1;
+  if (totalSlides > 1 && slideNumber < totalSlides) {
+    parts.push(`<text x="${W - Math.round(W * .075)}" y="${H - Math.round(H * .025)}" text-anchor="end" font-family="${FONT_SANS}" font-size="${Math.round(W * .018)}" font-weight="800" letter-spacing="2" fill="${escXml(p.accent)}">SWIPE →</text>`);
+  }
   return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">${parts.join('')}</svg>`;
 }
 
@@ -1388,18 +1454,24 @@ async function renderStatCard(slide, category, paletteKey, format, imageUrl, opt
   const scrimStrength = cover ? cover.brightness : null;
 
   const svg = design && design.panel
-    ? renderPanelSVG(p, f, slide, cat, typo, design)
+    ? renderPanelSVG(p, f, slide, cat, typo, design, options.brand)
     : type === "hook" ? renderHookSVG(p, f, slide, cat, scrimStrength, typo, design)
     : type === "outro" ? renderOutroSVG(p, f, slide, cat, scrimStrength, typo, design)
     : renderBodySVG(p, f, slide, cat, scrimStrength, typo, design);
 
   const photoUrlForCard = slide.imageUrl || imageUrl;
   const labels = [];
-  if (options.brand?.name) {
+  if (options.brand?.name && !(design && design.panel)) {
     const name = escXml(String(options.brand.name).slice(0, 28));
     const bottom = options.brand.placement === "bottom-left";
     const y = bottom ? f.h - 128 : 150;
-    labels.push(`<g><rect x="${f.margin}" y="${y-34}" width="${Math.min(440, name.length*19+44)}" height="46" rx="23" fill="${p.backgroundEnd}" fill-opacity="0.82" stroke="${p.accent}" stroke-opacity="0.82" stroke-width="2"/><text x="${f.margin+20}" y="${y-4}" font-family="${typo.body}" font-size="20" font-weight="800" letter-spacing="1.2" fill="${p.primaryText}">${name}</text></g>`);
+    if (design && design.templateId === "full_bleed_quote") {
+      const right = f.w - f.margin;
+      const width = Math.min(440, name.length * 19 + 44);
+      labels.push(`<g><rect x="${right-width}" y="${y-34}" width="${width}" height="46" rx="23" fill="${p.backgroundEnd}" fill-opacity="0.82" stroke="${p.accent}" stroke-opacity="0.82" stroke-width="2"/><text x="${right-20}" y="${y-4}" text-anchor="end" font-family="${typo.body}" font-size="20" font-weight="800" letter-spacing="1.2" fill="${p.primaryText}">${name}</text></g>`);
+    } else {
+      labels.push(`<g><rect x="${f.margin}" y="${y-34}" width="${Math.min(440, name.length*19+44)}" height="46" rx="23" fill="${p.backgroundEnd}" fill-opacity="0.82" stroke="${p.accent}" stroke-opacity="0.82" stroke-width="2"/><text x="${f.margin+20}" y="${y-4}" font-family="${typo.body}" font-size="20" font-weight="800" letter-spacing="1.2" fill="${p.primaryText}">${name}</text></g>`);
+    }
   }
   if (slide.silentCamera) {
     labels.push(`<g><rect x="${f.margin}" y="${f.h-142}" width="310" height="42" rx="21" fill="${p.backgroundEnd}" fill-opacity="0.82" stroke="${p.accent}" stroke-opacity="0.8" stroke-width="2"/><text x="${f.margin+20}" y="${f.h-114}" font-family="${typo.body}" font-size="17" font-weight="700" letter-spacing="1.4" fill="${p.primaryText}">SILENT CAMERA · ON-SCREEN TEXT</text></g>`);
@@ -1483,6 +1555,7 @@ module.exports = {
   mapWithConcurrency,
   paletteFromDesign,
   templateGradientDefs,
+  templatePhotoScrimDefs,
   templateDecoration,
   renderPanelSVG,
   PALETTE,

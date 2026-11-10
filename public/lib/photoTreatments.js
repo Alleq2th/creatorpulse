@@ -229,7 +229,7 @@
       // a 4:5 card; `tallHeight` is the (shorter) fraction on a 9:16 card, where
       // the extra height belongs to the photo. `overlap` lifts the panel a
       // little over the photo so the seam reads as a deliberate card edge.
-      panel: { height: 0.34, tallHeight: 0.36, bg: '#fbfaf7', radius: 0, overlap: 0 },
+      panel: { height: 0.34, tallHeight: 0.36, bg: '#fbfaf7', radius: 0.035, overlap: 0.012 },
       textZone: { x: 0.075, y: 0.66, width: 0.85, height: 0.30 }
     };
   }

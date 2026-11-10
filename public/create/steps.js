@@ -273,6 +273,19 @@
     var deco = design.decoration;
     var W = design.canvas.width, H = design.canvas.height;
     var px = function (v, total) { return (v / total * 100).toFixed(2) + '%'; };
+    // Use a real repository photo in every tile. The treatment's own frame and
+    // filter control the crop, so split/inset/full-bleed templates read differently.
+    var treatment = design.treatment || {};
+    var frame = treatment.frame || { x: 0, y: 0, width: 1, height: 1, radius: 0 };
+    var filter = treatment.filter || {};
+    var photoFilter = 'brightness(' + (filter.brightness || 1) + ') contrast(' + (filter.contrast || 1) + ') saturate(' + (filter.saturation || 1) + ')' +
+      (filter.grayscale ? ' grayscale(' + filter.grayscale + ')' : '') +
+      (filter.blur ? ' blur(' + filter.blur + 'px)' : '');
+    var photoHtml = '<span class="cc-template-photo" aria-hidden="true" style="left:' + px(frame.x, 1) + ';top:' + px(frame.y, 1) + ';width:' + px(frame.width, 1) + ';height:' + px(frame.height, 1) + ';border-radius:' + px(frame.radius || 0, 1) + ';filter:' + photoFilter + ';background-image:url(https://raw.githubusercontent.com/Alleq2th/creatorpulse/main/shots/whitepanel/news1.jpg)"></span>';
+    var panelHtml = '';
+    if (design.panel) {
+      panelHtml = '<span class="cc-template-panel" style="top:' + px(design.panel.y, 1) + ';height:' + px(design.panel.height, 1) + ';background:' + design.panel.bg + ';border-top-left-radius:' + px(design.panel.radius || 0, W) + ';border-top-right-radius:' + px(design.panel.radius || 0, W) + '"></span>';
+    }
     var decoHtml = '';
     if (deco.type === 'badge') {
       decoHtml = '<span class="cc-template-badge-pill" style="left:' + px(deco.x, W) + ';top:' + px(deco.y, H) + ';width:' + px(deco.width, W) + ';height:' + px(deco.height, H) + ';background:' + deco.bg + ';color:' + design.palette.bg + '">' + E(deco.text) + '</span>';
@@ -296,8 +309,9 @@
       decoHtml = '<span class="cc-template-rule" style="left:' + px(deco.x, W) + ';top:' + px(deco.y, H) + ';width:' + px(deco.width, W) + ';height:' + px(deco.height, H) + ';color:' + deco.bg + ';font:900 ' + (deco.size / W * 100).toFixed(2) + 'cqw/0.9 Inter,sans-serif;letter-spacing:-.02em;display:flex;align-items:center;white-space:nowrap;overflow:hidden">' + E(deco.text) + '</span>';
     }
     return '<div class="cc-template-thumb cc-template-thumb-live" data-aspect="' + (design.platform === 'tiktok' ? 'tiktok' : 'ig') + '" style="background:' + design.palette.bg + '">' +
+      photoHtml +
       (scrim ? '<span class="cc-template-scrim" style="background:linear-gradient(180deg,' + scrim + ')"></span>' : '') +
-      decoHtml + layers +
+      panelHtml + decoHtml + layers +
     '</div>';
   }
 
