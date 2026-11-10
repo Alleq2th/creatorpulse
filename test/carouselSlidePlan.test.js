@@ -52,13 +52,17 @@ test("a 1-slide request is a single post, not a carousel", () => {
   assert.strictEqual(out.slides[0].type, "hook");
 });
 
-test("6+ slides earns a dedicated closing slide; fewer folds the CTA in", () => {
-  const short = plan.plan(HOOK, [], 4, SOURCE, () => ({ type: "outro", headline: "Follow" }));
-  assert.ok(!short.slides.some(s => s.type === "outro"), "a 4-slide carousel must not spend a slide on the outro");
-  assert.ok(short.slides[short.slides.length - 1].ctaLine, "the CTA must ride on the last body slide");
+test("3+ slides earns a dedicated closing slide; 2 slides fold the CTA into the hook", () => {
+  const two = plan.plan(HOOK, [], 2, SOURCE, () => ({ type: "outro", headline: "Follow" }));
+  assert.ok(!two.slides.some(s => s.type === "outro"), "a 2-slide carousel must not spend a slide on the outro");
+  assert.ok(two.slides[two.slides.length - 1].ctaLine, "the CTA must be included on the final available slide");
 
-  const long = plan.plan(HOOK, [], 6, SOURCE, () => ({ type: "outro", headline: "Follow" }));
-  assert.strictEqual(long.slides[long.slides.length - 1].type, "outro");
+  const four = plan.plan(HOOK, [], 4, SOURCE, () => ({ type: "outro", headline: "Follow" }));
+  assert.strictEqual(four.slides.length, 4);
+  assert.strictEqual(four.slides[four.slides.length - 1].type, "outro", "a 4-slide carousel gets a dedicated CTA slide");
+
+  const six = plan.plan(HOOK, [], 6, SOURCE, () => ({ type: "outro", headline: "Follow" }));
+  assert.strictEqual(six.slides[six.slides.length - 1].type, "outro");
 });
 
 test("the slide count is clamped to a sane range", () => {
