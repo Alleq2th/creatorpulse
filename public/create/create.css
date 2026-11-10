@@ -1032,3 +1032,21 @@
 .cc-th-photo{position:absolute;z-index:0;background-size:cover;background-position:center;background-repeat:no-repeat}
 .cc-th-scrim{position:absolute;inset:0;z-index:1;pointer-events:none}
 .cc-th-layer{position:absolute;z-index:2;display:block;overflow:hidden;overflow-wrap:anywhere;white-space:pre-wrap}
+
+/* Phase 3 — creator-added elements sit on the same live stage as template text. */
+.cp-user-elements{position:absolute;inset:0;z-index:8;overflow:hidden;pointer-events:none;container-type:inline-size}
+.cp-user-element{display:block;box-sizing:border-box}
+.cp-user-rule{min-height:2px}
+.cp-user-circle{aspect-ratio:1/1}
+.cp-user-badge{display:flex;align-items:center;justify-content:center}
+.cc-ed-upload{display:inline-flex;align-items:center;justify-content:center;min-height:42px;padding:8px 14px;border:1px solid var(--br,#333);border-radius:10px;background:var(--bg,#111);color:var(--tx,#fff);font-size:13px;font-weight:700;cursor:pointer}
+.cc-ed-upload input{display:none}
+.cc-ed-control{display:flex;flex-direction:column;gap:7px;margin:9px 0;padding:9px 10px;border:1px solid var(--br,#333);border-radius:10px;background:var(--bg,#111)}
+.cc-ed-control>span{display:flex;align-items:center;justify-content:space-between;font-size:12px;color:var(--mu2,#aaa)}
+.cc-ed-control input[type="text"],.cc-ed-control select{width:100%;min-height:40px;padding:8px 10px;border:1px solid var(--br,#333);border-radius:8px;background:var(--sf,#171717);color:var(--tx,#fff);font:inherit;font-size:13px}
+.cc-ed-control input[type="range"]{width:100%;accent-color:var(--ac,#7c3aed)}
+.cc-ed-control input[type="color"]{width:44px;height:36px;padding:2px;border:1px solid var(--br,#333);border-radius:8px;background:var(--sf,#171717)}
+.cc-ed-element{padding:10px;margin:10px 0;border:1px solid var(--br,#333);border-radius:12px;background:var(--sf,#171717)}
+.cc-ed-element-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.cc-ed-element-head strong{font-size:12px;text-transform:capitalize}
+.cc-ed-empty{font-size:12px;line-height:1.5;color:var(--mu2,#aaa);padding:12px;border:1px dashed var(--br,#333);border-radius:10px}
