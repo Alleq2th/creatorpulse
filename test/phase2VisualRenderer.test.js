@@ -47,3 +47,14 @@ test('White Panel photo seam has a curved overlap in the shared treatment', () =
   assert.ok(treatment.panel.radius > 0);
   assert.ok(treatment.panel.overlap > 0);
 });
+
+test('template picker preview uses the selected photo treatment and panel', () => {
+  const steps = fs.readFileSync(require.resolve('../public/create/steps.js'), 'utf8');
+  const css = fs.readFileSync(require.resolve('../public/create/create.css'), 'utf8');
+  assert.match(steps, /cc-template-photo/);
+  assert.match(steps, /design\.treatment/);
+  assert.match(steps, /design\.panel/);
+  assert.match(steps, /news1\.jpg/);
+  assert.match(css, /\.cc-template-photo/);
+  assert.match(css, /\.cc-template-panel::after/);
+});
