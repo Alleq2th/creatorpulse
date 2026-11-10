@@ -336,6 +336,27 @@
       safeZones: { instagram: { top: .07, bottom: .07, left: .07, right: .07 } }
     },
 
+    /* Full-bleed quote — editorial quote typography over a real photograph.
+     * The oversized quote mark and shared carousel counter keep the design
+     * recognisable while the image remains the visual anchor. */
+    full_bleed_quote: {
+      id: 'full_bleed_quote', platform: 'instagram', name: 'Full-Bleed Quote', aspect: '4/5',
+      canvas: { width: 1080, height: 1350 },
+      palette: { bg: '#171717', text: '#f6f6f6', accent: '#d8b24a', secondary: '#dedede', dim: 0.58, gradient: 'linear-gradient(180deg,rgba(12,12,12,.32),rgba(12,12,12,.88))' },
+      pairing: 'broadcast',
+      treatment: { id: 'fullBleedScrim', options: {} },
+      accentUse: { cta: true, rule: true, keyword: true },
+      decoration: { type: 'quote', accent: '#d8b24a' },
+      roles: {
+        hook:     { headline: R(.10, .28, .80, .34, { maxLines: 5, maxSize: .090, minSize: .022, keyword: true }), supportingText: R(.10, .66, .80, .12, { maxLines: 2, maxSize: .030 }) },
+        context:  { headline: R(.10, .26, .80, .28, { maxLines: 4, maxSize: .078, keyword: true }), supportingText: R(.10, .58, .80, .18, { maxLines: 3, maxSize: .032 }) },
+        evidence: { headline: R(.10, .28, .80, .26, { maxLines: 4, maxSize: .076, keyword: true }), supportingText: R(.10, .58, .80, .18, { maxLines: 3, maxSize: .032 }) },
+        turn:     { supportingText: R(.10, .24, .80, .16, { maxLines: 3, maxSize: .032 }), headline: R(.10, .44, .80, .30, { maxLines: 4, maxSize: .082, keyword: true }) },
+        payoff:   { headline: R(.10, .34, .80, .28, { maxLines: 4, maxSize: .080, keyword: true }), ctaLine: R(.10, .68, .80, .07, { maxLines: 1, maxSize: .030 }) },
+        cta:      { headline: R(.10, .26, .80, .26, { maxLines: 4, maxSize: .076, keyword: true }), ctaLine: R(.10, .58, .80, .12, { maxLines: 2, maxSize: .046 }) }
+      },
+      safeZones: { instagram: { top: .06, bottom: .07, left: .08, right: .08 } }
+    },
     /* Neon Cyber — the platform's tenth template, kept as the terminal/mono
      * variant of the Neon/Ambient family: a hard-cropped photo band, a mono
      * headline, and a stripe field. Structurally distinct from dark_gradient
