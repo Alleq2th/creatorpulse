@@ -263,3 +263,10 @@ test('the Create stylesheet is scoped so it cannot collide with the Studio', () 
     assert.ok(/^\.cc-|^@|^:root/.test(sel), 'unscoped selector in create.css: ' + sel);
   }
 });
+
+test('the extracted template preview module loads before Create steps', () => {
+  const html = fs.readFileSync(path.join(SRC, 'index.html'), 'utf8');
+  assert.ok(html.indexOf('create/templateThumb.js') < html.indexOf('create/steps.js'));
+  assert.match(html, /create\/templateThumb\.js\?v=1/);
+  assert.match(fs.readFileSync(path.join(SRC, 'create', 'steps.js'), 'utf8'), /CPCreateTemplateThumb/);
+});
