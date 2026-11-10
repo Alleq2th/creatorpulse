@@ -582,10 +582,15 @@
   z-index: 2;
   display: block;
   pointer-events: none;
-  background-image: radial-gradient(circle, rgba(200,69,44,.22) 1px, transparent 1.5px);
+}
+.cc-template-panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(circle, rgba(200,69,44,.34) 1px, transparent 1.5px);
   background-size: 9px 9px;
-  background-repeat: no-repeat;
-  background-position: right bottom;
+  mask-image: radial-gradient(circle at 100% 100%, #000 0%, transparent 68%);
+  opacity: .42;
 }
 .cc-template-scrim { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
 .cc-template-layer { position: absolute; z-index: 2; display: block; overflow: hidden; overflow-wrap: anywhere; white-space: pre-wrap; }
