@@ -204,15 +204,17 @@
           return '<option value="' + f.id + '"' + (el.font === f.id ? ' selected' : '') + '>' + esc(f.label) + '</option>';
         }).join('');
         return '<div class="cc-ed-element" data-ed-element-row="' + id + '">' +
-          '<div class="cc-ed-element-head"><strong>' + esc(el.type.charAt(0).toUpperCase() + el.type.slice(1)) + '</strong><button type="button" class="cc-ed-chip" data-ed-element-remove="' + id + '">Remove</button></div>' +
+          '<div class="cc-ed-element-head"><strong>' + esc(el.type.charAt(0).toUpperCase() + el.type.slice(1)) + '</strong><span><button type="button" class="cc-ed-chip" data-ed-element-duplicate="' + id + '">Duplicate</button> <button type="button" class="cc-ed-chip" data-ed-element-remove="' + id + '">Remove</button></span></div>' +
           (isText ? '<label class="cc-ed-control"><span>Text</span><input type="text" maxlength="120" value="' + esc(el.text || '') + '" data-ed-element-field="text" data-ed-element-id="' + id + '" /></label>' : '') +
           '<label class="cc-ed-control"><span>Colour</span><input type="color" value="' + esc(el.color || '#ffffff') + '" data-ed-element-field="color" data-ed-element-id="' + id + '" /></label>' +
           '<label class="cc-ed-control"><span>Horizontal position</span><input type="range" min="0" max="96" value="' + Math.round((el.x || 0) * 100) + '" data-ed-element-field="x" data-ed-element-id="' + id + '" /></label>' +
           '<label class="cc-ed-control"><span>Vertical position</span><input type="range" min="0" max="96" value="' + Math.round((el.y || 0) * 100) + '" data-ed-element-field="y" data-ed-element-id="' + id + '" /></label>' +
+          '<label class="cc-ed-control"><span>Width</span><input type="range" min="2" max="100" value="' + Math.round((el.width || .2) * 100) + '" data-ed-element-field="width" data-ed-element-id="' + id + '" /></label>' +
+          '<label class="cc-ed-control"><span>Height</span><input type="range" min="1" max="100" value="' + Math.round((el.height || .08) * 100) + '" data-ed-element-field="height" data-ed-element-id="' + id + '" /></label>' +
+          '<label class="cc-ed-control"><span>Opacity</span><input type="range" min="0" max="100" value="' + Math.round((el.opacity == null ? 1 : el.opacity) * 100) + '" data-ed-element-field="opacity" data-ed-element-id="' + id + '" /></label>' +
+          '<label class="cc-ed-control"><span>Rotation</span><input type="range" min="-180" max="180" value="' + Number(el.rotation || 0) + '" data-ed-element-field="rotation" data-ed-element-id="' + id + '" /></label>' +
           (isText ? '<label class="cc-ed-control"><span>Font</span><select data-ed-element-field="font" data-ed-element-id="' + id + '">' + fontOptions + '</select></label>' : '') +
           (isText ? '<label class="cc-ed-control"><span>Size</span><input type="range" min="12" max="100" value="' + Math.round((el.fontSize || .038) * 1000) + '" data-ed-element-field="fontSize" data-ed-element-id="' + id + '" /></label>' : '') +
-          (isText ? '<label class="cc-ed-control"><span>Opacity</span><input type="range" min="0" max="100" value="' + Math.round((el.opacity == null ? 1 : el.opacity) * 100) + '" data-ed-element-field="opacity" data-ed-element-id="' + id + '" /></label>' : '') +
-          (isText ? '<label class="cc-ed-control"><span>Rotation</span><input type="range" min="-180" max="180" value="' + Number(el.rotation || 0) + '" data-ed-element-field="rotation" data-ed-element-id="' + id + '" /></label>' : '') +
           (isText ? '<label class="cc-ed-control"><span><input type="checkbox" ' + (el.italic ? 'checked' : '') + ' data-ed-element-field="italic" data-ed-element-id="' + id + '"/> Italic</span><span><input type="checkbox" ' + (el.uppercase ? 'checked' : '') + ' data-ed-element-field="uppercase" data-ed-element-id="' + id + '"/> Uppercase</span></label>' : '') +
           (el.type === 'badge' ? '<label class="cc-ed-control"><span>Badge background</span><input type="color" value="' + esc(el.background || '#2f7bff') + '" data-ed-element-field="background" data-ed-element-id="' + id + '" /></label>' : '') +
           '</div>';
@@ -370,6 +372,23 @@
           render();
         });
       });
+      overlay.querySelectorAll('[data-ed-element-duplicate]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var id = btn.getAttribute('data-ed-element-duplicate');
+          var list = Array.isArray(slide.elements) ? slide.elements : (slide.elements = []);
+          if (list.length >= 24) { host.toast && host.toast('This card has reached the 24-element limit.'); return; }
+          var source = list.find(function (el) { return String(el.id) === id; });
+          if (!source) return;
+          var copy = JSON.parse(JSON.stringify(source));
+          copy.id = 'element-' + Date.now() + '-' + list.length;
+          copy.x = Math.min(.96, Number(copy.x || 0) + .025);
+          copy.y = Math.min(.96, Number(copy.y || 0) + .025);
+          list.push(copy);
+          host.onChange && host.onChange();
+          host.onEdit && host.onEdit();
+          render();
+        });
+      });
       overlay.querySelectorAll('[data-ed-element-remove]').forEach(function (btn) {
         btn.addEventListener('click', function () {
           var id = btn.getAttribute('data-ed-element-remove');
@@ -386,7 +405,7 @@
           var el = (slide.elements || []).find(function (item) { return String(item.id) === id; });
           if (!el) return;
           var value = input.type === 'checkbox' ? !!input.checked : input.value;
-          if (field === 'x' || field === 'y') value = Number(value) / 100;
+          if (field === 'x' || field === 'y' || field === 'width' || field === 'height') value = Number(value) / 100;
           if (field === 'fontSize') value = Number(value) / 1000;
           if (field === 'opacity') value = Number(value) / 100;
           if (field === 'rotation') value = Number(value);
