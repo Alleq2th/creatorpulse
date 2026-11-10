@@ -133,3 +133,16 @@ test('the 26 font picker faces are all requested from the webfont stylesheet', (
     'Cormorant+Garamond','Libre+Baskerville','Roboto+Slab','Space+Mono','Source+Code+Pro'
   ]) assert.ok(html.includes('family=' + family), family + ' must be loaded for the editor');
 });
+
+test('direct text editing seeds history before the first keystroke', () => {
+  assert.match(core, /const target = cpTextTarget\(txt\);\s*if \(target\) cpSeedHistory\(target\.tid, target\.idx, target\.slideIndex\)/);
+  assert.match(core, /cpPushHistory\(t\.tid, t\.idx, t\.slideIndex\)/);
+});
+
+test('crop controls reuse the source plate and apply focal points at export time', () => {
+  const start = core.indexOf('function cpPlateKey');
+  const end = core.indexOf('function cpEnsurePlate', start);
+  const keyFunction = core.slice(start, end);
+  assert.doesNotMatch(keyFunction, /sty\.cropX|sty\.cropY/);
+  assert.match(core, /sty\.cropX[\s\S]*?sty\.cropY[\s\S]*?focalPoint:/);
+});
