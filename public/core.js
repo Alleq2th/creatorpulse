@@ -3887,11 +3887,10 @@ window.gen = async (tid, all) => {
         // what lets TikTok produce several posts instead of always one.
         const isSingle = isInstagramSingle || isThumbnail || requestedCount === 1;
         const cardFormat = isSilentCamera ? "tiktok_silent" : isThumbnail ? "youtube_thumbnail" : isInstagramSingle ? "instagram" : (isTikTokGraphic || isSingle) ? "tiktok" : plat;
-        // Only 6+ slides earns a dedicated CTA slide — below that, there's
-        // too little actual story to justify spending a whole slide on
-        // "follow for more" by itself. Instead the CTA gets folded onto the
-        // end of the last content slide (a ctaLine — see statCard.js).
-        const useDedicatedOutro = requestedCount >= 6;
+        // A carousel ends with a dedicated CTA slide whenever it has room for
+        // at least one story beat: 3 slides = hook/body/CTA; 4 = hook/body/body/CTA.
+        // Two slides remain hook + CTA, with no separate middle beat.
+        const useDedicatedOutro = requestedCount >= 3;
         // This is the actual source article text now (server sends up to
         // 1600 chars, not the old 200) — the raw material the AI rewrites
         // from, not just a fragment to mechanically slice up.
