@@ -232,7 +232,8 @@
     { id: 'dark_gradient', label: 'Dark Ambient Glow', sub: 'Soft radial backdrop with glowing accents', preview: 'background:radial-gradient(circle,#312e81,#09090b);color:#e0e7ff;' },
     { id: 'neon_noir', label: 'Neon Cyber', sub: 'Electric lime & cyan punchy layout', preview: 'background:#022c22;color:#4ade80;font-weight:800;' },
     { id: 'white_panel', label: 'White Panel', sub: 'Photo on top, clean white text panel below', preview: 'background:#fbfaf7;color:#1a1a1a;font-family:serif;' },
-    { id: 'white_panel_inset', label: 'White Panel Inset', sub: 'Rounded white card overlapping the photo', preview: 'background:#fbfaf7;color:#1a1a1a;font-family:serif;' }
+    { id: 'white_panel_inset', label: 'White Panel Inset', sub: 'Rounded white card overlapping the photo', preview: 'background:#fbfaf7;color:#1a1a1a;font-family:serif;' },
+    { id: 'full_bleed_quote', label: 'Full-Bleed Quote', sub: 'Full photo, oversized quote typography and slide counter', preview: 'background:#171717;color:#f6f6f6;font-weight:900;' }
   ];
 
   var TEMPLATES_TT = [
