@@ -1,0 +1,150 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+
+const elements = require('../public/lib/cardElementLibrary.js');
+const editor = require('../public/lib/cardEditor.js');
+const core = fs.readFileSync(path.join(__dirname, '../public/core.js'), 'utf8');
+const typography = fs.readFileSync(path.join(__dirname, '../public/lib/cardTypography.js'), 'utf8');
+const renderer = fs.readFileSync(path.join(__dirname, '../services/statCard.js'), 'utf8');
+const html = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+
+test('the Elements library creates all four supported element types', () => {
+  for (const type of ['text', 'badge', 'rule', 'circle']) {
+    const item = elements.create(type, 0);
+    assert.equal(item.type, type);
+    assert.ok(item.id);
+  }
+});
+
+test('element normalization clamps geometry, rejects unsafe colours and caps the library', () => {
+  const list = elements.normalize([
+    { id: 'x', type: 'text', text: '<script>', x: 4, y: -2, width: 5, height: 0, color: 'url(javascript:alert(1))', font: 'not-a-font' },
+    ...Array.from({ length: 30 }, (_, i) => ({ id: 'e' + i, type: 'circle', x: .2, y: .2, width: .1, height: .1, color: '#112233' }))
+  ]);
+  assert.equal(list.length, 24);
+  assert.equal(list[0].x, 0, 'an element wider than the card is anchored within the canvas');
+  assert.equal(list[0].y, 0);
+  assert.equal(list[0].width, 1);
+  assert.equal(list[0].height, .008);
+  assert.equal(list[0].color, '#ffffff');
+  assert.equal(list[0].font, 'impact');
+});
+
+test('live element markup escapes text and emits the same saved position and colour', () => {
+  const html = elements.renderHTML([{ id: 'tag', type: 'text', text: '<b>hello</b>', x: .2, y: .3, width: .5, height: .1, color: '#ff0000', font: 'impact', fontSize: .04 }]);
+  assert.match(html, /&lt;b&gt;hello&lt;\/b&gt;/);
+  assert.match(html, /left:20\.000%/);
+  assert.match(html, /top:30\.000%/);
+  assert.match(html, /color:#ff0000/);
+});
+
+test('canvas element painter handles text, badge, rule and circle elements', () => {
+  const calls = [];
+  const ctx = {
+    save(){}, restore(){}, translate(){}, rotate(){}, fillRect(){calls.push('rect');},
+    beginPath(){}, arc(){calls.push('circle');}, fill(){}, roundRect(){},
+    fillText(){calls.push('text');}, measureText(v){return {width:String(v).length*10};},
+    rect(){}, clip(){}, strokeText(){calls.push('stroke');}
+  };
+  elements.drawCanvas(ctx, [
+    { id:'t', type:'text', text:'Text', x:.1, y:.1, width:.5, height:.1, fontSize:.03 },
+    { id:'b', type:'badge', text:'NEW', x:.1, y:.2, width:.2, height:.06, fontSize:.02 },
+    { id:'r', type:'rule', x:.1, y:.3, width:.4, height:.01 },
+    { id:'c', type:'circle', x:.8, y:.1, width:.1, height:.1 }
+  ], 1080, 1350);
+  assert.ok(calls.includes('text'));
+  assert.ok(calls.includes('rect'));
+  assert.ok(calls.includes('circle'));
+});
+
+test('editor exposes five sections and a working Elements library', () => {
+  assert.equal(editor.NAV.length, 5);
+  assert.ok(editor.NAV.some(x => x.id === 'elements'));
+  const markup = editor.buildSheet({ design:null, nav:'elements', templates:[], treatments:[], roles:[], elements:[{ id:'demo', type:'text', text:'Sample', x:.1, y:.1, width:.5, height:.1, color:'#ffffff', font:'impact', fontSize:.04, weight:800, align:'left', opacity:1 }] });
+  assert.match(markup, /data-ed-add="text"/);
+  assert.match(markup, /data-ed-add="badge"/);
+  assert.match(markup, /data-ed-add="rule"/);
+  assert.match(markup, /data-ed-add="circle"/);
+  assert.match(markup, /data-ed-element-duplicate/);
+  assert.match(markup, /data-ed-element-field="width"/);
+  assert.match(markup, /data-ed-element-field="height"/);
+  assert.match(markup, /data-ed-element-field="align"/);
+  assert.match(markup, /data-ed-element-field="weight"/);
+});
+
+test('all 26 fonts are available to the live text controls and layout engine', () => {
+  const match = core.match(/const CARD_TYPOGRAPHIES = \[([\s\S]*?)\];/);
+  assert.ok(match);
+  assert.equal((match[1].match(/\{ id:/g) || []).length, 26);
+  for (const id of ['archivo_black','bebas_neue','barlow_condensed','dm_serif_display','space_mono','source_code_pro']) {
+    assert.match(typography, new RegExp(id + ':'));
+    assert.match(renderer, new RegExp(id + ':'));
+  }
+});
+
+test('photo crop position and replacement flow update the shared design state', () => {
+  const cardEditor = fs.readFileSync(path.join(__dirname, '../public/lib/cardEditor.js'), 'utf8');
+  assert.match(cardEditor, /data-ed-crop="cropX"/);
+  assert.match(cardEditor, /data-ed-crop="cropY"/);
+  assert.match(cardEditor, /data-ed-replace-image/);
+  assert.match(core, /onReplaceImage: \(input\) => window\.cpPickCardBackground/);
+  assert.match(core, /sty\.cropX/);
+  assert.match(core, /sty\.cropY/);
+});
+
+test('elements are included in undo snapshots, live preview and final image export', () => {
+  assert.match(core, /elements: Array\.isArray\(slide\.elements\)/);
+  assert.match(core, /slide\.elements = JSON\.parse\(JSON\.stringify\(snap\.elements\)\)/);
+  assert.match(core, /CPCardElementLibrary\.renderHTML\(slide\.elements \|\| \[\]\)/);
+  assert.match(core, /CPCardElementLibrary\.drawCanvas\(ctx, state\.elements \|\| \[\], W, H\)/);
+  assert.match(core, /elements: window\.CPCardElementLibrary/);
+  assert.match(html, /lib\/cardElementLibrary\.js\?v=3/);
+});
+
+test('text effects are exposed and applied in both preview and export', () => {
+  const cardEditor = fs.readFileSync(path.join(__dirname, '../public/lib/cardEditor.js'), 'utf8');
+  assert.match(core, /data-cp-ctx-kind="effects"/);
+  assert.match(core, /window\.cpSetLayerEffect/);
+  assert.match(core, /effects\.uppercase/);
+  assert.match(core, /effects\.italic/);
+  assert.match(core, /effects\.shadow === false/);
+  assert.match(core, /effects\.outline/);
+  assert.match(cardEditor, /data-ed-element-field="italic"/);
+  assert.match(cardEditor, /data-ed-element-field="uppercase"/);
+});
+
+test('theme preview supports templates without scrims and exposes headline layer identity', () => {
+  const themePreview = fs.readFileSync(path.join(__dirname, '../public/lib/themePreview.js'), 'utf8');
+  assert.match(themePreview, /design\.scrim && Array\.isArray\(design\.scrim\.stops\)/);
+  assert.match(themePreview, /data-layer-key=/);
+  assert.match(html, /lib\/themePreview\.js\?v=2/);
+});
+
+test('custom element fonts are loaded before the final canvas export', () => {
+  assert.match(core, /const elementFonts = window\.CPCardElementLibrary/);
+  assert.match(core, /CPCardElementLibrary\.FONTS\[el\.font\]/);
+  assert.match(core, /cpEnsureGraphicFontsLoaded\(\[\.\.\.\(state\.layers \|\| \[\]\), \.\.\.elementFonts\]\)/);
+});
+
+test('the 26 font picker faces are all requested from the webfont stylesheet', () => {
+  for (const family of [
+    'Barlow+Condensed','Roboto+Condensed','Montserrat','Poppins','DM+Sans','Space+Grotesk',
+    'Urbanist','Outfit','Figtree','DM+Serif+Display','Lora','Merriweather',
+    'Cormorant+Garamond','Libre+Baskerville','Roboto+Slab','Space+Mono','Source+Code+Pro'
+  ]) assert.ok(html.includes('family=' + family), family + ' must be loaded for the editor');
+});
+
+test('direct text editing seeds history before the first keystroke', () => {
+  assert.match(core, /const target = cpTextTarget\(txt\);\s*if \(target\) cpSeedHistory\(target\.tid, target\.idx, target\.slideIndex\)/);
+  assert.match(core, /cpPushHistory\(t\.tid, t\.idx, t\.slideIndex\)/);
+});
+
+test('crop controls reuse the source plate and apply focal points at export time', () => {
+  const start = core.indexOf('function cpPlateKey');
+  const end = core.indexOf('function cpEnsurePlate', start);
+  const keyFunction = core.slice(start, end);
+  assert.doesNotMatch(keyFunction, /sty\.cropX|sty\.cropY/);
+  assert.match(core, /sty\.cropX[\s\S]*?sty\.cropY[\s\S]*?focalPoint:/);
+});

@@ -41,14 +41,19 @@
       : 'background:' + esc(design.palette.bg);
 
     // The scrim, from the same stops the real card uses.
-    var scrimStops = design.scrim.stops.map(function (s) {
-      return s.color + ' ' + Math.round(s.offset * 100) + '%';
-    }).join(',');
+    var scrimStops = design.scrim && Array.isArray(design.scrim.stops)
+      ? design.scrim.stops.map(function (s) {
+          return s.color + ' ' + Math.round(s.offset * 100) + '%';
+        }).join(',')
+      : '';
+    var scrimHtml = scrimStops
+      ? '<span class="cc-th-scrim" style="background:linear-gradient(180deg,' + scrimStops + ')"></span>'
+      : '';
 
     // Every layer is placed with the real box, in percentages of the tile, and
     // sized with the real font size (cqw = % of the tile's own width).
     var layers = design.layers.filter(function (l) { return !l.empty; }).map(function (l) {
-      return '<span class="cc-th-layer" style="' +
+      return '<span class="cc-th-layer" data-layer-key="' + esc(l.key) + '" style="' +
         'left:' + (l.box.x * 100).toFixed(2) + '%;' +
         'top:' + (l.box.y * 100).toFixed(2) + '%;' +
         'width:' + (l.box.width * 100).toFixed(2) + '%;' +
@@ -60,7 +65,7 @@
       ' aria-pressed="' + (opts.active ? 'true' : 'false') + '"' +
       (opts.onclick ? ' onclick="' + opts.onclick + '"' : '') + '>' +
       '<span class="cc-th-frame" style="' + plate + ';background-color:' + esc(design.palette.bg) + '">' +
-        '<span class="cc-th-scrim" style="background:linear-gradient(180deg,' + scrimStops + ')"></span>' +
+        scrimHtml +
         layers +
       '</span>' +
       '<span class="cc-th-name">' + esc(opts.themeName || '') + '</span>' +

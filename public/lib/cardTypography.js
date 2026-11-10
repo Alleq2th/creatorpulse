@@ -22,7 +22,7 @@
 })(typeof window !== 'undefined' ? window : null, function () {
   'use strict';
 
-  /* The five faces the app ships. Each id maps to a real webfont that
+  /* The editor exposes 26 selectable faces, plus legacy aliases used by existing templates. Each id maps to a real webfont that
    * index.html loads, plus a system fallback, so the browser preview and the
    * canvas export pick the same face. `tracking` is letter-spacing as a
    * fraction of the font size; `upper` is the face's natural case. */
@@ -33,7 +33,29 @@
     modern_body:     { family: "Inter, Arial, sans-serif",                            weight: 500, upper: false, tracking: 0 },
     editorial_serif: { family: "'Playfair Display', Georgia, serif",                  weight: 900, upper: false, tracking: -0.01 },
     classic_serif:   { family: "'Playfair Display', Georgia, serif",                  weight: 700, upper: false, tracking: 0 },
-    code_mono:       { family: "'IBM Plex Mono', ui-monospace, monospace",            weight: 500, upper: true,  tracking: 0.02 }
+    code_mono:       { family: "'IBM Plex Mono', ui-monospace, monospace",            weight: 500, upper: true,  tracking: 0.02 },
+    archivo_black:   { family: "'Archivo Black', Impact, sans-serif",                    weight: 900, upper: true,  tracking: 0 },
+    anton:           { family: "'Anton', Impact, sans-serif",                            weight: 400, upper: true,  tracking: 0 },
+    bebas_neue:      { family: "'Bebas Neue', Impact, sans-serif",                       weight: 400, upper: true,  tracking: 0.02 },
+    oswald:          { family: "'Oswald', Impact, sans-serif",                           weight: 700, upper: true,  tracking: 0 },
+    roboto_condensed:{ family: "'Roboto Condensed', Arial, sans-serif",                  weight: 800, upper: true,  tracking: 0 },
+    barlow_condensed:{ family: "'Barlow Condensed', Arial, sans-serif",                  weight: 800, upper: true,  tracking: 0 },
+    montserrat:      { family: "'Montserrat', Arial, sans-serif",                        weight: 800, upper: false, tracking: 0 },
+    poppins:         { family: "'Poppins', Arial, sans-serif",                           weight: 700, upper: false, tracking: 0 },
+    dm_sans:         { family: "'DM Sans', Arial, sans-serif",                           weight: 700, upper: false, tracking: 0 },
+    manrope:         { family: "'Manrope', Arial, sans-serif",                           weight: 700, upper: false, tracking: 0 },
+    space_grotesk:   { family: "'Space Grotesk', Arial, sans-serif",                     weight: 700, upper: false, tracking: 0 },
+    urbanist:        { family: "'Urbanist', Arial, sans-serif",                          weight: 800, upper: false, tracking: 0 },
+    outfit:          { family: "'Outfit', Arial, sans-serif",                            weight: 700, upper: false, tracking: 0 },
+    figtree:         { family: "'Figtree', Arial, sans-serif",                           weight: 700, upper: false, tracking: 0 },
+    dm_serif_display:{ family: "'DM Serif Display', Georgia, serif",                     weight: 400, upper: false, tracking: -0.01 },
+    lora:            { family: "'Lora', Georgia, serif",                                weight: 700, upper: false, tracking: 0 },
+    merriweather:    { family: "'Merriweather', Georgia, serif",                         weight: 700, upper: false, tracking: 0 },
+    cormorant_garamond:{ family: "'Cormorant Garamond', Georgia, serif",                 weight: 700, upper: false, tracking: 0 },
+    libre_baskerville:{ family: "'Libre Baskerville', Georgia, serif",                   weight: 700, upper: false, tracking: 0 },
+    roboto_slab:     { family: "'Roboto Slab', Georgia, serif",                          weight: 700, upper: false, tracking: 0 },
+    space_mono:      { family: "'Space Mono', monospace",                               weight: 700, upper: true,  tracking: 0.01 },
+    source_code_pro: { family: "'Source Code Pro', monospace",                          weight: 600, upper: false, tracking: 0 }
   };
 
   /* Named pairings: a display face for the headline and a body face for the

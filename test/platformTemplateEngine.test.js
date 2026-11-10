@@ -5,8 +5,8 @@ const engine = require('../public/create/templateEngine.js');
 test('platform template engine exposes distinct compositions for each platform', () => {
   const ig = engine.list('instagram');
   const tt = engine.list('tiktok');
-  // Five original Instagram compositions plus the two White Panel variants.
-  assert.equal(ig.length, 7);
+  // The Instagram collection now contains eight distinct compositions.
+  assert.equal(ig.length, 8);
   assert.equal(tt.length, 5);
   assert.ok(ig.every(t => t.canvas.width === 1080 && t.canvas.height === 1350));
   assert.ok(tt.every(t => t.canvas.width === 1080 && t.canvas.height === 1920));

@@ -62,11 +62,31 @@ function cpCardLayerText(slide, layer) {
 
 const CARD_TYPOGRAPHIES = [
   { id: "impact", label: "Impact Bold" },
+  { id: "archivo_black", label: "Archivo Black" },
+  { id: "anton", label: "Anton" },
+  { id: "bebas_neue", label: "Bebas Neue" },
+  { id: "oswald", label: "Oswald" },
+  { id: "roboto_condensed", label: "Roboto Condensed" },
+  { id: "barlow_condensed", label: "Barlow Condensed" },
+  { id: "montserrat", label: "Montserrat" },
+  { id: "poppins", label: "Poppins" },
   { id: "modern_sans", label: "Modern Sans" },
+  { id: "dm_sans", label: "DM Sans" },
+  { id: "manrope", label: "Manrope" },
+  { id: "space_grotesk", label: "Space Grotesk" },
+  { id: "urbanist", label: "Urbanist" },
+  { id: "outfit", label: "Outfit" },
+  { id: "figtree", label: "Figtree" },
   { id: "editorial_serif", label: "Editorial Serif" },
+  { id: "dm_serif_display", label: "DM Serif Display" },
+  { id: "lora", label: "Lora" },
+  { id: "merriweather", label: "Merriweather" },
+  { id: "cormorant_garamond", label: "Cormorant Garamond" },
+  { id: "libre_baskerville", label: "Libre Baskerville" },
+  { id: "roboto_slab", label: "Roboto Slab" },
   { id: "code_mono", label: "Modern Mono" },
-  { id: "condensed_sans", label: "Condensed Display" },
-  { id: "classic_serif", label: "Classic Editorial" }
+  { id: "space_mono", label: "Space Mono" },
+  { id: "source_code_pro", label: "Source Code Pro" }
 ];
 const BRAND_PRESETS = {
   editorial: { label: "Editorial", palette: "electric_blue", theme: "editorial_warm", typography: "editorial_serif", name: "THE DAILY EDIT" },
@@ -89,16 +109,33 @@ const PALETTES = [
 // ── Visual metadata for the pickers + local card fallback ──
 const PALETTE_VIS = {noir_orange:["#0d0d0f","#ff6a1a"],electric_blue:["#05122b","#2f7bff"],emerald:["#04170f","#18c37e"],violet:["#140a24","#9b5cff"],crimson:["#170507","#e3263b"],gold:["#141005","#f2b630"],hot_pink:["#1a0612","#ff3fa4"],sky_blue:["#061722","#3cc3ff"],deep_teal:["#03181a","#14a3a0"],royal_indigo:["#0a0b2a","#5b5ff5"],sunset_coral:["#1d0b08","#ff7a59"],white_platinum:["#f4f4f2","#1a1a1a"]};
 const THEME_VIS = {modern_dark:{bg:"#111114",fg:"#ffffff",mu:"#8a8a93"},clean_light:{bg:"#fafaf7",fg:"#111111",mu:"#6b6b6b"},cyber_neon:{bg:"#07021a",fg:"#e9fbff",mu:"#7ef9ff"},editorial_warm:{bg:"#f3ebdd",fg:"#2a1d12",mu:"#8a6d4e"}};
-const TYPO_VIS = {impact:{f:"Anton, Impact, sans-serif",w:400,up:true},modern_sans:{f:"Inter, Arial, sans-serif",w:800,up:false},editorial_serif:{f:"'Playfair Display', Georgia, serif",w:900,up:false},code_mono:{f:"'IBM Plex Mono', monospace",w:500,up:true},condensed_sans:{f:"'Arial Narrow', Impact, sans-serif",w:900,up:true},classic_serif:{f:"Georgia, 'Times New Roman', serif",w:700,up:false}};
-const DENSITY_VIS = {punchy:1,balanced:2,detailed:4};
-const FORMAT_VIS = {"Script":"🎬","Graphic":"🖼️","Carousel":"🗂️","Caption":"#️⃣","Thumbnail":"🖼️","Title":"🔤","Tweet":"💬","Thread":"🧵","Post":"📝","Thought":"💡","Update":"📣"};
-const PLAT_LOGO = {
-  instagram:'<svg viewBox="0 0 24 24" width="22" height="22"><defs><linearGradient id="igg" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#feda75"/><stop offset=".5" stop-color="#d62976"/><stop offset="1" stop-color="#4f5bd5"/></linearGradient></defs><rect x="2" y="2" width="20" height="20" rx="6" fill="url(#igg)"/><circle cx="12" cy="12" r="4.2" fill="none" stroke="#fff" stroke-width="2"/><circle cx="17.3" cy="6.7" r="1.2" fill="#fff"/></svg>',
-  tiktok:'<svg viewBox="0 0 24 24" width="22" height="22"><rect width="24" height="24" rx="6" fill="#000"/><path d="M15.5 5c.4 1.7 1.6 2.9 3.3 3.1v2.6c-1.2 0-2.3-.4-3.3-1v5.2a4.6 4.6 0 1 1-4.6-4.6v2.6a2 2 0 1 0 2 2V5z" fill="#fff"/><path d="M15.5 5c.4 1.7 1.6 2.9 3.3 3.1" stroke="#25f4ee" stroke-width=".8" fill="none"/></svg>',
-  youtube:'<svg viewBox="0 0 24 24" width="22" height="22"><rect x="1" y="5" width="22" height="14" rx="4" fill="#ff0000"/><path d="M10 9v6l5-3z" fill="#fff"/></svg>',
-  twitter:'<svg viewBox="0 0 24 24" width="22" height="22"><rect width="24" height="24" rx="6" fill="#000"/><path d="M6 6h3.2l3.1 4.3L16 6h1.7l-4.6 5.4L18 18h-3.2l-3.3-4.6L7.6 18H6l4.8-5.6z" fill="#fff"/></svg>',
-  facebook:'<svg viewBox="0 0 24 24" width="22" height="22"><rect width="24" height="24" rx="6" fill="#1877f2"/><path d="M13.5 19v-6h2l.3-2.4h-2.3V9.2c0-.7.2-1.2 1.2-1.2h1.2V5.9a16 16 0 0 0-1.8-.1c-1.8 0-3 1.1-3 3.1v1.7h-2V13h2v6z" fill="#fff"/></svg>',
-  linkedin:'<svg viewBox="0 0 24 24" width="22" height="22"><rect width="24" height="24" rx="5" fill="#0a66c2"/><path d="M7 10h2.3v7H7zM8.1 6.5a1.3 1.3 0 1 1 0 2.6 1.3 1.3 0 0 1 0-2.6zM11 10h2.2v1c.4-.7 1.2-1.2 2.4-1.2 2.3 0 2.7 1.5 2.7 3.4V17H16v-3.4c0-.9 0-1.9-1.2-1.9s-1.4.9-1.4 1.9V17H11z" fill="#fff"/></svg>'
+const TYPO_VIS = {
+  impact: { f: "'Anton', Impact, sans-serif", w: 400, up: true },
+  archivo_black: { f: "'Archivo Black', Impact, sans-serif", w: 900, up: true },
+  anton: { f: "'Anton', Impact, sans-serif", w: 400, up: true },
+  bebas_neue: { f: "'Bebas Neue', Impact, sans-serif", w: 400, up: true },
+  oswald: { f: "'Oswald', Impact, sans-serif", w: 700, up: true },
+  roboto_condensed: { f: "'Roboto Condensed', Arial, sans-serif", w: 800, up: true },
+  barlow_condensed: { f: "'Barlow Condensed', Arial, sans-serif", w: 800, up: true },
+  montserrat: { f: "'Montserrat', Arial, sans-serif", w: 800, up: false },
+  poppins: { f: "'Poppins', Arial, sans-serif", w: 700, up: false },
+  modern_sans: { f: "Inter, Arial, sans-serif", w: 800, up: false },
+  dm_sans: { f: "'DM Sans', Arial, sans-serif", w: 700, up: false },
+  manrope: { f: "'Manrope', Arial, sans-serif", w: 700, up: false },
+  space_grotesk: { f: "'Space Grotesk', Arial, sans-serif", w: 700, up: false },
+  urbanist: { f: "'Urbanist', Arial, sans-serif", w: 800, up: false },
+  outfit: { f: "'Outfit', Arial, sans-serif", w: 700, up: false },
+  figtree: { f: "'Figtree', Arial, sans-serif", w: 700, up: false },
+  editorial_serif: { f: "'Playfair Display', Georgia, serif", w: 900, up: false },
+  dm_serif_display: { f: "'DM Serif Display', Georgia, serif", w: 400, up: false },
+  lora: { f: "'Lora', Georgia, serif", w: 700, up: false },
+  merriweather: { f: "'Merriweather', Georgia, serif", w: 700, up: false },
+  cormorant_garamond: { f: "'Cormorant Garamond', Georgia, serif", w: 700, up: false },
+  libre_baskerville: { f: "'Libre Baskerville', Georgia, serif", w: 700, up: false },
+  roboto_slab: { f: "'Roboto Slab', Georgia, serif", w: 700, up: false },
+  code_mono: { f: "'IBM Plex Mono', monospace", w: 500, up: true },
+  space_mono: { f: "'Space Mono', monospace", w: 700, up: true },
+  source_code_pro: { f: "'Source Code Pro', monospace", w: 600, up: false }
 };
 function svgEsc(x){ return String(x==null?"":x).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
 function wrapLines(text, maxChars, maxLines){
@@ -1635,7 +1672,7 @@ function renderCardCanvasEditor(o, tid, idx, slideIndex, slide, imageUrl, aspect
   };
   const sty = live._style || {};
   const stage = options && options.controlsOnly ? "" : renderCardLiveStage(o, tid, idx, slideIndex, slide, aspectRatio);
-  const ctxBar = `<div class="cc-ctx" data-cp-ctx="${key}" data-tid="${tid}" data-idx="${idx}" data-slide-index="${slideIndex}" hidden><div class="cc-ctx-bar" role="toolbar" aria-label="Text tools"><span class="cc-ctx-name"></span><button type="button" class="cc-ctx-btn" data-cp-ctx-kind="font" aria-pressed="false" onclick="cpToggleCtxPanel('font')">Font</button><button type="button" class="cc-ctx-btn" data-cp-ctx-kind="size" aria-pressed="false" onclick="cpToggleCtxPanel('size')">Size</button><button type="button" class="cc-ctx-btn" data-cp-ctx-kind="color" aria-pressed="false" onclick="cpToggleCtxPanel('color')">Color</button><button type="button" class="cc-ctx-btn" onclick="cpTriggerTextEdit('${key}')">✏️ Edit</button></div><div class="cc-ctx-panel" hidden></div></div>`;
+  const ctxBar = `<div class="cc-ctx" data-cp-ctx="${key}" data-tid="${tid}" data-idx="${idx}" data-slide-index="${slideIndex}" hidden><div class="cc-ctx-bar" role="toolbar" aria-label="Text tools"><span class="cc-ctx-name"></span><button type="button" class="cc-ctx-btn" data-cp-ctx-kind="font" aria-pressed="false" onclick="cpToggleCtxPanel('font')">Font</button><button type="button" class="cc-ctx-btn" data-cp-ctx-kind="size" aria-pressed="false" onclick="cpToggleCtxPanel('size')">Size</button><button type="button" class="cc-ctx-btn" data-cp-ctx-kind="color" aria-pressed="false" onclick="cpToggleCtxPanel('color')">Color</button><button type="button" class="cc-ctx-btn" data-cp-ctx-kind="effects" aria-pressed="false" onclick="cpToggleCtxPanel('effects')">Effects</button><button type="button" class="cc-ctx-btn" onclick="cpTriggerTextEdit('${key}')">✏️ Edit</button></div><div class="cc-ctx-panel" hidden></div></div>`;
   const bgBar = `<div class="cc-bg" data-cp-bg="${key}" data-tid="${tid}" data-idx="${idx}" data-slide-index="${slideIndex}" hidden></div>`;
   setTimeout(cpSyncLiveStages, 0);
   setTimeout(cpRefreshCtx, 0);
@@ -1918,10 +1955,15 @@ function cpLiveTextStyle(slide, name, o, tid) {
     templateId, platform, slide, index: 0, total: 1, style: sty
   });
   const layer = design && design.layers.find(l => l.key === name);
-  if (layer) return window.CPCardLayout.layerCss(layer);
-  // Fallback only if the shared module is missing (it is loaded before core.js).
-  const vis = TYPO_VIS.impact;
-  return `font-family:${vis.f};font-weight:${vis.w};font-size:${CP_LIVE_BASE_SIZE[name] || 4}cqw;line-height:1.1;color:#fff;text-transform:none;text-align:left`;
+  const base = layer
+    ? window.CPCardLayout.layerCss(layer)
+    : `font-family:${TYPO_VIS.impact.f};font-weight:${TYPO_VIS.impact.w};font-size:${CP_LIVE_BASE_SIZE[name] || 4}cqw;line-height:1.1;color:#fff;text-align:left`;
+  const effects = (sty.layerEffects || {})[name] || {};
+  return base +
+    (effects.uppercase ? ";text-transform:uppercase" : "") +
+    (effects.italic ? ";font-style:italic" : "") +
+    (effects.shadow === false ? ";text-shadow:none" : "") +
+    (effects.outline ? ";-webkit-text-stroke:0.045em " + ((design && design.palette && design.palette.accent) || "#f2b630") : "");
 }
 
 // Which platform's safe zones a card is being previewed in. The mockup tab the
@@ -2037,29 +2079,27 @@ window.cpSetCardBlurPct = (tid, idx, slideIndex, pct) => {
 };
 
 window.cpSetCardBgColor = (tid, idx, slideIndex, color) => {
-  const slide = cpCardSlide(tid, idx, slideIndex); if (!slide) return;
-  slide._style = slide._style || {};
-  slide._style.bgColor = color;
-  delete slide._style.bgGradient;
-  cpUpdateLiveStage(tid, idx, slideIndex);
+  cpRecordEdit(tid, idx, slideIndex, slide => {
+    slide._style = slide._style || {};
+    slide._style.bgColor = color;
+    delete slide._style.bgGradient;
+  });
   cpRefreshBgMenu();
 };
 
-window.cpSetCardGradientColor = (tid, idx, slideIndex, num, color) => {
-  const slide = cpCardSlide(tid, idx, slideIndex); if (!slide) return;
+window.cpSetCardGradientColor = (tid, idx, slideIndex, num, color) => cpRecordEdit(tid, idx, slideIndex, slide => {
   slide._style = slide._style || {};
   const cur = slide._style.bgGradient || { color1: "#312e81", color2: "#09090b" };
   slide._style.bgGradient = Object.assign({}, cur, { [`color${num}`]: color });
   delete slide._style.bgColor;
-  cpUpdateLiveStage(tid, idx, slideIndex);
-};
+});
 
 window.cpApplyGradientPreset = (tid, idx, slideIndex, c1, c2) => {
-  const slide = cpCardSlide(tid, idx, slideIndex); if (!slide) return;
-  slide._style = slide._style || {};
-  slide._style.bgGradient = { color1: c1, color2: c2, angle: 135 };
-  delete slide._style.bgColor;
-  cpUpdateLiveStage(tid, idx, slideIndex);
+  cpRecordEdit(tid, idx, slideIndex, slide => {
+    slide._style = slide._style || {};
+    slide._style.bgGradient = { color1: c1, color2: c2, angle: 135 };
+    delete slide._style.bgColor;
+  });
   cpRefreshBgMenu();
 };
 
@@ -2071,12 +2111,10 @@ window.cpAddCardLayer = function(tid, idx, slideIndex, layerKey) {
   cpSelectCanvasBlock(`${tid}-${idx}-${slideIndex}`, layerKey);
 };
 
-window.cpSetCardBackgroundAdjustment = (tid, idx, slideIndex, key, value) => {
-  const slide = cpCardSlide(tid, idx, slideIndex); if (!slide) return;
+window.cpSetCardBackgroundAdjustment = (tid, idx, slideIndex, key, value) => cpRecordEdit(tid, idx, slideIndex, slide => {
   slide._style = slide._style || {};
   slide._style.backgroundAdjustments = Object.assign({}, slide._style.backgroundAdjustments || {}, { [key]: value });
-  cpUpdateLiveStage(tid, idx, slideIndex);
-};
+});
 
 // Chooses the article photo (index -1) or one of this card's earlier uploads.
 window.cpUseBackgroundAt = (tid, idx, slideIndex, i) => {
@@ -2131,7 +2169,7 @@ function cpCtxPanelHTML(tid, idx, slideIndex, name, kind) {
       </div>
       <div class="cc-ctx-size-row">
         <button type="button" class="cc-ctx-size-btn" onclick="cpAdjustLayerScale('${tid}',${idx},${slideIndex},'${name}',-0.1)" title="Smaller">A−</button>
-        <input type="range" class="cc-slider cc-ctx-size-slider" min="50" max="200" value="${curPct}" aria-label="Text size percentage" oninput="cpSetLayerScale('${tid}',${idx},${slideIndex},'${name}',this.value/100)"/>
+        <input type="range" class="cc-slider cc-ctx-size-slider" min="50" max="200" value="${curPct}" aria-label="Text size percentage" oninput="cpSetLayerScale('${tid}',${idx},${slideIndex},'${name}',this.value/100)" onchange="cpCommitLayerScale('${tid}',${idx},${slideIndex})"/>
         <button type="button" class="cc-ctx-size-btn" onclick="cpAdjustLayerScale('${tid}',${idx},${slideIndex},'${name}',0.1)" title="Larger">A+</button>
       </div>
       <div class="cc-ctx-size-presets">
@@ -2141,6 +2179,16 @@ function cpCtxPanelHTML(tid, idx, slideIndex, name, kind) {
         <button type="button" class="btn bo bxs" onclick="cpSetLayerScale('${tid}',${idx},${slideIndex},'${name}',1.75)">175%</button>
       </div>
     </div>`;
+  }
+  if (kind === "effects") {
+    const effects = (sty.layerEffects || {})[name] || {};
+    const check = (key, label, fallback) => '<label class="cc-ctx-effect"><input type="checkbox" ' + ((effects[key] == null ? fallback : effects[key]) ? 'checked' : '') + ' onchange="cpSetLayerEffect(\'' + tid + '\',' + idx + ',' + slideIndex + ',\'' + name + '\',\'' + key + '\',this.checked)"/> ' + label + '</label>';
+    return '<div class="cc-ctx-effects">' +
+      check('uppercase', 'Uppercase', false) +
+      check('italic', 'Italic', false) +
+      check('shadow', 'Text shadow', true) +
+      check('outline', 'Accent outline', false) +
+      '</div>';
   }
   const cur = ((sty.layerColors || {})[name] || sty.textColor || "#ffffff").toLowerCase();
   const isPreset = CP_CTX_COLORS.includes(cur);
@@ -2154,12 +2202,14 @@ function cpCtxPanelHTML(tid, idx, slideIndex, name, kind) {
 
 window.cpSetLayerScale = (tid, idx, slideIndex, name, scale) => {
   const slide = cpCardSlide(tid, idx, slideIndex); if (!slide) return;
+  cpSeedHistory(tid, idx, slideIndex);
   slide._style = slide._style || {};
   slide._style.layerScale = Object.assign({}, slide._style.layerScale || {}, { [name]: Number(scale) });
   const valEl = document.getElementById(`size-val-${tid}-${idx}-${slideIndex}-${name}`);
   if (valEl) valEl.textContent = `${Math.round(scale * 100)}%`;
   cpUpdateLiveStage(tid, idx, slideIndex);
 };
+window.cpCommitLayerScale = (tid, idx, slideIndex) => cpPushHistory(tid, idx, slideIndex);
 window.cpAdjustLayerScale = (tid, idx, slideIndex, name, delta) => {
   const slide = cpCardSlide(tid, idx, slideIndex); if (!slide) return;
   const cur = Number(((slide._style || {}).layerScale || {})[name]) || 1;
@@ -2190,6 +2240,8 @@ window.cpPickLayerColor = (tid, idx, slideIndex, name, color, refresh = true) =>
 function cpStartTextEdit(block) {
   const txt = block.querySelector(".cc-live-text");
   if (!txt) return;
+  const target = cpTextTarget(txt);
+  if (target) cpSeedHistory(target.tid, target.idx, target.slideIndex);
   txt.setAttribute("contenteditable", "true");
   txt.setAttribute("spellcheck", "true");
   if (txt.classList.contains("is-empty")) { txt.textContent = ""; txt.classList.remove("is-empty"); }
@@ -2215,6 +2267,8 @@ function cpPlateKey(tid, idx, slideIndex) {
   const slide = cpCardSlide(tid, idx, slideIndex) || {};
   const sty = slide._style || {};
   const bg = sty.bgImage ? `up:${sty.bgImage.length}:${sty.bgImage.slice(-48)}:${sty.bgName || ""}` : "";
+  // Crop sliders are client-side presentation state. Do not key the source
+  // photo cache on them or a slider drag would issue a fresh image request.
   const focal = S.focalPoint?.[tid] ? `${S.focalPoint[tid].x}/${S.focalPoint[tid].y}` : "";
   return [tid, idx, slideIndex, ctx.palette || "", ctx.category || "", ctx.format || o?.aspect || "", bg, ctx.imageUrl || "", slide.customImage || "", focal].join("|");
 }
@@ -2235,7 +2289,12 @@ function cpEnsurePlate(tid, idx, slideIndex, forceRetry) {
     ...ctx,
     slides: [{ ...slide, img: undefined, localImg: undefined, customImage: sty.bgImage || slide.customImage || undefined, dim: 0, plateOnly: true }],
     plateOnly: true,
-    focalPoint: S.focalPoint?.[tid] ? { x: S.focalPoint[tid].x / 100, y: S.focalPoint[tid].y / 100 } : null,
+    focalPoint: (Number.isFinite(Number(sty.cropX)) || Number.isFinite(Number(sty.cropY)) || slide.focalPoint || S.focalPoint?.[tid])
+      ? {
+          x: (Number.isFinite(Number(sty.cropX)) ? Number(sty.cropX) : (slide.focalPoint?.x ?? S.focalPoint?.[tid]?.x ?? 50)) / 100,
+          y: (Number.isFinite(Number(sty.cropY)) ? Number(sty.cropY) : (slide.focalPoint?.y ?? S.focalPoint?.[tid]?.y ?? 50)) / 100
+        }
+      : null,
     brand: BRAND_PRESETS[S.brandPreset?.[tid] || "creator"]
   };
   const useFallbackPlate = () => {
@@ -2416,7 +2475,11 @@ function cpUpdateLiveStage(tid, idx, slideIndex) {
     // the upper-middle, where faces are), so the preview crops exactly as the
     // export does. A user's own focal point still wins.
     const treatmentFocal = design && design.treatment && design.treatment.focal;
-    if (plateEl) plateEl.style.backgroundPosition = treatmentFocal ? `${treatmentFocal.x * 100}% ${treatmentFocal.y * 100}%` : "center";
+    if (plateEl) {
+      const fx = Number.isFinite(Number(sty.cropX)) ? Number(sty.cropX) : (slide.focalPoint?.x ?? S.focalPoint?.[tid]?.x ?? (treatmentFocal ? treatmentFocal.x * 100 : 50));
+      const fy = Number.isFinite(Number(sty.cropY)) ? Number(sty.cropY) : (slide.focalPoint?.y ?? S.focalPoint?.[tid]?.y ?? (treatmentFocal ? treatmentFocal.y * 100 : 50));
+      plateEl.style.backgroundPosition = `${fx}% ${fy}%`;
+    }
     if (dimEl) dimEl.style.background = template.palette.gradient || "#000";
     // The badge/rule/frame/orb/stripes are painted by the shared painter, which
     // sizes them in card pixels. That is what stops the accent pill from
@@ -2465,7 +2528,7 @@ function cpUpdateLiveStage(tid, idx, slideIndex) {
       if (bd && !bd.hidden) bd.style.backgroundImage = plateEl.style.backgroundImage;
     }
     if (plateEl) {
-      plateEl.style.backgroundPosition = S.focalPoint?.[tid] ? `${S.focalPoint[tid].x}% ${S.focalPoint[tid].y}%` : "center";
+      plateEl.style.backgroundPosition = `${Number.isFinite(Number(sty.cropX)) ? sty.cropX : (S.focalPoint?.[tid]?.x ?? 50)}% ${Number.isFinite(Number(sty.cropY)) ? sty.cropY : (S.focalPoint?.[tid]?.y ?? 50)}%`;
       const adj = sty.backgroundAdjustments || {};
       const brightness = Math.max(0, Math.min(2, Number(adj.brightness ?? 1)));
       const contrast = Math.max(0, Math.min(2, Number(adj.contrast ?? 1)));
@@ -2524,6 +2587,9 @@ function cpUpdateLiveStage(tid, idx, slideIndex) {
     if (!guidesEl) { guidesEl = document.createElement("div"); guidesEl.className = "cc-guides"; stage.appendChild(guidesEl); }
     guidesEl.innerHTML = window.CPCardGuides ? (window.CPCardGuides.safeZoneHTML(design) + window.CPCardGuides.layerGuidesHTML(design)) : "";
   } else if (guidesEl) { guidesEl.remove(); }
+  let userElements = stage.querySelector(".cp-user-elements");
+  if (!userElements) { userElements = document.createElement("div"); userElements.className = "cp-user-elements"; stage.appendChild(userElements); }
+  userElements.innerHTML = window.CPCardElementLibrary ? window.CPCardElementLibrary.renderHTML(slide.elements || []) : "";
   cpSyncStylePanel(tid, idx, slideIndex, slide);
   cpScheduleExport(tid, idx, slideIndex);
 }
@@ -2603,7 +2669,9 @@ function cpGetDesignState(tid, idx, si) {
         keyword: resolved.keyword || "",
         keywordColor: resolved.keywordColor || "",
         // Tabular digits on a stat, so the exported figures line up (Part 5).
-        tabular: !!resolved.tabular
+        tabular: !!resolved.tabular,
+        effects: (sty.layerEffects || {})[L.key] || {},
+        accentColor: design && design.palette ? design.palette.accent : null
       };
     }
     const layerSpec = template?.typography?.[L.key];
@@ -2623,11 +2691,18 @@ function cpGetDesignState(tid, idx, si) {
       scale: k,
       color: (sty.layerColors || {})[L.key] || (L.key === "ctaLine" ? template?.palette?.accent : null) || sty.textColor || template?.palette?.text || "#ffffff",
       align,
-      box: (slide.textLayout || {})[L.key] || (template && template.layout && template.layout[L.key]) || CP_LIVE_DEFAULT_BOX[L.key]
+      box: (slide.textLayout || {})[L.key] || (template && template.layout && template.layout[L.key]) || CP_LIVE_DEFAULT_BOX[L.key],
+      effects: (sty.layerEffects || {})[L.key] || {},
+      accentColor: template && template.palette ? template.palette.accent : null
     };
   });
 
-  const focal = sty.bgImage && S.focalPoint?.[tid] ? S.focalPoint[tid] : null;
+  const globalFocal = S.focalPoint?.[tid] || null;
+  const focal = {
+    x: Number.isFinite(Number(sty.cropX)) ? Number(sty.cropX) : (slide.focalPoint?.x ?? globalFocal?.x ?? 50),
+    y: Number.isFinite(Number(sty.cropY)) ? Number(sty.cropY) : (slide.focalPoint?.y ?? globalFocal?.y ?? 50)
+  };
+  const hasFocal = !!(sty.bgImage || slide.focalPoint || globalFocal || Number.isFinite(Number(sty.cropX)) || Number.isFinite(Number(sty.cropY)));
   const aspect = cpExportAspect(o, o.type === "carousel");
   return {
     templateId: templateId || null,
@@ -2642,7 +2717,7 @@ function cpGetDesignState(tid, idx, si) {
     plateSrc,
     background: {
       image: plateSrc,
-      position: focal ? [focal.x, focal.y] : [50, 50],
+      position: hasFocal ? [focal.x, focal.y] : [50, 50],
       dim: Math.max(0, Math.min(0.8, Number(sty.dim) || 0)),
       adjustments: { ...(sty.backgroundAdjustments || {}) }
     },
@@ -2650,8 +2725,9 @@ function cpGetDesignState(tid, idx, si) {
     dim: Math.max(0, Math.min(0.8, Number(sty.dim) || 0)),
     bgColor: sty.bgColor || null,
     bgGradient: sty.bgGradient || null,
-    focal: focal ? [focal.x, focal.y] : null,
+    focal: hasFocal ? [focal.x, focal.y] : null,
     layers,
+    elements: window.CPCardElementLibrary ? window.CPCardElementLibrary.normalize(slide.elements) : (Array.isArray(slide.elements) ? slide.elements : []),
     headline: slide.headline || "",
     supportingText: slide.supportingText || "",
     ctaLine: slide.ctaLine || "",
@@ -2828,16 +2904,18 @@ function cpWrapLines(ctx, text, maxW) {
 // into the exported image.
 function cpDrawTextBox(ctx, l, W, H) {
   if (!l || !l.text || l.empty) return; // an empty slot is not drawn at all
+  const effects = l.effects || {};
+  const text = effects.uppercase ? String(l.text).toUpperCase() : String(l.text);
   const px = l.size * W;
   const lineH = px * (Number(l.lineHeight) || 1.1);
   const left = l.box.x * W, top = l.box.y * H, bw = l.box.width * W, bh = l.box.height * H;
-  ctx.font = `${l.weight} ${px}px ${l.family}`;
+  ctx.font = `${effects.italic ? "italic " : ""}${l.weight} ${px}px ${l.family}`;
   // Tabular digits on a stat, so the figures line up (Part 5).
   if (l.tabular && "fontVariantNumeric" in ctx) ctx.fontVariantNumeric = "tabular-nums";
   // Shared wrapper: identical break points in preview and export.
   const lines = window.CPCardLayout
-    ? window.CPCardLayout.wrapLines(s => ctx.measureText(s).width, l.text, bw)
-    : cpWrapLines(ctx, l.text, bw);
+    ? window.CPCardLayout.wrapLines(s => ctx.measureText(s).width, text, bw)
+    : cpWrapLines(ctx, text, bw);
   const m = ctx.measureText("Hg");
   const asc = m.fontBoundingBoxAscent ?? px * 0.8;
   const desc = m.fontBoundingBoxDescent ?? px * 0.2;
@@ -2846,14 +2924,14 @@ function cpDrawTextBox(ctx, l, W, H) {
   ctx.beginPath();
   ctx.rect(left, top, bw, bh);
   ctx.clip();
-  ctx.font = `${l.weight} ${px}px ${l.family}`;
+  ctx.font = `${effects.italic ? "italic " : ""}${l.weight} ${px}px ${l.family}`;
   ctx.fillStyle = l.color;
   ctx.textAlign = l.align === "center" ? "center" : (l.align === "right" ? "right" : "left");
   ctx.textBaseline = "alphabetic";
-  ctx.shadowColor = "rgba(0,0,0,0.45)";
+  ctx.shadowColor = effects.shadow === false ? "transparent" : "rgba(0,0,0,0.45)";
   ctx.shadowOffsetX = 0;
-  ctx.shadowOffsetY = 0.006 * W; // 0.6% of the width, as in the preview text-shadow
-  ctx.shadowBlur = 0.035 * W;    // 3.5% of the width
+  ctx.shadowOffsetY = effects.shadow === false ? 0 : 0.006 * W;
+  ctx.shadowBlur = effects.shadow === false ? 0 : 0.035 * W;
   const xPos = l.align === "center" ? (left + bw / 2) : (l.align === "right" ? (left + bw) : left);
   // One keyword may be highlighted in the accent. The line is drawn in the
   // layer colour, then the keyword is over-painted in the accent at the same
@@ -2862,6 +2940,12 @@ function cpDrawTextBox(ctx, l, W, H) {
   lines.forEach((ln, i) => {
     const y = firstBaseline + i * lineH;
     ctx.fillStyle = l.color;
+    if (effects.outline) {
+      ctx.strokeStyle = (l.accentColor || l.keywordColor || l.color);
+      ctx.lineWidth = Math.max(2, px * 0.045);
+      ctx.lineJoin = "round";
+      ctx.strokeText(ln, xPos, y);
+    }
     ctx.fillText(ln, xPos, y);
     if (kw && ln.indexOf(kw) > -1) {
       const before = ln.slice(0, ln.indexOf(kw));
@@ -2932,7 +3016,14 @@ async function cpComposeCard(snap) {
   const { state } = snap;
   const W = CP_EXPORT_W;
   const H = Math.round(W * state.aspect[1] / state.aspect[0]);
-  await cpEnsureGraphicFontsLoaded(state.layers);
+  const elementFonts = window.CPCardElementLibrary
+    ? (state.elements || []).filter(el => el.text && (el.type === "text" || el.type === "badge")).map(el => ({
+        text: el.text,
+        family: window.CPCardElementLibrary.FONTS[el.font] || "Inter, Arial, sans-serif",
+        weight: el.weight || 800
+      }))
+    : [];
+  await cpEnsureGraphicFontsLoaded([...(state.layers || []), ...elementFonts]);
   const photo = snap.plateSrc ? await cpLoadExportImage(snap.plateSrc).catch(() => null) : null;
   const canvas = document.createElement("canvas");
   canvas.width = W;
@@ -3050,6 +3141,7 @@ async function cpComposeCard(snap) {
     (state.templateDecoration || []).forEach(el => cpDrawTemplateDecoration(ctx, el, state.templatePalette && state.templatePalette.accent, W, H));
   }
   state.layers.forEach(l => { if (l.text && !l.empty) cpDrawTextBox(ctx, l, W, H); });
+  if (window.CPCardElementLibrary) window.CPCardElementLibrary.drawCanvas(ctx, state.elements || [], W, H);
   return canvas.toDataURL("image/jpeg", 0.92);
 }
 
@@ -3423,23 +3515,24 @@ function cpCardSlide(tid, idx, slideIndex) {
   if (!o.editSlide) o.editSlide = {type:"hook", headline:S.trends.find(t=>t.id===tid)?.headline||o.label, slideNumber:1, totalSlides:1, imageUrl:o._renderCtx?.imageUrl};
   return o.editSlide;
 }
-window.cpSetCardStyle = (tid, idx, slideIndex, key, value) => {
-  const slide = cpCardSlide(tid, idx, slideIndex); if (!slide) return;
+window.cpSetCardStyle = (tid, idx, slideIndex, key, value) => cpRecordEdit(tid, idx, slideIndex, slide => {
   slide._style = slide._style || {};
   slide._style[key] = value;
-  cpUpdateLiveStage(tid, idx, slideIndex);
-};
+});
 window.cpSetSlideText = (tid, idx, slideIndex, field, value) => {
   const slide = cpCardSlide(tid, idx, slideIndex); if (!slide) return;
   slide[field] = value;
   cpUpdateLiveStage(tid, idx, slideIndex);
 };
-window.cpSetLayerStyle = (tid, idx, slideIndex, group, layerKey, value) => {
-  const slide = cpCardSlide(tid, idx, slideIndex); if (!slide) return;
+window.cpSetLayerStyle = (tid, idx, slideIndex, group, layerKey, value) => cpRecordEdit(tid, idx, slideIndex, slide => {
   slide._style = slide._style || {};
   slide._style[group] = { ...(slide._style[group] || {}), [layerKey]: value };
-  cpUpdateLiveStage(tid, idx, slideIndex);
-};
+});
+window.cpSetLayerEffect = (tid, idx, slideIndex, name, effect, enabled) => cpRecordEdit(tid, idx, slideIndex, slide => {
+  slide._style = slide._style || {};
+  slide._style.layerEffects = slide._style.layerEffects || {};
+  slide._style.layerEffects[name] = Object.assign({}, slide._style.layerEffects[name] || {}, { [effect]: !!enabled });
+});
 
 // ── Part 6: the editing experience ──────────────────────────────────────────
 // Undo / redo, per-slide layout swap, nudge, size, apply-to-all with a per-slide
@@ -3457,7 +3550,9 @@ function cpSnapshotSlide(slide) {
     headline: slide.headline, supportingText: slide.supportingText, ctaLine: slide.ctaLine,
     role: slide.role, _templateId: slide._templateId,
     _style: slide._style ? JSON.parse(JSON.stringify(slide._style)) : undefined,
-    textLayout: slide.textLayout ? JSON.parse(JSON.stringify(slide.textLayout)) : undefined
+    textLayout: slide.textLayout ? JSON.parse(JSON.stringify(slide.textLayout)) : undefined,
+    elements: Array.isArray(slide.elements) ? JSON.parse(JSON.stringify(slide.elements)) : undefined,
+    focalPoint: slide.focalPoint ? JSON.parse(JSON.stringify(slide.focalPoint)) : undefined
   };
 }
 function cpSeedHistory(tid, idx, slideIndex) {
@@ -3482,6 +3577,8 @@ function cpApplySnapshot(slide, snap) {
   });
   if (snap._style === undefined) delete slide._style; else slide._style = JSON.parse(JSON.stringify(snap._style));
   if (snap.textLayout === undefined) delete slide.textLayout; else slide.textLayout = JSON.parse(JSON.stringify(snap.textLayout));
+  if (snap.elements === undefined) delete slide.elements; else slide.elements = JSON.parse(JSON.stringify(snap.elements));
+  if (snap.focalPoint === undefined) delete slide.focalPoint; else slide.focalPoint = JSON.parse(JSON.stringify(snap.focalPoint));
   if (snap._templateId === undefined) delete slide._templateId; else slide._templateId = snap._templateId;
 }
 // Seeds the pre-edit state, applies the change, then records the post-edit state.
@@ -3697,6 +3794,7 @@ window.cpOpenCardEditor = (tid, idx, slideIndex) => {
   const slide = cpCardSlide(tid, idx, slideIndex);
   if (!o || !o._renderCtx || !slide) { toast("That graphic is not ready to edit yet."); return; }
   if (!window.CPCardEditor) { toast("The editor is still loading."); return; }
+  cpSeedHistory(tid, idx, slideIndex);
   window.CPCardEditor.open({
     tid, idx, slideIndex,
     platform: cpLayoutPlatform(o),
@@ -3723,6 +3821,7 @@ window.cpOpenCardEditor = (tid, idx, slideIndex) => {
     onToggleOverride: () => window.cpToggleSlideOverride(tid, idx, slideIndex),
     onToggleEditMode: () => window.cpToggleEditMode(tid, idx, slideIndex),
     isEditMode: () => window.cpIsEditMode(tid, idx, slideIndex),
+    onReplaceImage: (input) => window.cpPickCardBackground(input, tid, idx, slideIndex),
     toast
   });
 };

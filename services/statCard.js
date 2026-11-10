@@ -196,6 +196,32 @@ const TYPOGRAPHIES = {
   }
 };
 
+// The editor's extended font catalogue shares these ids with the browser layout engine.
+Object.assign(TYPOGRAPHIES, {
+  archivo_black: { id: "archivo_black", name: "Archivo Black", headline: "'Archivo Black', Impact, sans-serif", body: "Inter, Arial, sans-serif" },
+  anton: { id: "anton", name: "Anton", headline: "'Anton', Impact, sans-serif", body: "Inter, Arial, sans-serif" },
+  bebas_neue: { id: "bebas_neue", name: "Bebas Neue", headline: "'Bebas Neue', Impact, sans-serif", body: "Inter, Arial, sans-serif" },
+  oswald: { id: "oswald", name: "Oswald", headline: "'Oswald', Impact, sans-serif", body: "Inter, Arial, sans-serif" },
+  roboto_condensed: { id: "roboto_condensed", name: "Roboto Condensed", headline: "'Roboto Condensed', Arial, sans-serif", body: "Inter, Arial, sans-serif" },
+  barlow_condensed: { id: "barlow_condensed", name: "Barlow Condensed", headline: "'Barlow Condensed', Arial, sans-serif", body: "Inter, Arial, sans-serif" },
+  montserrat: { id: "montserrat", name: "Montserrat", headline: "'Montserrat', Arial, sans-serif", body: "Inter, Arial, sans-serif" },
+  poppins: { id: "poppins", name: "Poppins", headline: "'Poppins', Arial, sans-serif", body: "Inter, Arial, sans-serif" },
+  dm_sans: { id: "dm_sans", name: "DM Sans", headline: "'DM Sans', Arial, sans-serif", body: "Inter, Arial, sans-serif" },
+  manrope: { id: "manrope", name: "Manrope", headline: "'Manrope', Arial, sans-serif", body: "Inter, Arial, sans-serif" },
+  space_grotesk: { id: "space_grotesk", name: "Space Grotesk", headline: "'Space Grotesk', Arial, sans-serif", body: "Inter, Arial, sans-serif" },
+  urbanist: { id: "urbanist", name: "Urbanist", headline: "'Urbanist', Arial, sans-serif", body: "Inter, Arial, sans-serif" },
+  outfit: { id: "outfit", name: "Outfit", headline: "'Outfit', Arial, sans-serif", body: "Inter, Arial, sans-serif" },
+  figtree: { id: "figtree", name: "Figtree", headline: "'Figtree', Arial, sans-serif", body: "Inter, Arial, sans-serif" },
+  dm_serif_display: { id: "dm_serif_display", name: "DM Serif Display", headline: "'DM Serif Display', Georgia, serif", body: "Inter, Arial, sans-serif" },
+  lora: { id: "lora", name: "Lora", headline: "'Lora', Georgia, serif", body: "Inter, Arial, sans-serif" },
+  merriweather: { id: "merriweather", name: "Merriweather", headline: "'Merriweather', Georgia, serif", body: "Inter, Arial, sans-serif" },
+  cormorant_garamond: { id: "cormorant_garamond", name: "Cormorant Garamond", headline: "'Cormorant Garamond', Georgia, serif", body: "Inter, Arial, sans-serif" },
+  libre_baskerville: { id: "libre_baskerville", name: "Libre Baskerville", headline: "'Libre Baskerville', Georgia, serif", body: "Inter, Arial, sans-serif" },
+  roboto_slab: { id: "roboto_slab", name: "Roboto Slab", headline: "'Roboto Slab', Georgia, serif", body: "Inter, Arial, sans-serif" },
+  space_mono: { id: "space_mono", name: "Space Mono", headline: "'Space Mono', monospace", body: "Inter, Arial, sans-serif" },
+  source_code_pro: { id: "source_code_pro", name: "Source Code Pro", headline: "'Source Code Pro', monospace", body: "Inter, Arial, sans-serif" }
+});
+
 const DENSITIES = {
   punchy: {
     id: "punchy",

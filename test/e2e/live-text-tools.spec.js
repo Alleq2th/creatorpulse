@@ -33,13 +33,14 @@ test.describe('Live text tools on a generated graphic', () => {
     await expect(headline).toHaveClass(/is-selected/);
     await expect(toolbar).toBeVisible();
     await expect(toolbar.locator('.cc-ctx-name')).toHaveText('Headline');
-    await expect(toolbar.locator('.cc-ctx-btn')).toHaveText(['Font', 'Color']);
+    const toolbarLabels = await toolbar.locator('.cc-ctx-btn').allTextContents();
+    expect(toolbarLabels).toEqual(expect.arrayContaining(['Font', 'Size', 'Color', 'Effects', '✏️ Edit']));
 
     // 3. Font opens a vertical list; each name is drawn in its own face.
     const supportFontBefore = await support.locator('.cc-live-text').evaluate((el) => getComputedStyle(el).fontFamily);
     await toolbar.locator('.cc-ctx-btn', { hasText: 'Font' }).click();
     const fontItems = toolbar.locator('.cc-ctx-font');
-    await expect(fontItems).toHaveCount(6);
+    await expect(fontItems).toHaveCount(26);
     const boxes = await fontItems.evaluateAll((els) => els.map((el) => el.getBoundingClientRect()));
     expect(boxes[1].top).toBeGreaterThan(boxes[0].top);
     expect(Math.abs(boxes[1].left - boxes[0].left)).toBeLessThan(2);
