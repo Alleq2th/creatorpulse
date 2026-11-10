@@ -182,7 +182,7 @@ test('template tiles are mini previews of the real template', () => {
 // ── Cache busting ────────────────────────────────────────────────────────────
 test('core.js and the service worker cache are bumped together', () => {
   assert.match(html, /core\.js\?v=71/);
-  assert.match(sw, /creatorpulse-v52/);
+  assert.match(sw, /creatorpulse-v53/);
   assert.match(html, /lib\/cardLayout\.js\?v=3/, 'the shared layout facade is loaded');
   assert.match(html, /lib\/cardPaint\.js\?v=3/, 'the new painter is loaded');
   assert.match(html, /lib\/themePreview\.js\?v=2/, 'the new theme preview is loaded');
