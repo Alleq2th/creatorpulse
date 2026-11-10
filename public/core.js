@@ -1672,7 +1672,7 @@ function renderCardCanvasEditor(o, tid, idx, slideIndex, slide, imageUrl, aspect
   };
   const sty = live._style || {};
   const stage = options && options.controlsOnly ? "" : renderCardLiveStage(o, tid, idx, slideIndex, slide, aspectRatio);
-  const ctxBar = `<div class="cc-ctx" data-cp-ctx="${key}" data-tid="${tid}" data-idx="${idx}" data-slide-index="${slideIndex}" hidden><div class="cc-ctx-bar" role="toolbar" aria-label="Text tools"><span class="cc-ctx-name"></span><button type="button" class="cc-ctx-btn" data-cp-ctx-kind="font" aria-pressed="false" onclick="cpToggleCtxPanel('font')">Font</button><button type="button" class="cc-ctx-btn" data-cp-ctx-kind="size" aria-pressed="false" onclick="cpToggleCtxPanel('size')">Size</button><button type="button" class="cc-ctx-btn" data-cp-ctx-kind="color" aria-pressed="false" onclick="cpToggleCtxPanel('color')">Color</button><button type="button" class="cc-ctx-btn" onclick="cpTriggerTextEdit('${key}')">✏️ Edit</button></div><div class="cc-ctx-panel" hidden></div></div>`;
+  const ctxBar = `<div class="cc-ctx" data-cp-ctx="${key}" data-tid="${tid}" data-idx="${idx}" data-slide-index="${slideIndex}" hidden><div class="cc-ctx-bar" role="toolbar" aria-label="Text tools"><span class="cc-ctx-name"></span><button type="button" class="cc-ctx-btn" data-cp-ctx-kind="font" aria-pressed="false" onclick="cpToggleCtxPanel('font')">Font</button><button type="button" class="cc-ctx-btn" data-cp-ctx-kind="size" aria-pressed="false" onclick="cpToggleCtxPanel('size')">Size</button><button type="button" class="cc-ctx-btn" data-cp-ctx-kind="color" aria-pressed="false" onclick="cpToggleCtxPanel('color')">Color</button><button type="button" class="cc-ctx-btn" data-cp-ctx-kind="effects" aria-pressed="false" onclick="cpToggleCtxPanel('effects')">Effects</button><button type="button" class="cc-ctx-btn" onclick="cpTriggerTextEdit('${key}')">✏️ Edit</button></div><div class="cc-ctx-panel" hidden></div></div>`;
   const bgBar = `<div class="cc-bg" data-cp-bg="${key}" data-tid="${tid}" data-idx="${idx}" data-slide-index="${slideIndex}" hidden></div>`;
   setTimeout(cpSyncLiveStages, 0);
   setTimeout(cpRefreshCtx, 0);
@@ -1955,10 +1955,15 @@ function cpLiveTextStyle(slide, name, o, tid) {
     templateId, platform, slide, index: 0, total: 1, style: sty
   });
   const layer = design && design.layers.find(l => l.key === name);
-  if (layer) return window.CPCardLayout.layerCss(layer);
-  // Fallback only if the shared module is missing (it is loaded before core.js).
-  const vis = TYPO_VIS.impact;
-  return `font-family:${vis.f};font-weight:${vis.w};font-size:${CP_LIVE_BASE_SIZE[name] || 4}cqw;line-height:1.1;color:#fff;text-transform:none;text-align:left`;
+  const base = layer
+    ? window.CPCardLayout.layerCss(layer)
+    : `font-family:${TYPO_VIS.impact.f};font-weight:${TYPO_VIS.impact.w};font-size:${CP_LIVE_BASE_SIZE[name] || 4}cqw;line-height:1.1;color:#fff;text-align:left`;
+  const effects = (sty.layerEffects || {})[name] || {};
+  return base +
+    (effects.uppercase ? ";text-transform:uppercase" : "") +
+    (effects.italic ? ";font-style:italic" : "") +
+    (effects.shadow === false ? ";text-shadow:none" : "") +
+    (effects.outline ? ";-webkit-text-stroke:1px " + ((sty.layerColors || {})[name] || "#ffffff") : "");
 }
 
 // Which platform's safe zones a card is being previewed in. The mockup tab the
@@ -2176,6 +2181,16 @@ function cpCtxPanelHTML(tid, idx, slideIndex, name, kind) {
         <button type="button" class="btn bo bxs" onclick="cpSetLayerScale('${tid}',${idx},${slideIndex},'${name}',1.75)">175%</button>
       </div>
     </div>`;
+  }
+  if (kind === "effects") {
+    const effects = (sty.layerEffects || {})[name] || {};
+    const check = (key, label, fallback) => '<label class="cc-ctx-effect"><input type="checkbox" ' + ((effects[key] == null ? fallback : effects[key]) ? 'checked' : '') + ' onchange="cpSetLayerEffect(\'' + tid + '\',' + idx + ',' + slideIndex + ',\'' + name + '\',\'' + key + '\',this.checked)"/> ' + label + '</label>';
+    return '<div class="cc-ctx-effects">' +
+      check('uppercase', 'Uppercase', false) +
+      check('italic', 'Italic', false) +
+      check('shadow', 'Text shadow', true) +
+      check('outline', 'Accent outline', false) +
+      '</div>';
   }
   const cur = ((sty.layerColors || {})[name] || sty.textColor || "#ffffff").toLowerCase();
   const isPreset = CP_CTX_COLORS.includes(cur);
@@ -2645,7 +2660,8 @@ function cpGetDesignState(tid, idx, si) {
         keyword: resolved.keyword || "",
         keywordColor: resolved.keywordColor || "",
         // Tabular digits on a stat, so the exported figures line up (Part 5).
-        tabular: !!resolved.tabular
+        tabular: !!resolved.tabular,
+        effects: (sty.layerEffects || {})[L.key] || {}
       };
     }
     const layerSpec = template?.typography?.[L.key];
@@ -2665,7 +2681,8 @@ function cpGetDesignState(tid, idx, si) {
       scale: k,
       color: (sty.layerColors || {})[L.key] || (L.key === "ctaLine" ? template?.palette?.accent : null) || sty.textColor || template?.palette?.text || "#ffffff",
       align,
-      box: (slide.textLayout || {})[L.key] || (template && template.layout && template.layout[L.key]) || CP_LIVE_DEFAULT_BOX[L.key]
+      box: (slide.textLayout || {})[L.key] || (template && template.layout && template.layout[L.key]) || CP_LIVE_DEFAULT_BOX[L.key],
+      effects: (sty.layerEffects || {})[L.key] || {}
     };
   });
 
@@ -2876,16 +2893,18 @@ function cpWrapLines(ctx, text, maxW) {
 // into the exported image.
 function cpDrawTextBox(ctx, l, W, H) {
   if (!l || !l.text || l.empty) return; // an empty slot is not drawn at all
+  const effects = l.effects || {};
+  const text = effects.uppercase ? String(l.text).toUpperCase() : String(l.text);
   const px = l.size * W;
   const lineH = px * (Number(l.lineHeight) || 1.1);
   const left = l.box.x * W, top = l.box.y * H, bw = l.box.width * W, bh = l.box.height * H;
-  ctx.font = `${l.weight} ${px}px ${l.family}`;
+  ctx.font = `${effects.italic ? "italic " : ""}${l.weight} ${px}px ${l.family}`;
   // Tabular digits on a stat, so the figures line up (Part 5).
   if (l.tabular && "fontVariantNumeric" in ctx) ctx.fontVariantNumeric = "tabular-nums";
   // Shared wrapper: identical break points in preview and export.
   const lines = window.CPCardLayout
-    ? window.CPCardLayout.wrapLines(s => ctx.measureText(s).width, l.text, bw)
-    : cpWrapLines(ctx, l.text, bw);
+    ? window.CPCardLayout.wrapLines(s => ctx.measureText(s).width, text, bw)
+    : cpWrapLines(ctx, text, bw);
   const m = ctx.measureText("Hg");
   const asc = m.fontBoundingBoxAscent ?? px * 0.8;
   const desc = m.fontBoundingBoxDescent ?? px * 0.2;
@@ -2910,6 +2929,12 @@ function cpDrawTextBox(ctx, l, W, H) {
   lines.forEach((ln, i) => {
     const y = firstBaseline + i * lineH;
     ctx.fillStyle = l.color;
+    if (effects.outline) {
+      ctx.strokeStyle = (l.keywordColor || l.color);
+      ctx.lineWidth = Math.max(2, px * 0.045);
+      ctx.lineJoin = "round";
+      ctx.strokeText(ln, xPos, y);
+    }
     ctx.fillText(ln, xPos, y);
     if (kw && ln.indexOf(kw) > -1) {
       const before = ln.slice(0, ln.indexOf(kw));
@@ -3484,6 +3509,11 @@ window.cpSetSlideText = (tid, idx, slideIndex, field, value) => {
 window.cpSetLayerStyle = (tid, idx, slideIndex, group, layerKey, value) => cpRecordEdit(tid, idx, slideIndex, slide => {
   slide._style = slide._style || {};
   slide._style[group] = { ...(slide._style[group] || {}), [layerKey]: value };
+});
+window.cpSetLayerEffect = (tid, idx, slideIndex, name, effect, enabled) => cpRecordEdit(tid, idx, slideIndex, slide => {
+  slide._style = slide._style || {};
+  slide._style.layerEffects = slide._style.layerEffects || {};
+  slide._style.layerEffects[name] = Object.assign({}, slide._style.layerEffects[name] || {}, { [effect]: !!enabled });
 });
 
 // ── Part 6: the editing experience ──────────────────────────────────────────
