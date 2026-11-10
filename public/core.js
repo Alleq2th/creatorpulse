@@ -2079,29 +2079,27 @@ window.cpSetCardBlurPct = (tid, idx, slideIndex, pct) => {
 };
 
 window.cpSetCardBgColor = (tid, idx, slideIndex, color) => {
-  const slide = cpCardSlide(tid, idx, slideIndex); if (!slide) return;
-  slide._style = slide._style || {};
-  slide._style.bgColor = color;
-  delete slide._style.bgGradient;
-  cpUpdateLiveStage(tid, idx, slideIndex);
+  cpRecordEdit(tid, idx, slideIndex, slide => {
+    slide._style = slide._style || {};
+    slide._style.bgColor = color;
+    delete slide._style.bgGradient;
+  });
   cpRefreshBgMenu();
 };
 
-window.cpSetCardGradientColor = (tid, idx, slideIndex, num, color) => {
-  const slide = cpCardSlide(tid, idx, slideIndex); if (!slide) return;
+window.cpSetCardGradientColor = (tid, idx, slideIndex, num, color) => cpRecordEdit(tid, idx, slideIndex, slide => {
   slide._style = slide._style || {};
   const cur = slide._style.bgGradient || { color1: "#312e81", color2: "#09090b" };
   slide._style.bgGradient = Object.assign({}, cur, { [`color${num}`]: color });
   delete slide._style.bgColor;
-  cpUpdateLiveStage(tid, idx, slideIndex);
-};
+});
 
 window.cpApplyGradientPreset = (tid, idx, slideIndex, c1, c2) => {
-  const slide = cpCardSlide(tid, idx, slideIndex); if (!slide) return;
-  slide._style = slide._style || {};
-  slide._style.bgGradient = { color1: c1, color2: c2, angle: 135 };
-  delete slide._style.bgColor;
-  cpUpdateLiveStage(tid, idx, slideIndex);
+  cpRecordEdit(tid, idx, slideIndex, slide => {
+    slide._style = slide._style || {};
+    slide._style.bgGradient = { color1: c1, color2: c2, angle: 135 };
+    delete slide._style.bgColor;
+  });
   cpRefreshBgMenu();
 };
 
@@ -2204,12 +2202,14 @@ function cpCtxPanelHTML(tid, idx, slideIndex, name, kind) {
 
 window.cpSetLayerScale = (tid, idx, slideIndex, name, scale) => {
   const slide = cpCardSlide(tid, idx, slideIndex); if (!slide) return;
+  cpSeedHistory(tid, idx, slideIndex);
   slide._style = slide._style || {};
   slide._style.layerScale = Object.assign({}, slide._style.layerScale || {}, { [name]: Number(scale) });
   const valEl = document.getElementById(`size-val-${tid}-${idx}-${slideIndex}-${name}`);
   if (valEl) valEl.textContent = `${Math.round(scale * 100)}%`;
   cpUpdateLiveStage(tid, idx, slideIndex);
 };
+window.cpCommitLayerScale = (tid, idx, slideIndex) => cpPushHistory(tid, idx, slideIndex);
 window.cpAdjustLayerScale = (tid, idx, slideIndex, name, delta) => {
   const slide = cpCardSlide(tid, idx, slideIndex); if (!slide) return;
   const cur = Number(((slide._style || {}).layerScale || {})[name]) || 1;
