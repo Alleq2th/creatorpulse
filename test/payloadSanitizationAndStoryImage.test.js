@@ -89,6 +89,6 @@ describe("Payload Sanitization & Story Image Guarantees", () => {
     const indexHtml = fs.readFileSync(path.join(__dirname, "../public/index.html"), "utf8");
     const swJs = fs.readFileSync(path.join(__dirname, "../public/sw.js"), "utf8");
     assert.ok(indexHtml.includes("core\.js\?v=73"), "index.html must reference core\.js\?v=73");
-    assert.ok(swJs.includes('const CACHE_NAME = "creatorpulse-v55";'), "sw.js cache must be bumped to creatorpulse-v55");
+    assert.ok(swJs.includes('const CACHE_NAME = "creatorpulse-v56";'), "sw.js cache must be bumped to creatorpulse-v56");
   });
 });
