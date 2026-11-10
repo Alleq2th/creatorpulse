@@ -2108,12 +2108,10 @@ window.cpAddCardLayer = function(tid, idx, slideIndex, layerKey) {
   cpSelectCanvasBlock(`${tid}-${idx}-${slideIndex}`, layerKey);
 };
 
-window.cpSetCardBackgroundAdjustment = (tid, idx, slideIndex, key, value) => {
-  const slide = cpCardSlide(tid, idx, slideIndex); if (!slide) return;
+window.cpSetCardBackgroundAdjustment = (tid, idx, slideIndex, key, value) => cpRecordEdit(tid, idx, slideIndex, slide => {
   slide._style = slide._style || {};
   slide._style.backgroundAdjustments = Object.assign({}, slide._style.backgroundAdjustments || {}, { [key]: value });
-  cpUpdateLiveStage(tid, idx, slideIndex);
-};
+});
 
 // Chooses the article photo (index -1) or one of this card's earlier uploads.
 window.cpUseBackgroundAt = (tid, idx, slideIndex, i) => {
@@ -2676,7 +2674,7 @@ function cpGetDesignState(tid, idx, si) {
     x: Number.isFinite(Number(sty.cropX)) ? Number(sty.cropX) : (slide.focalPoint?.x ?? globalFocal?.x ?? 50),
     y: Number.isFinite(Number(sty.cropY)) ? Number(sty.cropY) : (slide.focalPoint?.y ?? globalFocal?.y ?? 50)
   };
-  const hasFocal = !!(sty.bgImage || slide.focalPoint || globalFocal);
+  const hasFocal = !!(sty.bgImage || slide.focalPoint || globalFocal || Number.isFinite(Number(sty.cropX)) || Number.isFinite(Number(sty.cropY)));
   const aspect = cpExportAspect(o, o.type === "carousel");
   return {
     templateId: templateId || null,
@@ -3474,23 +3472,19 @@ function cpCardSlide(tid, idx, slideIndex) {
   if (!o.editSlide) o.editSlide = {type:"hook", headline:S.trends.find(t=>t.id===tid)?.headline||o.label, slideNumber:1, totalSlides:1, imageUrl:o._renderCtx?.imageUrl};
   return o.editSlide;
 }
-window.cpSetCardStyle = (tid, idx, slideIndex, key, value) => {
-  const slide = cpCardSlide(tid, idx, slideIndex); if (!slide) return;
+window.cpSetCardStyle = (tid, idx, slideIndex, key, value) => cpRecordEdit(tid, idx, slideIndex, slide => {
   slide._style = slide._style || {};
   slide._style[key] = value;
-  cpUpdateLiveStage(tid, idx, slideIndex);
-};
+});
 window.cpSetSlideText = (tid, idx, slideIndex, field, value) => {
   const slide = cpCardSlide(tid, idx, slideIndex); if (!slide) return;
   slide[field] = value;
   cpUpdateLiveStage(tid, idx, slideIndex);
 };
-window.cpSetLayerStyle = (tid, idx, slideIndex, group, layerKey, value) => {
-  const slide = cpCardSlide(tid, idx, slideIndex); if (!slide) return;
+window.cpSetLayerStyle = (tid, idx, slideIndex, group, layerKey, value) => cpRecordEdit(tid, idx, slideIndex, slide => {
   slide._style = slide._style || {};
   slide._style[group] = { ...(slide._style[group] || {}), [layerKey]: value };
-  cpUpdateLiveStage(tid, idx, slideIndex);
-};
+});
 
 // ── Part 6: the editing experience ──────────────────────────────────────────
 // Undo / redo, per-slide layout swap, nudge, size, apply-to-all with a per-slide
