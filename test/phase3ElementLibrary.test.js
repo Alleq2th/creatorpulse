@@ -62,7 +62,7 @@ test('canvas element painter handles text, badge, rule and circle elements', () 
 test('editor exposes five sections and a working Elements library', () => {
   assert.equal(editor.NAV.length, 5);
   assert.ok(editor.NAV.some(x => x.id === 'elements'));
-  const markup = editor.buildSheet({ design:null, nav:'elements', templates:[], treatments:[], roles:[], elements:[] });
+  const markup = editor.buildSheet({ design:null, nav:'elements', templates:[], treatments:[], roles:[], elements:[{ id:'demo', type:'text', text:'Sample', x:.1, y:.1, width:.5, height:.1, color:'#ffffff', font:'impact', fontSize:.04, weight:800, align:'left', opacity:1 }] });
   assert.match(markup, /data-ed-add="text"/);
   assert.match(markup, /data-ed-add="badge"/);
   assert.match(markup, /data-ed-add="rule"/);
