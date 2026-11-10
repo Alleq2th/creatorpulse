@@ -58,3 +58,16 @@ test('template picker preview uses the selected photo treatment and panel', () =
   assert.match(css, /\.cc-template-photo/);
   assert.match(css, /\.cc-template-panel::after/);
 });
+
+test('photo export uses the shared scrim stop colours and alpha values', () => {
+  const svgDefs = statCard.templatePhotoScrimDefs({
+    scrim: { stops: [
+      { offset: 0, color: 'rgba(0,0,0,.18)' },
+      { offset: 0.45, color: 'rgba(0,0,0,.42)' },
+      { offset: 1, color: 'rgba(0,0,0,.88)' }
+    ] }
+  }, { w: 1080, h: 1350 });
+  assert.match(svgDefs, /stop-color="rgb\(0,0,0\)" stop-opacity="0\.180"/);
+  assert.match(svgDefs, /offset="45\.00%"/);
+  assert.match(svgDefs, /stop-opacity="0\.880"/);
+});
