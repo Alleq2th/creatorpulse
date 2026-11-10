@@ -95,7 +95,10 @@
     // the design they got and switch to another one without restarting the
     // flow. This is the "preview and select templates after generating" half of
     // the requirement; the template step covers the "before" half.
-    var templateBlock = outs.length ? templateSwitcher(st) : '';
+    // Template selection belongs to the Template step. The result screen is
+    // for reviewing, editing and exporting the finished output — not a second
+    // copy of the same picker.
+    var templateBlock = '';
 
     // Spec 7.4: make the most relevant action prominent: after generating,
     // that is saving, not generating again.
