@@ -17,7 +17,7 @@ test('White Panel export draws a curved top seam and print texture', () => {
     },
     { name: 'Sportsguys Media' }
   );
-  assert.match(svg, /<path d="M 0 .* Q 0 .* 38 H 1042 Q 1080 .* 1080 .* V 1350 H 0 Z"/);
+  assert.match(svg, /<path d="M 0 \\d+ Q 0 \\d+ 38 \\d+ H 1042 Q 1080 \\d+ 1080 \\d+ V 1350 H 0 Z"/);
   assert.match(svg, /cpPanelDots/);
   assert.match(svg, />SM</);
   assert.match(svg, /SWIPE →/);
