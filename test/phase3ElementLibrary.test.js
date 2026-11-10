@@ -96,3 +96,15 @@ test('elements are included in undo snapshots, live preview and final image expo
   assert.match(core, /elements: window\.CPCardElementLibrary/);
   assert.match(html, /lib\/cardElementLibrary\.js\?v=1/);
 });
+
+test('text effects are exposed and applied in both preview and export', () => {
+  const cardEditor = fs.readFileSync(path.join(__dirname, '../public/lib/cardEditor.js'), 'utf8');
+  assert.match(core, /data-cp-ctx-kind="effects"/);
+  assert.match(core, /window\.cpSetLayerEffect/);
+  assert.match(core, /effects\.uppercase/);
+  assert.match(core, /effects\.italic/);
+  assert.match(core, /effects\.shadow === false/);
+  assert.match(core, /effects\.outline/);
+  assert.match(cardEditor, /data-ed-element-field="italic"/);
+  assert.match(cardEditor, /data-ed-element-field="uppercase"/);
+});
