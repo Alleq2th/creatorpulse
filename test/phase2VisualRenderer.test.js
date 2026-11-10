@@ -38,8 +38,8 @@ test('White Panel final slide does not show a redundant swipe cue', () => {
 
 test('photo-backed templates keep their signature decoration in the export path', () => {
   const source = fs.readFileSync(require.resolve('../services/statCard.js'), 'utf8');
-  assert.match(source, /if \\(scrimStrength != null\\)[\\s\\S]*?templateDecoration\\(design, p, f\\)/);
-  assert.match(source, /design\\.templateId === "full_bleed_quote"/);
+  assert.match(source, /if \(scrimStrength != null\)[\s\S]*?templateDecoration\(design, p, f\)/);
+  assert.match(source, /design\.templateId === "full_bleed_quote"/);
 });
 
 test('White Panel photo seam has a curved overlap in the shared treatment', () => {
