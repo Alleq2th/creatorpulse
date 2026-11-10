@@ -2913,7 +2913,7 @@ function cpDrawTextBox(ctx, l, W, H) {
   ctx.beginPath();
   ctx.rect(left, top, bw, bh);
   ctx.clip();
-  ctx.font = `${l.weight} ${px}px ${l.family}`;
+  ctx.font = `${effects.italic ? "italic " : """}${l.weight} ${px}px ${l.family}`;
   ctx.fillStyle = l.color;
   ctx.textAlign = l.align === "center" ? "center" : (l.align === "right" ? "right" : "left");
   ctx.textBaseline = "alphabetic";
