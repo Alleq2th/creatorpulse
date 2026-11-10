@@ -367,8 +367,8 @@ test('the new modules are loaded before core.js and the versions are bumped', ()
   for (const f of ['cardEditControls', 'cardEditHistory', 'cardGuides', 'cardThumbnails', 'cardSkeleton', 'cardQualityBar']) {
     assert.ok(HTML.includes('lib/' + f + '.js'), f + ' is loaded');
   }
-  assert.ok(HTML.indexOf('lib/cardLayoutEngine.js') < HTML.indexOf('core.js?v=66'), 'the engine loads before core.js');
+  assert.ok(HTML.indexOf('lib/cardLayoutEngine.js') < HTML.indexOf('core\.js\?v=68'), 'the engine loads before core.js');
   assert.match(HTML, /core\.js\?v=66/);
   const sw = fs.readFileSync(path.join(__dirname, '..', 'public', 'sw.js'), 'utf8');
-  assert.match(sw, /creatorpulse-v45/);
+  assert.match(sw, /creatorpulse-v48/);
 });
