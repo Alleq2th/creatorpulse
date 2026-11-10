@@ -24,7 +24,7 @@ test('element normalization clamps geometry, rejects unsafe colours and caps the
     ...Array.from({ length: 30 }, (_, i) => ({ id: 'e' + i, type: 'circle', x: .2, y: .2, width: .1, height: .1, color: '#112233' }))
   ]);
   assert.equal(list.length, 24);
-  assert.equal(list[0].x, .96);
+  assert.equal(list[0].x, 0, 'an element wider than the card is anchored within the canvas');
   assert.equal(list[0].y, 0);
   assert.equal(list[0].width, 1);
   assert.equal(list[0].height, .008);
