@@ -48,7 +48,8 @@
   }
   function normalize(elements) {
     return (Array.isArray(elements) ? elements : []).slice(0, 24).map(function(e, i) {
-      var type = TYPES.indexOf(e && e.type) >= 0 ? e.type : "text";
+      e = e || {};
+      var type = TYPES.indexOf(e.type) >= 0 ? e.type : "text";
       return {
         id: String(e && e.id || "element-" + (i + 1)).slice(0, 64),
         type:type,
@@ -74,7 +75,7 @@
     return normalize(elements).map(function(e) {
       var left=(e.x*100).toFixed(3)+"%", top=(e.y*100).toFixed(3)+"%", width=(e.width*100).toFixed(3)+"%", height=(e.height*100).toFixed(3)+"%";
       var base="position:absolute;left:"+left+";top:"+top+";width:"+width+";height:"+height+";opacity:"+e.opacity+";transform:rotate("+e.rotation+"deg);transform-origin:center center;box-sizing:border-box;";
-      if(e.type==="rule") return '<span class="cp-user-element cp-user-rule" data-user-element="'+escapeHtml(e.id)+'" style="'+base+'height:'+Math.max(2,e.height*100)+'%;background:'+e.color+'"></span>';
+      if(e.type==="rule") return '<span class="cp-user-element cp-user-rule" data-user-element="'+escapeHtml(e.id)+'" style="'+base+'background:'+e.color+'"></span>';
       if(e.type==="circle") return '<span class="cp-user-element cp-user-circle" data-user-element="'+escapeHtml(e.id)+'" style="'+base+'background:'+e.color+';border-radius:50%"></span>';
       var label=e.type==="badge" ? "cp-user-badge" : "cp-user-text";
       var bg=e.type==="badge" ? "background:"+e.background+";border-radius:999px;padding:.35em .8em;" : "background:transparent;";
@@ -91,7 +92,7 @@
       ctx.globalAlpha=e.opacity;
       ctx.translate(x+w/2,y+h/2);
       ctx.rotate(e.rotation*Math.PI/180);
-      if(e.type==="rule") { ctx.fillStyle=e.color; ctx.fillRect(-w/2,-Math.max(2,h/2),w,Math.max(4,h)); }
+      if(e.type==="rule") { ctx.fillStyle=e.color; ctx.fillRect(-w/2,-h/2,w,h); }
       else if(e.type==="circle") { ctx.fillStyle=e.color; ctx.beginPath(); ctx.arc(0,0,Math.min(w,h)/2,0,Math.PI*2); ctx.fill(); }
       else {
         if(e.type==="badge") {
