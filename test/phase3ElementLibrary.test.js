@@ -62,11 +62,14 @@ test('canvas element painter handles text, badge, rule and circle elements', () 
 test('editor exposes five sections and a working Elements library', () => {
   assert.equal(editor.NAV.length, 5);
   assert.ok(editor.NAV.some(x => x.id === 'elements'));
-  const markup = editor.buildSheet({ design:null, templates:[], treatments:[], roles:[], elements:[] });
+  const markup = editor.buildSheet({ design:null, nav:'elements', templates:[], treatments:[], roles:[], elements:[] });
   assert.match(markup, /data-ed-add="text"/);
   assert.match(markup, /data-ed-add="badge"/);
   assert.match(markup, /data-ed-add="rule"/);
   assert.match(markup, /data-ed-add="circle"/);
+  assert.match(markup, /data-ed-element-duplicate/);
+  assert.match(markup, /data-ed-element-field="width"/);
+  assert.match(markup, /data-ed-element-field="height"/);
 });
 
 test('all 26 fonts are available to the live text controls and layout engine', () => {
