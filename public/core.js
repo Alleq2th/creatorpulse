@@ -1677,9 +1677,18 @@ function renderOut(o, tid, idx){
       ? `<span class="ol" style="color:#6fa062">Real photo${o.sourceLabel?' · '+esc(o.sourceLabel):''}</span>`
       : `<span class="ol">AI-generated</span>`;
     const gptBtn = o.isCard ? "" : `<button class="btn bo bxs tipbtn" data-tip="Get a detailed prompt for ChatGPT/DALL-E" title="ChatGPT prompt" aria-label="Get ChatGPT prompt" onclick="getChatGPTPrompt('${tid}')">${I.bolt} ChatGPT Prompt</button>`;
+    const silentHook = o.silentCamera ? String(o.editSlide?.headline || "").trim() : "";
+    const silentHookPanel = o.silentCamera && silentHook
+      ? `<div class="cc-silent-hook" style="margin:10px;padding:12px;border:1px solid var(--br);border-radius:10px;background:var(--sf)">
+          <div style="font-size:10px;font-weight:800;letter-spacing:.09em;color:var(--mu);margin-bottom:6px">HOOK TEXT FOR YOUR CAMERA RECORDING</div>
+          <p style="font-size:16px;font-weight:800;line-height:1.3;margin:0 0 10px;color:var(--tx)">${esc(silentHook)}</p>
+          <button class="btn bo bxs" type="button" onclick="copyTxt(${JSON.stringify(silentHook).replace(/"/g, '&quot;')})">${I.copy} Copy hook</button>
+        </div>`
+      : "";
     return `<div class="oc">
       <div class="oh">${badge}<span style="font-size:10.5px;color:var(--mu)">Swipe format above to test</span></div>
       ${mockupHTML}
+      ${silentHookPanel}
       ${o.isCard ? renderCardCanvasEditor(o,tid,idx,0,o.editSlide||{headline:S.trends.find(t=>t.id===tid)?.headline||o.label},o.img,aspectRatioCSS.replace('/','/'), { controlsOnly: true }) : ""}
       ${o.isCard ? "" : `
       <details style="margin:0 10px 10px;background:var(--sf);border-radius:6px;padding:8px 12px;border:1px solid var(--br)">
