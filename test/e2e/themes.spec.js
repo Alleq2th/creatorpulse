@@ -39,7 +39,7 @@ test.describe('Themes on a generated graphic', () => {
     await expect(page.locator('#cthOverlay .cc-th-swatch')).toHaveCount(8);
     await expect(page.locator('#cthOverlay .cc-th-body')).toHaveCSS('overflow-y', 'auto');
     // Each tile shows the graphic's own headline.
-    const headline = await page.locator('#cthOverlay .cc-th-tile').first().locator('.cc-th-headline').innerText();
+    const headline = await page.locator('#cthOverlay .cc-th-tile').first().locator('.cc-th-layer[data-layer-key="headline"]').innerText();
     expect(headline.length).toBeGreaterThan(0);
 
     // Wait for the gallery's photo before picking, so the next count is only about the pick.
