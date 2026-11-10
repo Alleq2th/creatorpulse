@@ -38,7 +38,9 @@ test('White Panel final slide does not show a redundant swipe cue', () => {
 
 test('photo-backed templates keep their signature decoration in the export path', () => {
   const source = fs.readFileSync(require.resolve('../services/statCard.js'), 'utf8');
-  assert.match(source, /if \(scrimStrength != null\)[\s\S]*?templateDecoration\(design, p, f\)/);
+  assert.match(source, /if \(design && scrimStrength != null\)[\s\S]*?templateDecoration\(design, p, f\)/);
+  assert.match(source, /design\.scrim \? templatePhotoScrimDefs\(design, f\) : ""/);
+  assert.match(source, /if \(design\) return templateBackgroundLayer\(design, p, f, slideType\)/);
   assert.match(source, /design\.templateId === "full_bleed_quote"/);
 });
 
