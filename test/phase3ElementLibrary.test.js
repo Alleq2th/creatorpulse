@@ -45,7 +45,8 @@ test('canvas element painter handles text, badge, rule and circle elements', () 
   const ctx = {
     save(){}, restore(){}, translate(){}, rotate(){}, fillRect(){calls.push('rect');},
     beginPath(){}, arc(){calls.push('circle');}, fill(){}, roundRect(){},
-    fillText(){calls.push('text');}
+    fillText(){calls.push('text');}, measureText(v){return {width:String(v).length*10};},
+    rect(){}, clip(){}, strokeText(){calls.push('stroke');}
   };
   elements.drawCanvas(ctx, [
     { id:'t', type:'text', text:'Text', x:.1, y:.1, width:.5, height:.1, fontSize:.03 },
