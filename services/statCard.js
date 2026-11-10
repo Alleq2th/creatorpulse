@@ -560,7 +560,7 @@ function templatePhotoScrimDefs(design, f) {
 }
 
 function backgroundLayer(p, f, scrimStrength, slideType, design) {
-  if (design) {
+  if (design && scrimStrength != null) {
     // A template's scrim is optional. Never invent a generic dark overlay when
     // its treatment deliberately keeps text off the photo or uses a solid field.
     const scrim = design.scrim ? templatePhotoScrimDefs(design, f) : "";
@@ -570,6 +570,7 @@ function backgroundLayer(p, f, scrimStrength, slideType, design) {
     // Keep the selected template's signature decoration over real photos too.
     return `${scrimLayer}${templateDecoration(design, p, f)}`;
   }
+  if (design) return templateBackgroundLayer(design, p, f, slideType);
   if (scrimStrength != null) {
     const scrim = scrimDefs(f.w, f.h, scrimStrength);
     return `<defs>${scrim}</defs><rect width="${f.w}" height="${f.h}" fill="url(#scrim)"/>`;
