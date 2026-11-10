@@ -50,14 +50,18 @@
     return (Array.isArray(elements) ? elements : []).slice(0, 24).map(function(e, i) {
       e = e || {};
       var type = TYPES.indexOf(e.type) >= 0 ? e.type : "text";
+      var width = clamp(e.width, .02, 1);
+      var height = clamp(e.height, .008, 1);
+      var x = clamp(e.x, 0, 1 - width);
+      var y = clamp(e.y, 0, 1 - height);
       return {
         id: String(e && e.id || "element-" + (i + 1)).slice(0, 64),
         type:type,
         text:String(e && e.text || "").slice(0, 120),
-        x:clamp(e && e.x, 0, .96),
-        y:clamp(e && e.y, 0, .96),
-        width:clamp(e && e.width, .02, 1),
-        height:clamp(e && e.height, .008, 1),
+        x:x,
+        y:y,
+        width:width,
+        height:height,
         color:hex(e && e.color, "#ffffff"),
         background:hex(e && e.background, "#2f7bff"),
         font:FONTS[e && e.font] ? e.font : "impact",
