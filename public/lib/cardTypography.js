@@ -22,7 +22,7 @@
 })(typeof window !== 'undefined' ? window : null, function () {
   'use strict';
 
-  /* The five faces the app ships. Each id maps to a real webfont that
+  /* The editor exposes 26 selectable faces, plus legacy aliases used by existing templates. Each id maps to a real webfont that
    * index.html loads, plus a system fallback, so the browser preview and the
    * canvas export pick the same face. `tracking` is letter-spacing as a
    * fraction of the font size; `upper` is the face's natural case. */
