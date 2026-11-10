@@ -3960,7 +3960,12 @@ window.gen = async (tid, all) => {
           const hookSlide = { type: "hook", headline: parsed.hookHeadline || t.headline, supportingText: parsed.hookTease || sourceText.split(/(?<=[.!?])\s/).slice(0,2).join(" "), emphasisLine: 1, sourceLabel: t.source || null };
           const planned = window.CPCreateSlidePlan
             ? window.CPCreateSlidePlan.plan(hookSlide, rawSlides, requestedCount, sourceText, () => ctaOutroSlide(t.niche))
-            : { slides: [hookSlide, ...rawSlides.map(s => ({ ...s, type: "body" }))], padded: 0, trimmed: 0, requested: requestedCount };
+            : {
+                slides: requestedCount >= 3
+                  ? [hookSlide, ...rawSlides.map(s => ({ ...s, type: "body" })), ctaOutroSlide(t.niche)]
+                  : [hookSlide, ...rawSlides.map((s, i) => ({ ...s, type: "body", ...(i === rawSlides.length - 1 ? { ctaLine: "FOLLOW FOR MORE \u2192" } : {}) }))],
+                padded: 0, trimmed: 0, requested: requestedCount
+              };
           slideArr = planned.slides;
           if (planned.padded || planned.trimmed) {
             console.info(`[carousel] slide plan: requested ${planned.requested}, padded ${planned.padded}, trimmed ${planned.trimmed}`);
