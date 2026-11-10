@@ -2240,6 +2240,8 @@ window.cpPickLayerColor = (tid, idx, slideIndex, name, color, refresh = true) =>
 function cpStartTextEdit(block) {
   const txt = block.querySelector(".cc-live-text");
   if (!txt) return;
+  const target = cpTextTarget(txt);
+  if (target) cpSeedHistory(target.tid, target.idx, target.slideIndex);
   txt.setAttribute("contenteditable", "true");
   txt.setAttribute("spellcheck", "true");
   if (txt.classList.contains("is-empty")) { txt.textContent = ""; txt.classList.remove("is-empty"); }
