@@ -1677,9 +1677,18 @@ function renderOut(o, tid, idx){
       ? `<span class="ol" style="color:#6fa062">Real photo${o.sourceLabel?' · '+esc(o.sourceLabel):''}</span>`
       : `<span class="ol">AI-generated</span>`;
     const gptBtn = o.isCard ? "" : `<button class="btn bo bxs tipbtn" data-tip="Get a detailed prompt for ChatGPT/DALL-E" title="ChatGPT prompt" aria-label="Get ChatGPT prompt" onclick="getChatGPTPrompt('${tid}')">${I.bolt} ChatGPT Prompt</button>`;
+    const silentHook = o.silentCamera ? String(o.editSlide?.headline || "").trim() : "";
+    const silentHookPanel = o.silentCamera && silentHook
+      ? `<div class="cc-silent-hook" style="margin:10px;padding:12px;border:1px solid var(--br);border-radius:10px;background:var(--sf)">
+          <div style="font-size:10px;font-weight:800;letter-spacing:.09em;color:var(--mu);margin-bottom:6px">HOOK TEXT FOR YOUR CAMERA RECORDING</div>
+          <p style="font-size:16px;font-weight:800;line-height:1.3;margin:0 0 10px;color:var(--tx)">${esc(silentHook)}</p>
+          <button class="btn bo bxs" type="button" onclick="copyTxt(${JSON.stringify(silentHook).replace(/"/g, '&quot;')})">${I.copy} Copy hook</button>
+        </div>`
+      : "";
     return `<div class="oc">
       <div class="oh">${badge}<span style="font-size:10.5px;color:var(--mu)">Swipe format above to test</span></div>
       ${mockupHTML}
+      ${silentHookPanel}
       ${o.isCard ? renderCardCanvasEditor(o,tid,idx,0,o.editSlide||{headline:S.trends.find(t=>t.id===tid)?.headline||o.label},o.img,aspectRatioCSS.replace('/','/'), { controlsOnly: true }) : ""}
       ${o.isCard ? "" : `
       <details style="margin:0 10px 10px;background:var(--sf);border-radius:6px;padding:8px 12px;border:1px solid var(--br)">
@@ -3887,11 +3896,10 @@ window.gen = async (tid, all) => {
         // what lets TikTok produce several posts instead of always one.
         const isSingle = isInstagramSingle || isThumbnail || requestedCount === 1;
         const cardFormat = isSilentCamera ? "tiktok_silent" : isThumbnail ? "youtube_thumbnail" : isInstagramSingle ? "instagram" : (isTikTokGraphic || isSingle) ? "tiktok" : plat;
-        // Only 6+ slides earns a dedicated CTA slide — below that, there's
-        // too little actual story to justify spending a whole slide on
-        // "follow for more" by itself. Instead the CTA gets folded onto the
-        // end of the last content slide (a ctaLine — see statCard.js).
-        const useDedicatedOutro = requestedCount >= 6;
+        // A carousel ends with a dedicated CTA slide whenever it has room for
+        // at least one story beat: 3 slides = hook/body/CTA; 4 = hook/body/body/CTA.
+        // Two slides remain hook + CTA, with no separate middle beat.
+        const useDedicatedOutro = requestedCount >= 3;
         // This is the actual source article text now (server sends up to
         // 1600 chars, not the old 200) — the raw material the AI rewrites
         // from, not just a fragment to mechanically slice up.
@@ -3952,7 +3960,12 @@ window.gen = async (tid, all) => {
           const hookSlide = { type: "hook", headline: parsed.hookHeadline || t.headline, supportingText: parsed.hookTease || sourceText.split(/(?<=[.!?])\s/).slice(0,2).join(" "), emphasisLine: 1, sourceLabel: t.source || null };
           const planned = window.CPCreateSlidePlan
             ? window.CPCreateSlidePlan.plan(hookSlide, rawSlides, requestedCount, sourceText, () => ctaOutroSlide(t.niche))
-            : { slides: [hookSlide, ...rawSlides.map(s => ({ ...s, type: "body" }))], padded: 0, trimmed: 0, requested: requestedCount };
+            : {
+                slides: requestedCount >= 3
+                  ? [hookSlide, ...rawSlides.map(s => ({ ...s, type: "body" })), ctaOutroSlide(t.niche)]
+                  : [hookSlide, ...rawSlides.map((s, i) => ({ ...s, type: "body", ...(i === rawSlides.length - 1 ? { ctaLine: "FOLLOW FOR MORE \u2192" } : {}) }))],
+                padded: 0, trimmed: 0, requested: requestedCount
+              };
           slideArr = planned.slides;
           if (planned.padded || planned.trimmed) {
             console.info(`[carousel] slide plan: requested ${planned.requested}, padded ${planned.padded}, trimmed ${planned.trimmed}`);

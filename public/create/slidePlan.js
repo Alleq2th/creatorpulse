@@ -82,9 +82,10 @@
     }
 
     // How many slides must come from the body, given the requested total.
-    // 6+ gets a dedicated closing slide; below that the CTA folds onto the last
-    // body slide, which keeps short carousels from wasting a slide on "follow".
-    var useDedicatedOutro = requested >= 6;
+    // A carousel always ends with a distinct CTA once it has room for a story beat.
+    // Three slides = hook, one body beat, CTA. Four slides = hook, two body beats,
+    // CTA. Two slides stay hook + CTA because there is no room for a middle beat.
+    var useDedicatedOutro = requested >= 3;
     var bodyTarget = useDedicatedOutro ? requested - 2 : requested - 1;
     if (bodyTarget < 1) bodyTarget = 1;
 
@@ -116,7 +117,7 @@
     if (useDedicatedOutro && typeof makeFooter === 'function') {
       slides.push(makeFooter());
     } else if (slides.length) {
-      // Below 6 slides the CTA rides on the final body slide.
+      // A two-slide carousel has no middle slide, so its final slide carries the CTA.
       slides[slides.length - 1].ctaLine =
         slides[slides.length - 1].ctaLine || 'FOLLOW FOR MORE \u2192';
     }
