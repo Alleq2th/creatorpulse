@@ -560,16 +560,20 @@ function templatePhotoScrimDefs(design, f) {
 }
 
 function backgroundLayer(p, f, scrimStrength, slideType, design) {
-  if (scrimStrength != null) {
-    // Keep the selected template's signature decoration on top of a real photo
-    // as well as on a generated gradient. Previously photo-backed cards silently
-    // lost quote marks, rules and badges because this branch returned early.
-    const scrim = design && design.scrim
-      ? templatePhotoScrimDefs(design, f)
-      : scrimDefs(f.w, f.h, scrimStrength);
-    return `<defs>${scrim}</defs><rect width="${f.w}" height="${f.h}" fill="url(#scrim)"/>${design ? templateDecoration(design, p, f) : ""}`;
+  if (design) {
+    // A template's scrim is optional. Never invent a generic dark overlay when
+    // its treatment deliberately keeps text off the photo or uses a solid field.
+    const scrim = design.scrim ? templatePhotoScrimDefs(design, f) : "";
+    const scrimLayer = scrim
+      ? `<defs>${scrim}</defs><rect width="${f.w}" height="${f.h}" fill="url(#scrim)"/>`
+      : "";
+    // Keep the selected template's signature decoration over real photos too.
+    return `${scrimLayer}${templateDecoration(design, p, f)}`;
   }
-  if (design) return templateBackgroundLayer(design, p, f, slideType);
+  if (scrimStrength != null) {
+    const scrim = scrimDefs(f.w, f.h, scrimStrength);
+    return `<defs>${scrim}</defs><rect width="${f.w}" height="${f.h}" fill="url(#scrim)"/>`;
+  }
   return `<defs>${gradientDefs(p, f.w, f.h)}</defs><rect width="${f.w}" height="${f.h}" fill="url(#bgGrad)"/>${decorativeTexture(p, f, slideType)}`;
 }
 
