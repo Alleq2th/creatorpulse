@@ -181,8 +181,8 @@ test('template tiles are mini previews of the real template', () => {
 
 // ── Cache busting ────────────────────────────────────────────────────────────
 test('core.js and the service worker cache are bumped together', () => {
-  assert.match(html, /core\.js\?v=70/);
-  assert.match(sw, /creatorpulse-v51/);
+  assert.match(html, /core\.js\?v=71/);
+  assert.match(sw, /creatorpulse-v52/);
   assert.match(html, /lib\/cardLayout\.js\?v=3/, 'the shared layout facade is loaded');
   assert.match(html, /lib\/cardPaint\.js\?v=3/, 'the new painter is loaded');
   assert.match(html, /lib\/themePreview\.js\?v=2/, 'the new theme preview is loaded');
@@ -193,7 +193,7 @@ test('core.js and the service worker cache are bumped together', () => {
   assert.match(html, /lib\/contentTypes\.js\?v=1/, 'the content types are loaded');
   assert.match(html, /lib\/roleLayouts\.js\?v=1/, 'the story roles are loaded');
   assert.match(html, /lib\/cardLayoutEngine\.js\?v=3/, 'the layout engine is loaded');
-  assert.match(html, /lib\/cardEditor\.js\?v=4/, 'the editor is loaded');
+  assert.match(html, /lib\/cardEditor\.js\?v=5/, 'the editor is loaded');
   assert.match(html, /lib\/cardElementLibrary\.js\?v=3/, 'the editable element library is loaded');
   assert.match(html, /lib\/cardEditControls\.js\?v=1/, 'the per-slide edit model is loaded');
   assert.match(html, /lib\/cardEditHistory\.js\?v=1/, 'the undo/redo history is loaded');
@@ -201,7 +201,7 @@ test('core.js and the service worker cache are bumped together', () => {
   assert.match(html, /lib\/cardThumbnails\.js\?v=1/, 'the real-card thumbnails are loaded');
   assert.match(html, /lib\/cardSkeleton\.js\?v=1/, 'the skeleton placeholder is loaded');
   assert.match(html, /lib\/cardQualityBar\.js\?v=1/, 'the quality-bar review is loaded');
-  assert.ok(html.indexOf('lib/cardLayoutEngine.js') < html.indexOf('core.js?v=70'), 'the engine loads before core.js');
+  assert.ok(html.indexOf('lib/cardLayoutEngine.js') < html.indexOf('core.js?v=71'), 'the engine loads before core.js');
 });
 
 // ── Plus AI must not be broken ───────────────────────────────────────────────
