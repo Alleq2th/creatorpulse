@@ -2169,7 +2169,7 @@ function cpCtxPanelHTML(tid, idx, slideIndex, name, kind) {
       </div>
       <div class="cc-ctx-size-row">
         <button type="button" class="cc-ctx-size-btn" onclick="cpAdjustLayerScale('${tid}',${idx},${slideIndex},'${name}',-0.1)" title="Smaller">A−</button>
-        <input type="range" class="cc-slider cc-ctx-size-slider" min="50" max="200" value="${curPct}" aria-label="Text size percentage" oninput="cpSetLayerScale('${tid}',${idx},${slideIndex},'${name}',this.value/100)"/>
+        <input type="range" class="cc-slider cc-ctx-size-slider" min="50" max="200" value="${curPct}" aria-label="Text size percentage" oninput="cpSetLayerScale('${tid}',${idx},${slideIndex},'${name}',this.value/100)" onchange="cpCommitLayerScale('${tid}',${idx},${slideIndex})"/>
         <button type="button" class="cc-ctx-size-btn" onclick="cpAdjustLayerScale('${tid}',${idx},${slideIndex},'${name}',0.1)" title="Larger">A+</button>
       </div>
       <div class="cc-ctx-size-presets">
