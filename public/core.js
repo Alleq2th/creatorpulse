@@ -3746,6 +3746,7 @@ window.cpOpenCardEditor = (tid, idx, slideIndex) => {
   const slide = cpCardSlide(tid, idx, slideIndex);
   if (!o || !o._renderCtx || !slide) { toast("That graphic is not ready to edit yet."); return; }
   if (!window.CPCardEditor) { toast("The editor is still loading."); return; }
+  cpSeedHistory(tid, idx, slideIndex);
   window.CPCardEditor.open({
     tid, idx, slideIndex,
     platform: cpLayoutPlatform(o),
@@ -3772,6 +3773,7 @@ window.cpOpenCardEditor = (tid, idx, slideIndex) => {
     onToggleOverride: () => window.cpToggleSlideOverride(tid, idx, slideIndex),
     onToggleEditMode: () => window.cpToggleEditMode(tid, idx, slideIndex),
     isEditMode: () => window.cpIsEditMode(tid, idx, slideIndex),
+    onReplaceImage: (input) => window.cpPickCardBackground(input, tid, idx, slideIndex),
     toast
   });
 };
