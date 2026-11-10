@@ -85,6 +85,28 @@
     }).join("");
   }
   function escapeHtml(s) { return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;"); }
+  function wrapCanvasText(ctx, text, maxWidth, maxLines) {
+    var out = [];
+    String(text).split("\n").forEach(function (paragraph) {
+      var words = paragraph.split(/\s+/).filter(Boolean);
+      var line = "";
+      words.forEach(function (word) {
+        var candidate = line ? line + " " + word : word;
+        if (ctx.measureText(candidate).width <= maxWidth) { line = candidate; return; }
+        if (line) out.push(line);
+        line = "";
+        if (ctx.measureText(word).width <= maxWidth) { line = word; return; }
+        var part = "";
+        Array.from(word).forEach(function (char) {
+          if (part && ctx.measureText(part + char).width > maxWidth) { out.push(part); part = char; }
+          else part += char;
+        });
+        line = part;
+      });
+      if (line) out.push(line);
+    });
+    return out.slice(0, maxLines || 5);
+  }
   function drawCanvas(ctx, elements, W, H) {
     normalize(elements).forEach(function(e) {
       var x=e.x*W, y=e.y*H, w=e.width*W, h=e.height*H;
@@ -103,11 +125,18 @@
         var txt=e.uppercase?e.text.toUpperCase():e.text;
         var px=e.fontSize*W;
         ctx.font=(e.italic?"italic ":"")+e.weight+" "+px+"px "+FONTS[e.font];
-        ctx.fillStyle=e.color; ctx.textAlign=e.align; ctx.textBaseline="middle";
-        var tx=e.align==="left"?-w/2:e.align==="right"?w/2:0;
-        var lines=txt.split("\n").slice(0,5);
-        var lineH=px*1.12, startY=-((lines.length-1)*lineH)/2;
-        lines.forEach(function(line,i){ctx.fillText(line,tx,startY+i*lineH,w);});
+        ctx.fillStyle=e.color;
+        ctx.beginPath(); ctx.rect(-w/2,-h/2,w,h); ctx.clip();
+        if (e.type === "badge") {
+          ctx.textAlign="center"; ctx.textBaseline="middle";
+          ctx.fillText(txt,0,0,w);
+        } else {
+          ctx.textAlign=e.align; ctx.textBaseline="top";
+          var tx=e.align==="left"?-w/2:e.align==="right"?w/2:0;
+          var lines=wrapCanvasText(ctx,txt,w,5);
+          var lineH=px*1.05;
+          lines.forEach(function(line,i){ctx.fillText(line,tx,-h/2+i*lineH);});
+        }
       }
       ctx.restore();
     });
