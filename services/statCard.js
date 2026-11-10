@@ -773,7 +773,7 @@ function renderPanelSVG(p, f, slide, category, typo, design, brand) {
   //    seam badge. Never invent a logo or display a fake mark when no brand exists.
   const brandName = brand && brand.name ? String(brand.name).trim().slice(0, 28) : "";
   if (brandName) {
-    const initials = brandName.split(/\\s+/).filter(Boolean).slice(0, 2).map(x => x[0].toUpperCase()).join("");
+    const initials = brandName.split(/\s+/).filter(Boolean).slice(0, 2).map(x => x[0].toUpperCase()).join("");
     const cx = Math.round(W / 2), cy = panelY, r = Math.round(W * 0.047);
     parts.push(`<circle cx="${cx}" cy="${cy}" r="${r + 7}" fill="${escXml(panel.bg)}"/>`);
     parts.push(`<circle cx="${cx}" cy="${cy}" r="${r}" fill="${escXml(p.accent)}"/>`);
