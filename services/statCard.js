@@ -544,7 +544,7 @@ function templatePhotoScrimDefs(design, f) {
   }
   const stops = scrim.stops.map((stop) => {
     const color = String(stop.color || "rgba(0,0,0,.45)");
-    const match = color.match(/^rgba?\\(([^)]+)\\)$/i);
+    const match = color.match(/^rgba?\(([^)]+)\)$/i);
     let stopColor = color, opacity = 1;
     if (match) {
       const channels = match[1].split(",").map(x => x.trim());
