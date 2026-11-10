@@ -95,7 +95,7 @@ test('elements are included in undo snapshots, live preview and final image expo
   assert.match(core, /CPCardElementLibrary\.renderHTML\(slide\.elements \|\| \[\]\)/);
   assert.match(core, /CPCardElementLibrary\.drawCanvas\(ctx, state\.elements \|\| \[\], W, H\)/);
   assert.match(core, /elements: window\.CPCardElementLibrary/);
-  assert.match(html, /lib\/cardElementLibrary\.js\?v=2/);
+  assert.match(html, /lib\/cardElementLibrary\.js\?v=3/);
 });
 
 test('text effects are exposed and applied in both preview and export', () => {
