@@ -328,7 +328,7 @@ const oauth2Client = GOOGLE_CLIENT_ID
   : null;
 
 // Supabase client — shared module, also used by routes/push.js
-const { supabase } = require("./config/supabase");
+const { supabase, handleAuthError, isUpstreamAuthError } = require("./config/supabase");
 
 // ── AUTH ────────────────────────────────────────────────────────────────────
 app.post("/api/auth/signup", async (req, res) => {
@@ -348,13 +348,13 @@ app.post("/api/auth/signup", async (req, res) => {
         }
       }
     });
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return handleAuthError(res, error, "signup");
     res.json({
       success: true,
       message: "Account created successfully.",
       user: data.user
     });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { handleAuthError(res, e, "signup"); }
 });
 
 app.post("/api/auth/login", async (req, res) => {
@@ -362,7 +362,7 @@ app.post("/api/auth/login", async (req, res) => {
   const { email, password } = req.body;
   try {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return handleAuthError(res, error, "login");
     const meta = data.user?.user_metadata || {};
     res.json({
       token: data.session?.access_token,
@@ -377,7 +377,7 @@ app.post("/api/auth/login", async (req, res) => {
         email
       }
     });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { handleAuthError(res, e, "login"); }
 });
 
 // Sends a real password-reset email via Supabase — the link in that email
@@ -390,13 +390,9 @@ app.post("/api/auth/forgot-password", async (req, res) => {
   if (!email) return res.status(400).json({ error: "Email required" });
   try {
     const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: FRONTEND_URL || undefined });
-    if (error) throw error;
-    // Always return success regardless of whether the email exists — this
-    // is standard practice for password-reset endpoints. Confirming an
-    // email doesn't exist would let anyone check which addresses have
-    // accounts on the service, one at a time.
+    if (error) return handleAuthError(res, error, "forgot-password");
     res.json({ success: true, message: "If that email has an account, a reset link is on its way." });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { handleAuthError(res, e, "forgot-password"); }
 });
 
 // The recovery link's one-time token proves who this is (same
@@ -410,11 +406,14 @@ app.post("/api/auth/reset-password", async (req, res) => {
   if (newPassword.length < 6) return res.status(400).json({ error: "Password must be at least 6 characters" });
   try {
     const { data: userData, error: userError } = await supabase.auth.getUser(accessToken);
-    if (userError) return res.status(401).json({ error: "This reset link has expired — request a new one." });
+    if (userError) {
+      if (isUpstreamAuthError(userError)) return handleAuthError(res, userError, "reset-password");
+      return res.status(401).json({ error: "This reset link has expired — request a new one." });
+    }
     const { error } = await supabase.auth.admin.updateUserById(userData.user.id, { password: newPassword });
-    if (error) throw error;
+    if (error) return handleAuthError(res, error, "reset-password");
     res.json({ success: true, message: "Password updated — you can sign in now." });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { handleAuthError(res, e, "reset-password"); }
 });
 
 // Access tokens expire (~1h). Client calls this with the stored refresh token
@@ -425,9 +424,12 @@ app.post("/api/auth/refresh", async (req, res) => {
     const { refreshToken } = req.body || {};
     if (!refreshToken) return res.status(400).json({ error: "Missing refresh token" });
     const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshToken });
-    if (error || !data.session) return res.status(401).json({ error: "Refresh failed — please log in again" });
+    if (error || !data?.session) {
+      if (isUpstreamAuthError(error)) return handleAuthError(res, error, "refresh");
+      return res.status(401).json({ error: "Refresh failed — please log in again" });
+    }
     res.json({ token: data.session.access_token, refreshToken: data.session.refresh_token });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) { handleAuthError(res, e, "refresh"); }
 });
 
 app.post("/api/auth/update-profile", async (req, res) => {

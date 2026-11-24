@@ -280,7 +280,8 @@ function checkAuthRedirect(){
     const errorDesc = hashParams.get("error_description") || searchParams.get("error_description");
 
     if(errorDesc){
-      S.authErr = decodeURIComponent(errorDesc.replace(/\+/g," "));
+      const rawMsg = decodeURIComponent(errorDesc.replace(/\+/g," "));
+      S.authErr = typeof formatAuthError === "function" ? formatAuthError(rawMsg) : rawMsg;
       S.authTab = "login";
       window.history.replaceState({}, document.title, window.location.pathname);
       return true;

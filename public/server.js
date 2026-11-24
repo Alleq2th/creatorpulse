@@ -209,7 +209,7 @@ const oauth2Client = GOOGLE_CLIENT_ID
   : null;
 
 // Supabase client — shared module, also used by routes/push.js
-const { supabase } = require("./config/supabase");
+const { supabase, handleAuthError, isUpstreamAuthError } = require("../config/supabase");
 
 // ── AUTH ────────────────────────────────────────────────────────────────────
 app.post("/api/auth/signup", async (req, res) => {
@@ -229,7 +229,7 @@ app.post("/api/auth/signup", async (req, res) => {
         }
       }
     });
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return (typeof handleAuthError === "function" ? handleAuthError(res, error, "auth") : res.status(400).json({ error: error.message }));
     res.json({
       success: true,
       message: "Account created successfully.",
@@ -243,7 +243,7 @@ app.post("/api/auth/login", async (req, res) => {
   const { email, password } = req.body;
   try {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return (typeof handleAuthError === "function" ? handleAuthError(res, error, "auth") : res.status(400).json({ error: error.message }));
     const meta = data.user?.user_metadata || {};
     res.json({
       token: data.session?.access_token,
@@ -335,7 +335,7 @@ app.post("/api/auth/update-profile", async (req, res) => {
         avatarUrl: avatarUrl !== undefined ? avatarUrl : existing.avatarUrl
       }
     });
-    if (error) return res.status(400).json({ error: error.message });
+    if (error) return (typeof handleAuthError === "function" ? handleAuthError(res, error, "auth") : res.status(400).json({ error: error.message }));
     res.json({ success: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

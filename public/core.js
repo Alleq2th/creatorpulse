@@ -987,17 +987,26 @@ function aspectForContent(platform, contentType){
 async function fetchNotifs(niches){ return (await api(`/api/notifications?niches=${encodeURIComponent(niches.join(","))}&_=${Date.now()}`)).notifications||[]; }
 
 // ─── AUTH ───────────────────────────────────────────────────────────────────
+function formatAuthError(msg){
+  if(!msg) return "An unexpected error occurred. Please try again.";
+  const lower = String(msg).toLowerCase();
+  if(lower.includes("fetch failed") || lower.includes("failed to fetch") || lower.includes("networkerror") || lower.includes("enotfound") || lower.includes("econnrefused")){
+    return "Unable to connect to the authentication server. If you are using a free Supabase project, please verify in your Supabase dashboard that the project is active and unpaused.";
+  }
+  return msg;
+}
+
 async function doLogin(){
   S.authLoading = true; S.authErr=""; S.authMsg=""; render();
   try {
     const d = await api("/api/auth/login", {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(S.authForm)});
-    if(d.error){ S.authErr = d.error; }
+    if(d.error){ S.authErr = formatAuthError(d.error); }
     else {
       S.token = d.token; S.refreshToken = d.refreshToken || null; S.user = d.user; saveSession();
       if(!S.user.niches?.length){ S.mode="onboard"; S.onboard.name = S.user.name; }
       else { S.mode="app"; bootApp(); }
     }
-  } catch(e){ S.authErr = e.message; }
+  } catch(e){ S.authErr = formatAuthError(e.message); }
   S.authLoading=false; render();
 }
 async function doSignup(){
@@ -1007,15 +1016,51 @@ async function doSignup(){
       email: S.authForm.email, password: S.authForm.password, name: S.authForm.name,
       niches: [], platforms: [], primaryPlatform: "", postsPerDay: 3
     })});
-    if(d.error){ S.authErr = d.error; }
+    if(d.error){ S.authErr = formatAuthError(d.error); }
     else {
       // Email confirmation is required before login — don't attempt auto-login.
       S.authMsg = d.message || "Account created. Check your email to confirm your account before signing in.";
       S.authTab = "login";
       S.authForm.password = "";
     }
-  } catch(e){ S.authErr = e.message; }
+  } catch(e){ S.authErr = formatAuthError(e.message); }
   S.authLoading=false; render();
+}
+
+async function doForgotPassword(){
+  const email = (S.authForm.email || "").trim();
+  S.authErr = ""; S.authMsg = "";
+  if(!email){ S.authErr = "Enter your email address first."; render(); return; }
+  S.authLoading = true; render();
+  try {
+    const d = await api("/api/auth/forgot-password", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email })
+    });
+    if(d.error) S.authErr = formatAuthError(d.error);
+    else S.authMsg = d.message || "If that email has an account, a reset link is on its way. Check your inbox and spam folder.";
+  } catch(e){ S.authErr = formatAuthError(e.message); }
+  S.authLoading = false; render();
+}
+
+async function doResetPassword(){
+  const pw = (S.authForm.password || "");
+  S.authErr = "";
+  if(pw.length < 6){ S.authErr = "Password must be at least 6 characters."; render(); return; }
+  S.authLoading = true; render();
+  try {
+    const d = await api("/api/auth/reset-password", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accessToken: S.token, newPassword: pw })
+    });
+    if(d.error) S.authErr = formatAuthError(d.error);
+    else {
+      S.authMsg = "Password updated! You can sign in now.";
+      S.authTab = "login";
+      S.authForm.password = "";
+    }
+  } catch(e){ S.authErr = formatAuthError(e.message); }
+  S.authLoading = false; render();
 }
 async function saveOnboarding(){
   const ob = S.onboard;
