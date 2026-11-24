@@ -12,3 +12,4 @@ pages/
 playwright-report/
 test-results/
 shots-editing/
+.usage_cache.json

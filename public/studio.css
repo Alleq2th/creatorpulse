@@ -971,3 +971,89 @@ textarea.sv-input{ min-height: 130px; resize: vertical; line-height: 1.6; }
   .sv-prompter{ max-height: 46%; }
   .sv-shutter{ width: 60px; height: 60px; }
 }
+
+/* ── Live Captions & Prompter Speed controls ──────────────────────────────── */
+.sv-live-caption-pill {
+  position: absolute;
+  bottom: 84px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(10, 10, 15, 0.88);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  padding: 8px 18px;
+  border-radius: 10px;
+  text-align: center;
+  max-width: 86%;
+  z-index: 25;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.65);
+  pointer-events: none;
+  border: 1px solid rgba(255,255,255,0.18);
+  line-height: 1.35;
+}
+.sv-prompter-wpm-pill {
+  font-size: 11px;
+  font-weight: 700;
+  color: #a0a0b8;
+  padding: 2px 6px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 4px;
+}
+
+/* ── Paywall Modal Styles ─────────────────────────────────────────────────── */
+.cp-paywall-scrim {
+  position: fixed; inset: 0; z-index: 10000;
+  background: rgba(10, 10, 15, 0.88);
+  backdrop-filter: blur(8px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.cp-paywall-card {
+  background: #161622;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 20px;
+  max-width: 440px; width: 100%;
+  padding: 28px 24px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.7);
+  text-align: center;
+  color: #f0f0f5;
+  animation: cp-modal-in .25s ease-out;
+}
+@keyframes cp-modal-in {
+  from { opacity: 0; transform: scale(0.94); }
+  to { opacity: 1; transform: scale(1); }
+}
+.cp-paywall-icon {
+  width: 56px; height: 56px; border-radius: 50%;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: #ef4444; font-size: 26px;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 16px;
+}
+.cp-paywall-title {
+  font-size: 20px; font-weight: 800; margin-bottom: 8px; letter-spacing: -0.01em;
+}
+.cp-paywall-desc {
+  font-size: 13.5px; color: #a0a0b8; line-height: 1.5; margin-bottom: 20px;
+}
+.cp-paywall-meters {
+  background: #101018; border-radius: 12px; padding: 14px 16px; margin-bottom: 20px; text-align: left;
+}
+.cp-paywall-meter-row {
+  display: flex; justify-content: space-between; align-items: center; font-size: 13px; font-weight: 600; margin-bottom: 8px;
+}
+.cp-paywall-free-row {
+  font-size: 12px; color: #34d399; margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; align-items: center; gap: 6px;
+}
+.cp-paywall-btn-pro {
+  width: 100%; padding: 14px; border-radius: 12px; font-size: 15px; font-weight: 700;
+  background: linear-gradient(135deg, #7c3aed, #a855f7); color: #fff; border: none; cursor: pointer;
+  margin-bottom: 10px; transition: transform .1s;
+}
+.cp-paywall-btn-pro:active { transform: scale(0.98); }
+.cp-paywall-btn-sec {
+  width: 100%; padding: 10px; border-radius: 10px; font-size: 13px; font-weight: 600;
+  background: transparent; color: #a0a0b8; border: 1px solid rgba(255,255,255,0.1); cursor: pointer;
+}

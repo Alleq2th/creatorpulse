@@ -338,7 +338,8 @@ function svCameraView(st){
       <video id="sv-cam-live" playsinline muted autoplay
         style="transform:${st.mirror && st.facing === 'user' ? 'scaleX(-1) ' : ''}scale(${st.zoom})"></video>
 
-      ${st.showPrompter && st.script ? svPrompterHtml(st) : ''}
+      ${st.showPrompter ? svPrompterHtml(st) : ''}
+      <div class="sv-live-caption-pill" id="sv-live-caption-pill" style="display:none"></div>
 
       ${st.running
         ? `<div class="${st.paused ? 'sv-paused-pill' : 'sv-rec-pill'}">
@@ -348,6 +349,7 @@ function svCameraView(st){
 
       <div class="sv-rail">
         <button class="sv-rail-btn ${st.showPrompter ? 'on' : ''}" data-act="prompter">${svIcon('text')}<span>Script</span></button>
+        <button class="sv-rail-btn ${st.liveCaptions !== false ? 'on' : ''}" data-act="toggleLiveCaptions">${svIcon('cc')}<span>${st.liveCaptions !== false ? "Live CC" : "Captions"}</span></button>
         <button class="sv-rail-btn ${st.countdown ? 'on' : ''}" data-act="cycleCountdown">${svIcon('timer')}<span>${st.countdown ? st.countdown + 's' : 'Timer'}</span></button>
         <button class="sv-rail-btn ${st.micOn ? '' : 'warn'}" data-act="mic">${svIcon('voice')}<span>${st.micOn ? 'Mic' : 'Muted'}</span></button>
         <button class="sv-rail-btn ${st.camFilter !== 'none' ? 'on' : ''}" data-act="camFilters">${svIcon('fx')}<span>${st.camFilter === 'none' ? 'Look' : (SP_RECORD_FILTERS[st.camFilter] ? SP_RECORD_FILTERS[st.camFilter].label : 'Look')}</span></button>
@@ -459,19 +461,23 @@ function svCaptureLabel(st){
 function svPrompterHtml(st){
   const g = spPrompterGeometry({ width: SVP.stageW || 400, height: SVP.stageH || 700 },
     st.promptSize, st.promptPos);
+  const wpm = Math.round((st.promptSpeed || 60) / 1.4);
   return `<div class="sv-prompter-wrap" id="sv-prompter-wrap"
       style="left:${st.promptPos.x}%;top:${st.promptPos.y}%">
     <div class="sv-prompter-hd" data-ptr="prompterDrag">
       <span class="sv-prompter-grip">${svIcon('text')}<span>Teleprompter</span></span>
       <span class="sv-prompter-tools">
+        <button class="sv-prompter-btn" data-act="promptSpeedStep" data-arg="-" title="Slower scroll">🐢</button>
+        <span class="sv-prompter-wpm-pill" title="Scroll speed">${wpm}wpm</span>
+        <button class="sv-prompter-btn" data-act="promptSpeedStep" data-arg="+" title="Faster scroll">⚡</button>
         <button class="sv-prompter-btn" data-act="prompterSize" data-arg="-" aria-label="Smaller text">A<span class="sm">−</span></button>
         <button class="sv-prompter-btn" data-act="prompterSize" data-arg="+" aria-label="Bigger text">A<span class="lg">+</span></button>
-        <button class="sv-prompter-btn" data-act="prompterReset" aria-label="Reset position">${svIconSm('undo')}</button>
+        <button class="sv-prompter-btn" data-act="editScriptPrompt" title="Edit script">${svIconSm('text')}</button>
         <button class="sv-prompter-btn" data-act="togglePrompter" aria-label="Hide teleprompter">Hide</button>
       </span>
     </div>
-    <div class="sv-prompter"><div class="sv-prompter-inner" id="sv-prompter-inner"
-      style="font-size:${g.fontPx}px;line-height:${g.lineHeight}px">${esc(st.script)}</div></div>
+    <div class="sv-prompter" data-act="editScriptPrompt"><div class="sv-prompter-inner" id="sv-prompter-inner"
+      style="font-size:${g.fontPx}px;line-height:${g.lineHeight}px">${esc(st.script || "Tap here to add or paste your teleprompter script…")}</div></div>
   </div>`;
 }
 
@@ -828,6 +834,24 @@ const SV_ACT = {
   prompter:        () => svPrompterTap(),
   togglePrompter:  () => { const st = svState(); st.showPrompter = !st.showPrompter; render(); },
   promptSpeed:     (a, el) => { svState().promptSpeed = Number(el.value); },
+  promptSpeedStep: a => {
+    const st = svState();
+    const cur = st.promptSpeed || 60;
+    st.promptSpeed = a === "+" ? Math.min(140, cur + 15) : Math.max(20, cur - 15);
+    svToast("Teleprompter: " + Math.round(st.promptSpeed / 1.4) + " wpm");
+    render();
+  },
+  editScriptPrompt: () => {
+    const st = svState();
+    st.showScriptEditor = true;
+    render();
+  },
+  toggleLiveCaptions: () => {
+    const st = svState();
+    st.liveCaptions = st.liveCaptions === false ? true : false;
+    svToast(st.liveCaptions ? "Live auto-captions active" : "Live captions disabled");
+    render();
+  },
   saveScript:      () => svSaveScript(),
   closeScript:     () => { const st = svState(); st.showScriptEditor = false; render(); },
   importScript:    () => document.getElementById('sv-script-import') && document.getElementById('sv-script-import').click(),
@@ -2236,16 +2260,23 @@ function svSpeechStart(){
   try {
     const r = new SR();
     r.continuous = true;
-    r.interimResults = false;
-    r.lang = navigator.language || 'en-GB';
+    r.interimResults = true;
+    r.lang = navigator.language || 'en-US';
     r.onresult = ev => {
+      let liveText = "";
       for (let i = ev.resultIndex; i < ev.results.length; i++){
         const res = ev.results[i];
-        if (!res.isFinal) continue;
-        const text = String((res[0] && res[0].transcript) || '').trim();
-        if (!text) continue;
-        // Timestamped against the take, so a later trim can re-time it.
-        SVSR.segs.push({ text, atMs: Math.max(0, Date.now() - (SVC.speechT0 || Date.now())) });
+        const text = String((res[0] && res[0].transcript) || "").trim();
+        if (res.isFinal) {
+          if (text) SVSR.segs.push({ text, atMs: Math.max(0, Date.now() - (SVC.speechT0 || Date.now())) });
+        }
+        liveText += text + " ";
+      }
+      const liveCap = document.getElementById("sv-live-caption-pill");
+      if (liveCap && svState().liveCaptions !== false) {
+        const display = liveText.trim();
+        liveCap.textContent = display;
+        liveCap.style.display = display ? "block" : "none";
       }
     };
     r.onerror = () => {};
@@ -2259,6 +2290,8 @@ function svSpeechStart(){
 function svSpeechStop(){
   try { if (SVSR.rec) SVSR.rec.stop(); } catch (_){}
   SVSR.rec = null; SVSR.active = false;
+  const liveCap = document.getElementById("sv-live-caption-pill");
+  if (liveCap) liveCap.style.display = "none";
 }
 
 function svSpeechReset(){ SVSR.segs = []; SVC.speechT0 = Date.now(); }

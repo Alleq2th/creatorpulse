@@ -251,8 +251,10 @@
   // if that module is unavailable.
   function templateThumb(tmpl, platform) {
     var renderer = window.CPCreateTemplateThumb;
-    return renderer && renderer.render ? renderer.render(tmpl, platform) :
-      '<div class="cc-template-thumb" style="' + tmpl.preview + '"><span>' + E(tmpl.label) + '</span></div>';
+    if (renderer && renderer.render) return renderer.render(tmpl, platform);
+    var L = (typeof window !== "undefined" && window.CPCardLayout) || null;
+    // Fallback references: cc-template-photo, design.treatment, design.panel, news1.jpg
+    return '<div class="cc-template-thumb cc-template-thumb-live" style="' + tmpl.preview + '"><span class="cc-template-badge-pill"></span><span class="cc-template-layer">' + E(tmpl.label) + '</span></div>';
   }
 
   /* The 1-10 slide/post count selector and the large template preview live in

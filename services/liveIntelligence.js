@@ -92,4 +92,25 @@ async function fetchMultiSourceLiveData(query = "", niche = "") {
   return store(key, { items: results.slice(0, 9), sourcesCount: new Set(results.map(x => x.source)).size, catalogCount: LIVE_SOURCES_CATALOG.length, sources: [...new Set(results.map(x => x.source))] });
 }
 
-module.exports = { LIVE_SOURCES_CATALOG, fetchWikipediaKnowledge, findLiveImage, fetchMultiSourceLiveData };
+
+async function fetch2026WebContext(query = "", niche = "") {
+  try {
+    const live = await fetchMultiSourceLiveData(query, niche);
+    const validItems = (live?.items || []).filter(item => item.title && !item.title.includes("background"));
+    if (!validItems.length) return "";
+
+    const lines = validItems.slice(0, 4).map(item => {
+      const src = item.source || "Web News";
+      const snippet = (item.snippet || "").slice(0, 150).replace(/\s+/g, " ");
+      return `- [${src}] "${item.title}": ${snippet} (${item.url || "https://news.google.com"})`;
+    });
+
+    return `\n\nREAL-TIME 2026 VERIFIED WEB SOURCES & FACTUAL GROUNDING:\n${lines.join("\n")}\n\nSTRICT 2026 TIMELINESS INSTRUCTION: Current year is 2026. Anchor all hook statements, facts, player/creator names, statistics, and references in the live 2026 web context above. Do not hallucinate or use outdated 2023/2024 information as current.`;
+  } catch (e) {
+    console.warn("[live-intel] 2026 context fetch error:", e.message);
+    return "";
+  }
+}
+
+module.exports = { LIVE_SOURCES_CATALOG, fetchWikipediaKnowledge, findLiveImage, fetchMultiSourceLiveData, fetch2026WebContext };
+

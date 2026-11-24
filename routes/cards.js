@@ -1,3 +1,4 @@
+const { checkLimitMiddleware, recordUsage } = require("../services/usageLimits");
 const express = require("express");
 const router = express.Router();
 const { renderCardSet } = require("../services/statCard");
@@ -71,7 +72,7 @@ function buildDefaultPulseSlides(topic, format, wikiData, imageInfo) {
   ];
 }
 
-router.post("/generate-cards", async (req, res) => {
+router.post("/generate-cards", checkLimitMiddleware("images"), async (req, res) => {
   if (activeGenerations >= MAX_CONCURRENT_GENERATIONS) {
     return res.status(503).json({ error: "Server is a little busy right now — please try again in a few seconds." });
   }
