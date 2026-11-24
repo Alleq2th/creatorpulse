@@ -179,6 +179,26 @@
           '<button type="button" class="cc-ed-chip" data-ed-apply="template">Template to all</button>' +
           '<button type="button" class="cc-ed-chip" data-ed-apply="accent">Accent to all</button>' +
           '<button type="button" class="cc-ed-chip' + (m.override ? ' active' : '') + '" aria-pressed="' + !!m.override + '" data-ed-override="1">Keep this slide</button>' +
+          '<button type="button" class="cc-ed-chip" data-ed-guides="1">Guides</button>' +
+        '</div>';
+    } else if (nav === 'style') {
+      panel = '<div class="cc-ed-section">Template</div>' +
+        '<div class="cc-ed-tiles">' + templateTiles + '</div>' +
+        '<div class="cc-ed-section">Accent colour</div>' +
+        '<div class="cc-ed-swatches">' + accentBtns + '</div>' +
+        '<div class="cc-ed-section">Apply across carousel</div>' +
+        '<div class="cc-ed-chips">' +
+          '<button type="button" class="cc-ed-chip" data-ed-apply="template">Template to all</button>' +
+          '<button type="button" class="cc-ed-chip" data-ed-apply="accent">Accent to all</button>' +
+          '<button type="button" class="cc-ed-chip' + (m.override ? ' active' : '') + '" aria-pressed="' + !!m.override + '" data-ed-override="1">Keep this slide</button>' +
+        '</div>';
+    } else if (nav === 'history') {
+      panel = '<div class="cc-ed-section">History</div>' +
+        '<div class="cc-ed-chips">' +
+          '<button type="button" class="cc-ed-chip" data-ed-undo="1">Undo</button>' +
+          '<button type="button" class="cc-ed-chip" data-ed-redo="1">Redo</button>' +
+          '<button type="button" class="cc-ed-chip" data-ed-reset="1">Reset slide</button>' +
+          '<button type="button" class="cc-ed-chip" data-ed-restore="1">Restore original</button>' +
         '</div>';
     } else if (nav === 'photo') {
       var cropX = Math.max(0, Math.min(100, Number((m.style || {}).cropX ?? 50)));

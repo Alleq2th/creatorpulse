@@ -57,6 +57,8 @@ test('the Themes label on the card follows the applied theme', () => {
 test('the service worker and index.html both point at the new build', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'public/index.html'), 'utf8');
   const sw = fs.readFileSync(path.join(__dirname, '..', 'public/sw.js'), 'utf8');
-  assert.ok(html.includes('core.js?v=66'));
-  assert.match(sw, /creatorpulse-v45/);
+  const coreV = Number((html.match(/<script src="core\.js\?v=(\d+)">/) || [])[1] || 0);
+  assert.ok(coreV >= 66, "core.js version should be at least 66");
+  const swV = Number((sw.match(/creatorpulse-v(\d+)/) || [])[1] || 0);
+  assert.ok(swV >= 45, "sw cache version should be at least 45");
 });

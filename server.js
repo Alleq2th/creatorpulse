@@ -155,6 +155,7 @@ app.use("/api", require("./routes/uniqueness"));
 app.use("/api", require("./routes/image"));
 app.use("/api", require("./routes/cards"));
 app.use("/api", require("./routes/stockphoto"));
+app.use("/api", require("./routes/usage"));
 
 // Shared, alias-aware key resolution for stock photos. Read here (not inline
 // against process.env) so /api/health can never report a provider as missing
@@ -1607,9 +1608,18 @@ const TONE_PROMPTS = {
   storytelling: "Write like a story: cold-open hook, escalating tension, one unexpected turn, satisfying payoff. Use scenes and specifics, not summaries."
 };
 
-app.post("/api/generate", heavyLimiter, async (req, res) => {
-  const { system, user, tone } = req.body;
+const { checkLimitMiddleware, recordUsage } = require("./services/usageLimits");
+const { fetch2026WebContext } = require("./services/liveIntelligence");
+
+app.post("/api/generate", heavyLimiter, checkLimitMiddleware("scripts"), async (req, res) => {
+  const { system, user, tone, niche, topic } = req.body || {};
+  let web2026Context = "";
+  try {
+    const q = topic || user || niche || "";
+    web2026Context = await fetch2026WebContext(q, niche);
+  } catch (_) {}
   const toneAdd = tone && TONE_PROMPTS[tone] ? `\n\nTONE DIRECTION: ${TONE_PROMPTS[tone]}` : "";
+  const enrichedSystem = (system || "") + toneAdd + web2026Context;
   // One retry on a 429 from Groq itself (their rate limit, not ours — our
   // own heavyLimiter allows 60/hour, so a 429 this soon is always upstream).
   // A short backoff clears most transient rate-limit hits from generating
@@ -1622,7 +1632,7 @@ app.post("/api/generate", heavyLimiter, async (req, res) => {
         body: JSON.stringify({
           model: "openai/gpt-oss-120b",
           messages: [
-            { role: "system", content: (system || "") + toneAdd },
+            { role: "system", content: enrichedSystem },
             { role: "user", content: user }
           ],
           // Raised from 1200 — a rewritten hook plus several detailed body
@@ -1646,6 +1656,7 @@ app.post("/api/generate", heavyLimiter, async (req, res) => {
           text: ""
         });
       }
+      recordUsage(req, "scripts", 1);
       return res.json({ text: d.choices?.[0]?.message?.content || "" });
     } catch (e) {
       if (attempt === 1) return res.status(500).json({ error: e.message, text: "" });

@@ -1,3 +1,115 @@
+
+window.enableNewsPushAlerts = async function(){
+  if (!('Notification' in window)) {
+    toast('Notifications not supported in this browser');
+    return;
+  }
+  try {
+    const perm = await Notification.requestPermission();
+    if (perm === 'granted') {
+      localStorage.setItem('cp_news_alerts', '1');
+      toast('🔔 Breaking news alerts activated!');
+      if ('serviceWorker' in navigator && navigator.serviceWorker.ready) {
+        if(typeof initPush === 'function') initPush();
+      }
+      try {
+        new Notification("CreatorPulse News Alerts Active", {
+          body: "You will receive breaking news and trend updates on your phone.",
+          icon: "/logo-64.png"
+        });
+      } catch(_) {}
+      render();
+    } else {
+      toast('Notification permission was declined in browser settings.');
+    }
+  } catch(e) {
+    toast('Could not enable notifications: ' + e.message);
+  }
+};
+
+window.cpOpenArticle = function(url){
+  const href = String(url || "").trim();
+  if (!href) return;
+  try {
+    const opened = window.open(href, "_blank", "noopener,noreferrer");
+    if (!opened) window.location.href = href;
+  } catch (e) {
+    window.location.href = href;
+  }
+};
+
+// ─── USAGE & PAYWALL ENFORCEMENT ───────────────────────────────────────────
+window.CP_USAGE = window.CP_USAGE || {
+  scripts: { used: 0, limit: 5, blocked: false },
+  images: { used: 0, limit: 3, blocked: false },
+  isPro: false
+};
+window.CP_PAYWALL_OPEN = false;
+
+window.cpShowPaywall = function(limitType, data){
+  window.CP_PAYWALL_OPEN = true;
+  if (data && data.limitType) {
+    if (data.limitType === "scripts") window.CP_USAGE.scripts.blocked = true;
+    if (data.limitType === "images") window.CP_USAGE.images.blocked = true;
+  }
+  render();
+};
+
+window.cpClosePaywall = function(){
+  window.CP_PAYWALL_OPEN = false;
+  render();
+};
+
+window.cpSyncUsage = async function(){
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const cached = localStorage.getItem("cp_daily_usage_" + today);
+    if(cached){
+      try { window.CP_USAGE = JSON.parse(cached); } catch(_){}
+    }
+    const r = await api("/api/usage");
+    if(r && r.scripts && r.images){
+      window.CP_USAGE = r;
+      localStorage.setItem("cp_daily_usage_" + today, JSON.stringify(r));
+      render();
+    }
+  } catch(e){}
+};
+
+function renderPaywallModal(){
+  if(!window.CP_PAYWALL_OPEN) return "";
+  const s = window.CP_USAGE.scripts || { used: 5, limit: 5 };
+  const m = window.CP_USAGE.images || { used: 3, limit: 3 };
+  return `<div class="cp-paywall-scrim" id="cp-paywall-modal" onclick="if(event.target===this)cpClosePaywall()">
+    <div class="cp-paywall-card">
+      <div class="cp-paywall-icon">🔒</div>
+      <div class="cp-paywall-title">Daily Free Limit Reached</div>
+      <div class="cp-paywall-desc">
+        You have reached today's free generation allowance. Limits reset every 24 hours at 00:00 UTC. Upgrade to CreatorPulse Pro for unlimited generations.
+      </div>
+      <div class="cp-paywall-meters">
+        <div class="cp-paywall-meter-row">
+          <span>📝 AI Script Generations</span>
+          <span style="color:${s.used >= 5 ? "#ef4444" : "#f59e0b"}">${s.used} / 5 used</span>
+        </div>
+        <div class="cp-paywall-meter-row">
+          <span>🎨 AI Graphics & Carousels</span>
+          <span style="color:${m.used >= 3 ? "#ef4444" : "#f59e0b"}">${m.used} / 3 used</span>
+        </div>
+        <div class="cp-paywall-free-row">
+          <span>✓ Always Free:</span>
+          <span>75-Story News, Viral Hooks, Calendar & Video Studio</span>
+        </div>
+      </div>
+      <button class="cp-paywall-btn-pro" onclick="toast('Opening CreatorPulse Pro…');window.open('https://creatorpulse.app/pro','_blank')">
+        ⚡ Upgrade to Pro (Unlimited Access)
+      </button>
+      <button class="cp-paywall-btn-sec" onclick="cpClosePaywall()">
+        Continue with Free Tools
+      </button>
+    </div>
+  </div>`;
+}
 // ─── ICONS (Lucide-style inline SVGs) ───────────────────────────────────────
 const I = {
   image: '<svg class="icon icon-sm" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>',
@@ -781,6 +893,9 @@ async function api(path, opts, _isRetry){
       throw new Error(`Server returned an unexpected response (status ${r.status}). This usually means the endpoint isn't available or the server is still starting up.`);
     }
     if(!r.ok && !data.error) data.error = data.message || `Request failed (status ${r.status})`;
+    if(r.status === 403 && (data.error === "DAILY_LIMIT_REACHED" || data.limitType)){
+      if(typeof window.cpShowPaywall === "function") window.cpShowPaywall(data.limitType || "general", data);
+    }
     // Access token expired mid-session — silently refresh once and retry the
     // same request, instead of surfacing "Invalid token" to the user.
     if(r.status === 401 && !_isRetry && S.refreshToken && !path.startsWith('/api/auth/')){
@@ -810,8 +925,42 @@ async function fetchNews(niche){ return (await api(`/api/news?niche=${encodeURIC
 async function fetchBlogs(niche){ return (await api(`/api/blog-feed?niche=${encodeURIComponent(niche)}&_=${Date.now()}`)).articles||[]; }
 async function fetchTwitter(handle,niche){ return (await api(`/api/twitter-feed?handle=${handle}&niche=${encodeURIComponent(niche||"")}&_=${Date.now()}`)).articles||[]; }
 async function fetchEvents(niche){ return (await api(`/api/events?niche=${encodeURIComponent(niche)}&_=${Date.now()}`)).events||[]; }
-async function generateText(system, user, tone){ const d = await api(`/api/generate`, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({system,user,tone})}); if(d.error) throw new Error(d.error); return d.text||""; }
-async function generateImage(prompt, format, count){ const d = await api(`/api/generate-image`, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({prompt,format,count:count||1})}); return count && count>1 ? (d.images||[]) : (d.image||null); }
+async function generateText(system, user, tone){
+  if(window.CP_USAGE && window.CP_USAGE.scripts && window.CP_USAGE.scripts.blocked){
+    window.cpShowPaywall("scripts");
+    throw new Error("Daily script generation limit reached (5/5).");
+  }
+  const d = await api(`/api/generate`, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({system,user,tone})});
+  if(d.error){
+    if(d.error === "DAILY_LIMIT_REACHED" || d.limitType === "scripts") window.cpShowPaywall("scripts", d);
+    throw new Error(d.error);
+  }
+  if(window.CP_USAGE && window.CP_USAGE.scripts){
+    window.CP_USAGE.scripts.used = Math.min(5, (window.CP_USAGE.scripts.used || 0) + 1);
+    if(window.CP_USAGE.scripts.used >= 5) window.CP_USAGE.scripts.blocked = true;
+    const today = new Date().toISOString().slice(0, 10);
+    localStorage.setItem("cp_daily_usage_" + today, JSON.stringify(window.CP_USAGE));
+  }
+  return d.text||"";
+}
+async function generateImage(prompt, format, count){
+  if(window.CP_USAGE && window.CP_USAGE.images && window.CP_USAGE.images.blocked){
+    window.cpShowPaywall("images");
+    throw new Error("Daily graphic generation limit reached (3/3).");
+  }
+  const d = await api(`/api/generate-image`, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({prompt,format,count:count||1})});
+  if(d.error){
+    if(d.error === "DAILY_LIMIT_REACHED" || d.limitType === "images") window.cpShowPaywall("images", d);
+    throw new Error(d.error);
+  }
+  if(window.CP_USAGE && window.CP_USAGE.images){
+    window.CP_USAGE.images.used = Math.min(3, (window.CP_USAGE.images.used || 0) + 1);
+    if(window.CP_USAGE.images.used >= 3) window.CP_USAGE.images.blocked = true;
+    const today = new Date().toISOString().slice(0, 10);
+    localStorage.setItem("cp_daily_usage_" + today, JSON.stringify(window.CP_USAGE));
+  }
+  return count && count>1 ? (d.images||[]) : (d.image||null);
+}
 // A raw headline sentence is NOT a usable image prompt — diffusion models have
 // no concrete subject to render from "Riot Games has confirmed development
 // will cease" and end up hallucinating unrelated dark/dramatic art instead.
@@ -901,7 +1050,7 @@ async function loadAgendaSchedule(){
     if(successful.length){ S.agendaSchedule = successful.flatMap(r => r.posts); cleanupPendingSchedule(); render(); }
   } catch(e){}
 }
-async function bootApp(){ render(); ariaAnnounceBackend(); loadTrends(); loadNotifs(); loadSchedule(); loadSaved(); loadDigest(); loadAgendaSchedule(); flushOutbox(); startGlobalTimer(); initPush(); }
+async function bootApp(){ render(); cpSyncUsage(); ariaAnnounceBackend(); loadTrends(); loadNotifs(); loadSchedule(); loadSaved(); loadDigest(); loadAgendaSchedule(); flushOutbox(); startGlobalTimer(); initPush(); }
 
 // ─── PUSH NOTIFICATIONS ─────────────────────────────────────────────────────
 // Public key only — safe to embed client-side. Must match VAPID_PUBLIC_KEY on the server.
@@ -2903,19 +3052,15 @@ function cpWrapLines(ctx, text, maxW) {
 // public/lib/cardLayout.js). Never draws selection outlines or editing controls
 // into the exported image.
 function cpDrawTextBox(ctx, l, W, H) {
-  if (!l || !l.text || l.empty) return; // an empty slot is not drawn at all
+  if (!l || !l.text || l.empty) return;
   const effects = l.effects || {};
   const text = effects.uppercase ? String(l.text).toUpperCase() : String(l.text);
   const px = l.size * W;
   const lineH = px * (Number(l.lineHeight) || 1.1);
   const left = l.box.x * W, top = l.box.y * H, bw = l.box.width * W, bh = l.box.height * H;
   ctx.font = `${effects.italic ? "italic " : ""}${l.weight} ${px}px ${l.family}`;
-  // Tabular digits on a stat, so the figures line up (Part 5).
   if (l.tabular && "fontVariantNumeric" in ctx) ctx.fontVariantNumeric = "tabular-nums";
-  // Shared wrapper: identical break points in preview and export.
-  const lines = window.CPCardLayout
-    ? window.CPCardLayout.wrapLines(s => ctx.measureText(s).width, text, bw)
-    : cpWrapLines(ctx, text, bw);
+  const lines = window.CPCardLayout ? window.CPCardLayout.wrapLines(s => ctx.measureText(s).width, text, bw) : cpWrapLines(ctx, text, bw);
   const m = ctx.measureText("Hg");
   const asc = m.fontBoundingBoxAscent ?? px * 0.8;
   const desc = m.fontBoundingBoxDescent ?? px * 0.2;
@@ -3518,6 +3663,7 @@ function cpCardSlide(tid, idx, slideIndex) {
 window.cpSetCardStyle = (tid, idx, slideIndex, key, value) => cpRecordEdit(tid, idx, slideIndex, slide => {
   slide._style = slide._style || {};
   slide._style[key] = value;
+  cpUpdateLiveStage(tid, idx, slideIndex);
 });
 window.cpSetSlideText = (tid, idx, slideIndex, field, value) => {
   const slide = cpCardSlide(tid, idx, slideIndex); if (!slide) return;
@@ -4644,20 +4790,35 @@ window.obToggleN = n => { const i = S.onboard.niches.indexOf(n); if(i<0){ if(S.o
 window.obToggleP = p => { const i = S.onboard.platforms.indexOf(p); if(i<0) S.onboard.platforms.push(p); else S.onboard.platforms.splice(i,1); render(); };
 window.ob = S.onboard;
 
+function pageStudio(){
+  if(typeof window.svDirectView === "function"){
+    const cs = window.CPEnv && window.CPEnv.state ? window.CPEnv.state() : null;
+    if(cs){
+      cs.studioDirect = true;
+      cs.studio = cs.studio || {};
+      if(!cs.studio.mode || cs.studio.mode === "idle") cs.studio.mode = "camera";
+    }
+    return window.svDirectView();
+  }
+  return '<div class="sv-root"><div style="color:#fff;text-align:center;padding:40px">Loading Camera Studio…</div></div>';
+}
+
 function renderApp(){
-  const pageFns = { home: pageHome, hooks: pageHooks, calendar: pageCalendar, create: pageCreate, profile: pageProfile, library: pageLibrary, discover: pageDiscover };
+  const pageFns = { home: pageHome, hooks: pageHooks, calendar: pageCalendar, create: pageCreate, studio: pageStudio, profile: pageProfile, library: pageLibrary, discover: pageDiscover };
   const pageHtml = (pageFns[S.tab] || pageHome)();
-  const TEX = { home:"dots", hooks:"grid", calendar:"cross", create:"diag", profile:"dots", library:"grid", discover:"cross" };
+  const TEX = { home:"dots", hooks:"grid", calendar:"cross", create:"diag", studio:"diag", profile:"dots", library:"grid", discover:"cross" };
   document.getElementById("root").innerHTML = `<div class="app" data-tex="${TEX[S.tab]||'dots'}">${pageHtml}
     <nav class="tabbar">
       <button class="tab ${S.tab==='home'?'active':''}" aria-current="${S.tab==='home'?'page':'false'}" onclick="setTab('home')">${I.home}Home</button>
       <button class="tab ${S.tab==='hooks'?'active':''}" aria-current="${S.tab==='hooks'?'page':'false'}" onclick="setTab('hooks')">${I.hook}Hooks</button>
       <button class="tab tab-create ${S.tab==='create'?'active':''}" aria-current="${S.tab==='create'?'page':'false'}" onclick="setTab('create')"><span class="tab-fab">${I.create}</span>Create</button>
+      <button class="tab tab-studio ${S.tab==='studio'?'active':''}" aria-current="${S.tab==='studio'?'page':'false'}" onclick="setTab('studio')"><span class="tab-fab" style="background:linear-gradient(135deg,#7c3aed,#ec4899);color:#fff">${I.cam}</span>Studio</button>
       <button class="tab ${S.tab==='calendar'?'active':''}" aria-current="${S.tab==='calendar'?'page':'false'}" onclick="setTab('calendar')">${I.cal}Calendar</button>
       <button class="tab ${S.tab==='profile'?'active':''}" aria-current="${S.tab==='profile'?'page':'false'}" onclick="setTab('profile')">${I.user}Profile</button>
     </nav>
     ${renderSheet()}
     ${typeof renderFloatingCoach === "function" ? renderFloatingCoach() : ""}
+    ${typeof renderPaywallModal === "function" ? renderPaywallModal() : ""}
   </div>`;
 }
 window.setTab = t => {
@@ -4665,7 +4826,18 @@ window.setTab = t => {
   if(t !== prev && window.pushBackState){
     window.pushBackState(() => { S.tab = prev; render(); if(prev==='calendar'){ loadSchedule(); loadCalendarEvents(); loadAgendaSchedule(); } if(prev==='profile'){ loadSaved(); } if(prev==='hooks'){ loadActiveHooks(); } });
   }
-  S.tab=t; render(); if(t==='calendar'){ loadSchedule(); loadCalendarEvents(); loadAgendaSchedule(); } if(t==='profile'){ loadSaved(); } if(t==='hooks'){ loadActiveHooks(); }
+  S.tab=t;
+  if(t==='studio'){
+    const cs = window.CPEnv && window.CPEnv.state ? window.CPEnv.state() : null;
+    if(cs){
+      cs.studioDirect = true;
+      cs.studio = cs.studio || {};
+      if(!cs.studio.mode || cs.studio.mode === "idle") cs.studio.mode = "camera";
+    }
+  }
+  render();
+  if(t==='studio' && typeof window.svOpenCamera === 'function'){ window.svOpenCamera(); }
+  if(t==='calendar'){ loadSchedule(); loadCalendarEvents(); loadAgendaSchedule(); } if(t==='profile'){ loadSaved(); } if(t==='hooks'){ loadActiveHooks(); }
 };
 function loadActiveHooks(){
   const userNiches = S.user?.niches || [];
@@ -4767,7 +4939,7 @@ function renderDigest(){
     const act = url ? `cpOpenArticle('${esc(url).replace(/'/g,"\\'")}')` : "setTab('home')";
     return `<div class="digest-card" role="link" tabindex="0" data-article-url="${esc(url)}" onclick="${act}" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();${act}}"><div class="digest-niche">${esc(s.niche)}</div><div class="hl">${esc(s.headline)}</div>${url?'<span class="digest-go" aria-hidden="true">↗</span>':''}</div>`;
   }).join("");
-  return `<div class="digest"><div class="digest-h"><div class="digest-title">Daily Digest</div><button class="tiny-copy tipbtn" data-tip="Dismiss today's digest" title="Dismiss today's digest" aria-label="Dismiss digest" onclick="dismissDigest()">Got it</button></div>${sectionErr("digest")}<div class="digest-strip">${cards}</div></div>`;
+  return `<div class="digest"><div class="digest-h"><div class="digest-title">Daily Digest (75 Live Stories)</div><div style="display:flex;gap:6px"><button class="tiny-copy tipbtn" data-tip="Enable breaking news alerts on your phone" onclick="enableNewsPushAlerts()">🔔 Alerts</button><button class="tiny-copy tipbtn" data-tip="Dismiss today's digest" title="Dismiss today's digest" aria-label="Dismiss digest" onclick="dismissDigest()">Got it</button></div></div>${sectionErr("digest")}<div class="digest-strip">${cards}</div></div>`;
 }
 
 // ─── HOOKS PAGE ─────────────────────────────────────────────────────────────

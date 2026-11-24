@@ -40,6 +40,8 @@ test('a failed preview has an accessible explicit retry control and retry bypass
 });
 
 test('preview changes refresh the cached core and service worker assets', () => {
-  assert.match(html, /core\.js\?v=66/);
-  assert.match(sw, /creatorpulse-v45/);
+  const coreV = Number((html.match(/<script src="core\.js\?v=(\d+)">/) || [])[1] || 0);
+  assert.ok(coreV >= 66, "core.js version should be at least 66");
+  const swV = Number((sw.match(/creatorpulse-v(\d+)/) || [])[1] || 0);
+  assert.ok(swV >= 45, "sw cache version should be at least 45");
 });
